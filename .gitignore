@@ -1,0 +1,27 @@
+## Gradle
+/.gradle/
+/build/
+/captures/
+.externalNativeBuild
+.cxx
+local.properties
+
+## Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+## Keystore files
+*.jks
+*.keystore
+
+## Firebase
+google-services.json
+
+## Relay config (contains server URL)
+app/src/main/assets/relay-config.json
+
+## Logs
+*.log

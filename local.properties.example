@@ -1,0 +1,12 @@
+## This file must *NOT* be checked into Version Control Systems,
+# as it contains information specific to your local configuration.
+#
+# Location of the Android SDK. This is usually set automatically by Android Studio.
+sdk.dir=/path/to/Android/sdk
+
+# Signing configuration (for release builds)
+# Generate keystore with: keytool -genkey -v -keystore arkdo.jks -keyalg RSA -keysize 2048 -validity 10000 -alias arkdo
+KEYSTORE_FILE=/path/to/arkdo.jks
+KEYSTORE_PASSWORD=your_keystore_password
+KEY_ALIAS=arkdo
+KEY_PASSWORD=your_key_password
