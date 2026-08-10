@@ -1,4 +1,0 @@
-{
-  "relay_endpoint": "https://your-relay-server.com/subscribe",
-  "relay_public_key": "YOUR_VAPID_PUBLIC_KEY"
-}
