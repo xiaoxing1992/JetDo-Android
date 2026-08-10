@@ -1,10 +1,8 @@
 package com.arkdo.android
 
 import android.app.Application
-import coil.ImageLoader
-import coil.ImageLoaderFactory
-import coil.decode.SvgDecoder
-import coil.request.CachePolicy
+import coil3.ImageLoader
+import coil3.ImageLoaderFactory
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 import javax.inject.Inject

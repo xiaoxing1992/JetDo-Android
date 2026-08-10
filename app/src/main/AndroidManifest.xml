@@ -44,15 +44,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Firebase Messaging Service -->
-        <service
-            android:name=".services.push.ArkDoFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <!-- 隐藏 WebView 宿主 Service（用于网络桥接） -->
         <service
             android:name=".services.network.WebViewBridgeService"
