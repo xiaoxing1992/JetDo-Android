@@ -1,21 +1,20 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.1.0"
-compose-bom = "2024.12.01"
-compose-compiler = "1.5.15"
-hilt = "2.54"
-ksp = "2.1.0-1.0.29"
-androidx-core = "1.15.0"
-androidx-lifecycle = "2.8.7"
-androidx-activity-compose = "1.9.3"
-androidx-navigation = "2.8.5"
-androidx-datastore = "1.1.1"
-androidx-room = "2.6.1"
-ktor = "3.0.3"
-coil = "2.8.0"
-firebase-bom = "33.7.0"
-okhttp = "5.0.0-alpha.14"
-google-services = "4.4.2"
+agp = "9.3.1"
+kotlin = "2.4.10"
+compose-bom = "2026.06.01"
+hilt = "2.60.1"
+ksp = "2.3.6"
+androidx-core = "1.19.0"
+androidx-lifecycle = "2.11.0"
+androidx-activity-compose = "1.13.0"
+androidx-navigation = "2.9.8"
+androidx-datastore = "1.2.1"
+androidx-room = "2.8.4"
+ktor = "3.5.1"
+coil = "3.5.0"
+okhttp = "5.4.0"
+material-icons-extended = "1.7.8"
+kotlinx-serialization-json = "1.11.0"
 
 [libraries]
 # AndroidX Core
@@ -31,7 +30,7 @@ compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "material-icons-extended" }
 
 # Navigation
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "androidx-navigation" }
@@ -39,7 +38,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 # Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.2.0" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.4.0" }
 
 # DataStore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "androidx-datastore" }
@@ -56,20 +55,18 @@ ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-conte
 ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-client-logging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktor" }
 
-# Coil
-coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
-coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
-
-# Firebase
-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
-firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+# Coil (Coil 3)
+coil = { group = "io.coil-kt.coil3", name = "coil", version.ref = "coil" }
+coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+coil-svg = { group = "io.coil-kt.coil3", name = "coil-svg", version.ref = "coil" }
 
 # OkHttp
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-dnsoverhttps = { group = "com.squareup.okhttp3", name = "okhttp-dnsoverhttps", version.ref = "okhttp" }
 
 # Kotlinx Serialization
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.7.3" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
 
 # Accompanist (for WebView, SystemUI controller, etc.)
 accompanist-webview = { group = "com.google.accompanist", name = "accompanist-webview", version = "0.36.0" }
@@ -87,9 +84,7 @@ compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-mani
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

@@ -1,11 +1,10 @@
 package com.arkdo.android.di
 
 import android.content.Context
-import coil.ImageLoader
-import coil.decode.SvgDecoder
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
-import coil.request.CachePolicy
+import coil3.ImageLoader
+import coil3.decode.SvgDecoder
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,7 +17,7 @@ import javax.inject.Singleton
  *
  * 提供全局单例的核心服务：
  * - ImageLoader（Coil 图片加载器，支持 SVG）
- * - WebViewNetworkBridge（网络桥接）
+ * - ArkWebNetworkBridge（网络桥接）
  * - DohManager（DoH DNS 管理器）
  * - 其他基础设施
  */
@@ -37,8 +36,8 @@ object AppModule {
                 add(SvgDecoder.Factory())
             }
             .memoryCache {
-                MemoryCache.Builder(context)
-                    .maxSizePercent(0.25) // 使用 25% 的应用内存
+                MemoryCache.Builder()
+                    .maxSizePercent(context, 0.25) // 使用 25% 的应用内存
                     .build()
             }
             .diskCache {
@@ -47,7 +46,6 @@ object AppModule {
                     .maxSizeBytes(50 * 1024 * 1024) // 50 MB
                     .build()
             }
-            .respectCacheHeaders(false) // 忽略服务端 Cache-Control
             .crossfade(true) // 淡入动画
             .build()
     }
