@@ -5,6 +5,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+app/build/
 
 ## Android Studio
 .idea/
