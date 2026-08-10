@@ -1,0 +1,178 @@
+# ArkDO Android
+
+**[LINUX DO](https://linux.do) 社区的第三方 Android 原生客户端**
+
+基于 Jetpack Compose 从零编写，1:1 还原 HarmonyOS 版本的功能和体验。
+
+[![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-green)](https://developer.android.com/)
+[![Language](https://img.shields.io/badge/language-Kotlin-purple)](https://kotlinlang.org/)
+[![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-blue)](https://developer.android.com/jetpack/compose)
+[![Community](https://img.shields.io/badge/LINUX%20DO-社区-ffb003)](https://linux.do)
+
+---
+
+## 关于 LINUX DO
+
+> **[LINUX DO](https://linux.do) —— 新的理想型社区。**
+> Where possible begins. 一个真诚、友善、团结、专业的技术社区。
+
+ArkDO Android 是 LINUX DO 社区的**非官方**第三方客户端，基于 HarmonyOS 版本移植，由社区成员开发，仅为方便 Android 用户浏览社区内容，与官方无隶属关系。
+
+社区主站：**https://linux.do**
+
+## 功能特性
+
+**浏览**
+- 最新 / 热门 / 未读 / 新主题多入口，可在设置里勾选启用与排序
+- 两级版块树抽屉，按分类看帖
+- 话题详情窗口式分页加载，楼层快速跳转
+- 引用卡与被引用楼层按需展开、跨帖跳转
+- 采纳答案面板、话题摘要卡、按帖子 ID 直跳
+
+**互动**
+- 回复评论（Material3 Bottom Sheet）
+- 表情回应、Boost 助力、投票、"俺也一样"
+- 书签增删与置顶，列表 / 详情 / 导航栏三处标记即时联动
+
+**账号**
+- WebView 网页登录，会话持久化，未登录写操作自动引导登录
+- 个人主页、用户动态（我的话题 / 回复 / 点赞）、徽章墙
+- 等级进度（读取 connect.linux.do 的升级要求）
+- 通知中心与角标，覆盖 30+ 种通知类型（含 Boost、Follow）
+
+**阅读体验**
+- Discourse 阅读进度跟踪，蓝点淡出、"上次访问"红线
+- Cooked HTML 自研解析器 → Compose 原生渲染
+- LaTeX 数学公式渲染（MathJax）
+- 图片预览（双击缩放、下拉关闭）、音视频播放、附件下载
+- 站内 Emoji、FontAwesome 徽章图标、标签图标完整还原
+
+**系统推送**（需自建中继，见 `server/`）
+- App 关闭时也能收到回复 / @ / 私信的系统通知，点击直达对应楼层
+- 点推送即标记该条通知已读，角标未读数同步递减
+
+**适配**
+- Material You 动态主题
+- 三态深色模式：跟随系统 / 强制浅色 / 强制深色
+- 平板/折叠屏横屏双栏、竖屏单栏自适应
+- DoH 自定义 DNS（内置优选服务器，支持增删、切换、测速）
+
+## 技术实现
+
+### WebView 网络桥
+LINUX DO 有 Cloudflare 防护，原生 HTTP 栈发的请求会被拦。使用常驻隐藏 WebView 承载会话，所有接口请求都注入 JS 用浏览器侧的 `fetch` 发出，Cookie（`_t` / `cf_clearance`）由 WebView 自己管，JSON 回传给 Compose 渲染成原生界面。
+
+> 核心文件：`app/src/main/kotlin/services/network/WebViewNetworkBridge.kt`
+
+### Cloudflare 挑战的静默恢复
+遇到挑战时先在后台重载宿主页，让挑战脚本自己跑通，每 2 秒用 `/latest.json` 探测是否放行；~12 秒还不通才弹出可见页面让用户手动点一下。
+
+> 核心文件：`app/src/main/kotlin/services/challenge/ChallengeRecoveryCoordinator.kt`
+
+### DoH
+应对 DNS 污染。通过 OkHttp 的 DNS-over-HTTPS 支持实现，内置优选服务器，也可自己加。
+
+> 核心文件：`app/src/main/kotlin/services/network/DohManager.kt`
+
+### 头像与静态图
+原生网络栈 TLS 握手阶段可能被按 SNI 阻断，所以头像也统一经 WebView 取字节再解码成 Bitmap，带并发限流和 LRU 缓存。
+
+> 核心文件：`app/src/main/kotlin/services/network/AvatarImageCache.kt`
+
+### 数学公式
+Discourse 的裸 LaTeX 交给离屏 WebView 跑 MathJax 出 SVG，转成 Bitmap 供 Compose 使用。
+
+> 核心文件：`app/src/main/kotlin/services/content/MathRenderService.kt`
+
+### 系统推送
+Discourse 的 Web Push 是标准协议（RFC 8291），把 `endpoint` 填成自建中继、密钥用中继生成的，LINUX DO 就会用我们的公钥加密并投递到我们的地址；中继解密后转成 Firebase Cloud Messaging 通知下发。
+
+```
+LINUX DO ──Web Push（加密）──▶ 自建中继 ──解密──▶ FCM ──▶ 设备通知
+```
+
+中继代码与部署文档在 `server/`。
+
+## 项目结构
+
+```
+app/src/main/kotlin/
+├── common/          常量、主题管理、响应式断点
+├── data/            数据模型
+├── navigation/      Compose Navigation 路由定义
+├── services/        14 个服务子域
+│   ├── network/     WebView 网桥、DoH、头像缓存
+│   ├── challenge/   Cloudflare 挑战检测与恢复
+│   ├── content/     Cooked HTML 解析、公式、下载、链接路由
+│   ├── topic/       话题分页、回应、投票
+│   ├── session/     登录态与写操作拦截
+│   ├── push/        系统推送：FCM token、中继订阅、通知深链
+│   └── ...          auth / bookmark / connect / draft / logging / notification / reading / site / user / web
+└── ui/
+    ├── screens/     15 个页面
+    └── components/  40 个组件
+
+server/              推送中继（Python，部署在自己的服务器上）
+├── relay.py         Web Push 解密 → FCM 转发
+└── README.md        部署文档
+```
+
+## 构建
+
+**环境要求**
+- Android Studio Ladybug | 2024.2.1+
+- JDK 17+
+- Android SDK 34+
+- 最低支持 Android 8.0 (API 26)
+
+**步骤**
+1. 克隆仓库后用 Android Studio 打开
+2. 在 `local.properties` 配置签名信息
+3. 连接设备或启动模拟器，Run
+
+命令行构建：
+
+```bash
+./gradlew assembleDebug
+```
+
+## 依赖项
+
+**核心**
+- Jetpack Compose (Material3)
+- Kotlin Coroutines & Flow
+- Hilt (依赖注入)
+- Ktor Client (HTTP, 备用方案)
+- Coil (图片加载)
+- DataStore (持久化)
+- Room (本地数据库)
+
+**推送**
+- Firebase Cloud Messaging
+
+## 常见问题
+
+**打开一直转圈 / 提示网络异常？**
+多半是 DNS 被污染。进「设置 → DoH 设置」开启 DoH 并切换服务器。
+
+**卡在人机验证？**
+正常情况下 App 会在后台静默过盾。若首页空白超过几秒，会浮现「手动验证」按钮，点进去完成验证即可。
+
+**能发新帖吗？**
+目前只支持回复，不支持发新主题、不支持上传图片。私信走内嵌网页。
+
+## 参与贡献
+
+欢迎 Issue 和 PR。
+
+## 免责声明
+
+ArkDO Android 是个人开发的第三方客户端，与 LINUX DO 官方无关，不代表社区立场。所有内容版权归 LINUX DO 社区及原作者所有。本项目仅供学习交流，请遵守 [LINUX DO](https://linux.do) 社区规则。
+
+## 开源协议
+
+MIT License
+
+---
+
+Made with ❤️ for **[LINUX DO](https://linux.do)**
