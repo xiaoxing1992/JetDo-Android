@@ -4,19 +4,19 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
+import android.webkit.DownloadListener
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.webkit.DownloadListener
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.content.DownloadEventBus
+import com.arkdo.android.services.content.DownloadResult
 import com.arkdo.android.services.message.MessageBusEventBus
-import com.arkdo.android.services.network.webscript.buildMessageBusScript
+import com.arkdo.android.services.network.webscript.MessageBusScriptTemplate
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
 import kotlin.coroutines.resume
@@ -59,7 +59,7 @@ private data class PendingJsonRequest(
     val deferred: CompletableDeferred<String>
 )
 
-private data class DownloadIntent(
+data class DownloadIntent(
     val isMedia: Boolean,
     val url: String
 )
@@ -105,37 +105,43 @@ class WebviewJsonExecutor(
         val deferred = CompletableDeferred<String>()
         pendingRequests[requestId] = PendingJsonRequest(deferred)
 
-        try {
-            withTimeout(AppConstants.DEFAULT_TIMEOUT_MS) {
-                suspendCancellableCoroutine { cont ->
-                    if (Thread.currentThread().looper != Looper.getMainLooper()) {
-                        mainHandler.post { evaluate(script, requestId, cont) }
-                    } else {
-                        evaluate(script, requestId, cont)
-                    }
-                    cont.invokeOnCancellation {
-                        pendingRequests.remove(requestId)
-                    }
+        // 兜底超时：requestId 未在窗口内被 JS 回传则判失败。
+        val timeoutJob = kotlinx.coroutines.MainScope().launch {
+            kotlinx.coroutines.delay(AppConstants.DEFAULT_TIMEOUT_MS)
+            pendingRequests.remove(requestId)?.let {
+                if (!it.deferred.isCompleted) {
+                    it.deferred.completeExceptionally(IllegalStateException("ArkWeb 请求超时。"))
                 }
             }
-        } catch (e: Exception) {
-            pendingRequests.remove(requestId)
-            throw e
         }
 
-        // withTimeout 返回 Unit，等待 deferred 完成
-        return deferred.await()
+        val shouldRun = runCatching {
+            if (Looper.myLooper() != Looper.getMainLooper()) {
+                mainHandler.post { evaluate(script, requestId) }
+            } else {
+                evaluate(script, requestId)
+            }
+        }.isFailure
+        if (shouldRun) {
+            rejectRequest(requestId, "ArkWeb 脚本执行失败。")
+            timeoutJob.cancel()
+        }
+
+        try {
+            return withTimeout(AppConstants.DEFAULT_TIMEOUT_MS) { deferred.await() }
+        } finally {
+            timeoutJob.cancel()
+            pendingRequests.remove(requestId)
+        }
     }
 
-    private fun evaluate(script: String, requestId: String, cont: kotlin.coroutines.Continuation<Unit>) {
+    private fun evaluate(script: String, requestId: String) {
         val patched = script.replace(REQUEST_ID_TOKEN, requestId)
         runCatching {
             webView.evaluateJavascript(patched, null)
         }.onFailure {
             rejectRequest(requestId, "ArkWeb 脚本执行失败。")
-            if (cont.isActive) cont.resume(Unit)
         }
-        if (cont.isActive) cont.resume(Unit)
     }
 
     override fun onJsonResult(requestId: String, payload: String) {
@@ -354,7 +360,12 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             // 无回调通道，这里简化：附件经 DownloadEventBus 提示已开始下载。
             if (!isMedia) {
                 DownloadEventBus.notify(
-                    DownloadResult(true, fileName, File(dir, fileName).absolutePath, "已开始下载：$fileName")
+                    DownloadResult(
+                        true,
+                        fileName,
+                        File(dir, fileName).absolutePath,
+                        "已开始下载：$fileName"
+                    )
                 )
             }
         } catch (e: Exception) {
@@ -419,7 +430,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             Timber.i("[ArkDO][Network] MessageBus start skipped: controller not ready")
             return
         }
-        runCatching { web.evaluateJavascript(buildMessageBusScript(), null) }.onFailure {
+        runCatching { web.evaluateJavascript(MessageBusScriptTemplate.buildMessageBusScript(), null) }.onFailure {
             Timber.i("[ArkDO][Network] MessageBus script injection failed")
         }
     }
@@ -454,12 +465,15 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             return
         }
         val channel = jsonString(channelName)
-        val pos = if (position.isFinite()) position.toInt() else -1
+        val pos = if (position != Long.MAX_VALUE && position != Long.MIN_VALUE) position.toInt() else -1
         val script =
             "if (window.__arkdoMessageBusAddChannel) { window.__arkdoMessageBusAddChannel($channel, $pos); } " +
                 "else { window.__arkdoMessageBusChannels = window.__arkdoMessageBusChannels || {}; " +
                 "if (!($channel in window.__arkdoMessageBusChannels)) { window.__arkdoMessageBusChannels[$channel] = $pos; } }"
-        runCatching { web.evaluateJavascript(script, null) }.onFailure {
+        runCatching {
+            web.evaluateJavascript(script, null)
+            Timber.i("[ArkDO][Network] MessageBus subscribeChannel channel=%s pos=%d", channelName, pos)
+        }.onFailure {
             Timber.i("[ArkDO][Network] MessageBus subscribeChannel injection failed")
         }
     }

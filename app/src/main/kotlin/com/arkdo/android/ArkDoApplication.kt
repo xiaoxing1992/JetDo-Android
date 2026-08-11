@@ -2,7 +2,7 @@ package com.arkdo.android
 
 import android.app.Application
 import coil3.ImageLoader
-import coil3.ImageLoaderFactory
+import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 import javax.inject.Inject
@@ -17,7 +17,7 @@ import javax.inject.Inject
  * 4. 预热核心服务（WebView 网络桥、DoH 管理器）
  */
 @HiltAndroidApp
-class ArkDoApplication : Application(), ImageLoaderFactory {
+class ArkDoApplication : Application(), SingletonImageLoader.Factory {
 
     @Inject
     lateinit var imageLoaderProvider: dagger.Lazy<ImageLoader>
@@ -32,11 +32,11 @@ class ArkDoApplication : Application(), ImageLoaderFactory {
 
         Timber.i("[ArkDO][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
 
-        // WebView 初始化会在首次使用时自动触发
-        // DoH、主题管理器等会在 MainActivity 的 onCreate 中按需初始化
+        // 用 Hilt 提供的 ImageLoader 作为 Coil 单例（经 SingletonImageLoader.Factory 注册）。
+        SingletonImageLoader.setSafe(this)
     }
 
-    override fun newImageLoader(): ImageLoader {
+    override fun newImageLoader(context: coil3.PlatformContext): ImageLoader {
         return imageLoaderProvider.get()
     }
 }

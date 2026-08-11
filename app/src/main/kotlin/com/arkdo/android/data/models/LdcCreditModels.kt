@@ -18,18 +18,10 @@ data class LdcUserInfo(
     @SerialName("community_balance") val communityBalance: String = "0",
     @SerialName("pending_balance") val pendingBalance: String = "0",
     @SerialName("remain_quota") val remainQuota: String = "0",
-    @SerialName("daily_limit") val dailyLimitRaw: Any? = null,
+    @SerialName("daily_limit") val dailyLimit: String = "0",
     @SerialName("total_receive") val totalReceive: String = "0",
     @SerialName("total_payment") val totalPayment: String = "0"
-) {
-    /** daily_limit 服务端可能是数字，统一转字符串。 */
-    val dailyLimit: String
-        get() = when (dailyLimitRaw) {
-            is Number -> (dailyLimitRaw as Number).toInt().toString()
-            is String -> dailyLimitRaw as String
-            else -> "0"
-        }
-}
+)
 
 /** 单日收支。date 形如 2026-07-29。 */
 @Serializable
