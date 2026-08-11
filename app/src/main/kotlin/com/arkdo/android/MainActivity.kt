@@ -4,13 +4,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.arkdo.android.navigation.ArkDoNavHost
+import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.AppStateEventBus
 import com.arkdo.android.services.session.observeLifecycle
+import com.arkdo.android.ui.components.ArkWebHost
 import com.arkdo.android.ui.theme.ArkDoTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -39,16 +43,39 @@ class MainActivity : ComponentActivity() {
         // 监听前后台状态（onStart → 前台，onStop → 后台）
         AppStateEventBus.observeLifecycle(this)
 
+        // 设置 WebView 下载上下文
+        ArkWebNetworkBridge.setDownloadContext(this)
+
+        // 清理媒体缓存（冷启动）
+        ArkWebNetworkBridge.clearMediaCacheDir(this)
+
         // Edge-to-Edge：沉浸式状态栏和导航栏
         enableEdgeToEdge()
 
         setContent {
             ArkDoTheme {
+                var isWebViewReady by remember { mutableStateOf(false) }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ArkDoNavHost()
+                    Box {
+                        // 主界面（在上层）
+                        ArkDoNavHost()
+
+                        // 隐藏的 WebView 宿主（在底层，1x1 像素，近透明）
+                        ArkWebHost(
+                            onReady = {
+                                Timber.i("[ArkDO][MainActivity] WebView bridge ready")
+                                isWebViewReady = true
+                            },
+                            onLoadFailed = {
+                                Timber.e("[ArkDO][MainActivity] WebView bridge load failed")
+                                // TODO: 显示降级 UI，引导用户开启 DoH
+                            }
+                        )
+                    }
                 }
             }
         }
