@@ -123,6 +123,9 @@ dependencies {
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
 
+    // Material Components (for Android View system themes)
+    implementation(libs.material)
+
     // Accompanist
     implementation(libs.accompanist.webview)
     implementation(libs.accompanist.systemuicontroller)

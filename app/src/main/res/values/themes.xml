@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base Material3 theme (required parent) -->
-    <style name="Theme.Material3.DayNight.NoActionBar" parent="android:Theme.Material.Light.NoActionBar" />
-
     <!-- Base application theme -->
     <style name="Theme.ArkDO" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Enable edge-to-edge -->

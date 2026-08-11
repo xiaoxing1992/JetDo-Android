@@ -21,6 +21,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.arkdo.android.navigation.Routes
+import com.arkdo.android.ui.home.HomeScreen
 
 /**
  * Root Tab 容器
@@ -78,7 +79,11 @@ fun RootTabScreen(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Routes.HOME) {
-                HomeScreen(navController = navController)
+                HomeScreen(
+                    onTopicClick = { topicId ->
+                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId")
+                    }
+                )
             }
             composable(Routes.NOTIFICATION) {
                 NotificationScreen(navController = navController)

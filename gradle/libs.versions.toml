@@ -15,6 +15,7 @@ coil = "3.5.0"
 okhttp = "5.4.0"
 material-icons-extended = "1.7.8"
 kotlinx-serialization-json = "1.11.0"
+material = "1.12.0"
 
 [libraries]
 # AndroidX Core
@@ -67,6 +68,9 @@ okhttp-dnsoverhttps = { group = "com.squareup.okhttp3", name = "okhttp-dnsoverht
 
 # Kotlinx Serialization
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
+
+# Material Components (for Android View system)
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 
 # Accompanist (for WebView, SystemUI controller, etc.)
 accompanist-webview = { group = "com.google.accompanist", name = "accompanist-webview", version = "0.36.0" }

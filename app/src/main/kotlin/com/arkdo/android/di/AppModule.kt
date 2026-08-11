@@ -5,6 +5,8 @@ import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.svg.SvgDecoder
+import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.topic.TopicService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -48,5 +50,11 @@ object AppModule {
                     .build()
             }
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTopicService(): TopicService {
+        return TopicService(ArkWebNetworkBridge)
     }
 }

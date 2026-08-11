@@ -9,6 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.arkdo.android.navigation.ArkDoNavHost
+import com.arkdo.android.services.session.AppStateEventBus
+import com.arkdo.android.services.session.observeLifecycle
 import com.arkdo.android.ui.theme.ArkDoTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -16,14 +18,15 @@ import timber.log.Timber
 /**
  * 主 Activity
  *
- * 单 Activity 架构，所有页面通过 Jetpack Compose Navigation 管理。
+ * 单 Activity 架构,所有页面通过 Jetpack Compose Navigation 管理。
  *
  * 启动流程：
  * 1. 安装 Splash Screen（Android 12+ 自动适配）
  * 2. 启用 Edge-to-Edge 沉浸式布局
- * 3. 加载主题（跟随系统/强制浅色/强制深色）
- * 4. 处理推送通知深链接
- * 5. 渲染 RootNavHost（Tab + Navigation Stack）
+ * 3. 监听前后台状态（AppStateEventBus）
+ * 4. 加载主题（跟随系统/强制浅色/强制深色）
+ * 5. 处理推送通知深链接
+ * 6. 渲染 RootNavHost（Tab + Navigation Stack）
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -32,6 +35,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         Timber.i("[ArkDO][MainActivity] onCreate ts=%d", System.currentTimeMillis())
+
+        // 监听前后台状态（onStart → 前台，onStop → 后台）
+        AppStateEventBus.observeLifecycle(this)
 
         // Edge-to-Edge：沉浸式状态栏和导航栏
         enableEdgeToEdge()
