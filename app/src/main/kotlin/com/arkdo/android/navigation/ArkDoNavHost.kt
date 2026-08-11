@@ -3,10 +3,13 @@ package com.arkdo.android.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.arkdo.android.ui.screens.RootTabScreen
+import com.arkdo.android.ui.topic.TopicDetailScreen
 
 /**
  * ArkDO 导航宿主
@@ -39,8 +42,36 @@ fun ArkDoNavHost(
             RootTabScreen(navController = navController)
         }
 
+        // 话题详情页
+        composable(
+            route = Routes.TOPIC_DETAIL + "/{topicId}?slug={slug}&title={title}",
+            arguments = listOf(
+                navArgument("topicId") { type = NavType.LongType },
+                navArgument("slug") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("title") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val topicId = backStackEntry.arguments?.getLong("topicId") ?: 0L
+            val slug = backStackEntry.arguments?.getString("slug")
+            val title = backStackEntry.arguments?.getString("title")
+
+            TopicDetailScreen(
+                topicId = topicId,
+                slug = slug,
+                title = title,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
         // TODO: 添加其他页面路由
-        // composable(Routes.TOPIC_DETAIL + "/{topicId}") { ... }
         // composable(Routes.SETTINGS) { ... }
         // composable(Routes.LOGIN) { ... }
     }
