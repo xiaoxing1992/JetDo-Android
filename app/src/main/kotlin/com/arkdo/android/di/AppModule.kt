@@ -2,14 +2,15 @@ package com.arkdo.android.di
 
 import android.content.Context
 import coil3.ImageLoader
-import coil3.decode.SvgDecoder
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import coil3.svg.SvgDecoder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okio.Path.Companion.toOkioPath
 import javax.inject.Singleton
 
 /**
@@ -42,11 +43,10 @@ object AppModule {
             }
             .diskCache {
                 DiskCache.Builder()
-                    .directory(context.cacheDir.resolve("image_cache"))
+                    .directory(context.cacheDir.resolve("image_cache").toOkioPath())
                     .maxSizeBytes(50 * 1024 * 1024) // 50 MB
                     .build()
             }
-            .crossfade(true) // 淡入动画
             .build()
     }
 }

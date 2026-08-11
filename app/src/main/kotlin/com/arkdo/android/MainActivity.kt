@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.arkdo.android.navigation.ArkDoNavHost
 import com.arkdo.android.ui.theme.ArkDoTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -30,9 +29,6 @@ import timber.log.Timber
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Splash Screen：启动图标在系统启动画面显示，避免白屏
-        installSplashScreen()
-
         super.onCreate(savedInstanceState)
 
         Timber.i("[ArkDO][MainActivity] onCreate ts=%d", System.currentTimeMillis())

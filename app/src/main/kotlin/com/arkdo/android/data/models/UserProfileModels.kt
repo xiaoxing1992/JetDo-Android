@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 
 // ==========================================================================
 // 与 HarmonyOS 版 models/UserProfile.ets 逐字段对齐。
+// User 复用同包 TopicModels 的 User（id: Long, username 可空）。
 // 来源：/u/{username}.json（资料）、/u/{username}/summary.json（统计+徽章）、
 //       /user_actions.json（动态）、/solution/by_user.json（已解决）。
 // ==========================================================================

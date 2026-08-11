@@ -2,11 +2,9 @@ package com.arkdo.android.services.message
 
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.network.ChallengeState
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import timber.log.Timber
 
 // ==========================================================================
@@ -14,19 +12,65 @@ import timber.log.Timber
 // MessageBus 长轮询事件总线：解析注入脚本上抛的 payload，广播给订阅方。
 // ==========================================================================
 
+/** Presence 频道 payload 里的用户（BasicUserSerializer：id/username/name/avatar_template）。 */
+@Serializable
+data class MessageBusPresenceUser(
+    @SerialName("id") val id: Long? = null,
+    @SerialName("username") val username: String? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("avatar_template") val avatarTemplate: String? = null
+)
+
+/**
+ * MessageBus 频道 payload 的可选字段。
+ * /notification/<id> 用 all_unread_notifications_count（总未读，含私信）；
+ * /topic/<id> 用 id/post_number/type（新楼 'created'）；
+ * /presence/<channel> 用 entering_users/leaving_user_ids/count_delta。
+ */
+@Serializable
+data class MessageBusData(
+    @SerialName("topic_id") val topicId: Long? = null,
+    @SerialName("message_type") val messageType: String? = null,
+    @SerialName("entering_users") val enteringUsers: List<MessageBusPresenceUser>? = null,
+    @SerialName("leaving_user_ids") val leavingUserIds: List<Long>? = null,
+    @SerialName("count_delta") val countDelta: Int? = null,
+    @SerialName("all_unread_notifications_count") val allUnreadNotificationsCount: Int? = null,
+    @SerialName("unread_notifications") val unreadNotifications: Int? = null,
+    @SerialName("unread_high_priority_notifications") val unreadHighPriorityNotifications: Int? = null,
+    @SerialName("id") val id: Long? = null,
+    @SerialName("post_number") val postNumber: Int? = null,
+    @SerialName("type") val type: String? = null
+)
+
 /** MessageBus 事件模型。 */
 @Serializable
 data class MessageBusEvent(
     val type: String? = null,
     val channel: String? = null,
-    val messageId: Long? = null,
-    val data: String? = null,
-    val statusCode: Int? = null,
+    @SerialName("message_id") val messageId: Long? = null,
+    val data: MessageBusData? = null,
+    @SerialName("statusCode") val statusCode: Int? = null,
     val stage: String? = null,
     val message: String? = null
 )
 
 typealias MessageBusListener = (MessageBusEvent) -> Unit
+
+/** 从 /topic/<id> 频道事件里取话题 id。 */
+fun extractMessageBusTopicId(event: MessageBusEvent?): Long? {
+    if (event?.type != "message" || event.data == null) return null
+    val topicId = event.data?.topicId ?: return null
+    if (topicId <= 0) return null
+    return topicId
+}
+
+/** 从 /topic/<id> 频道事件里取"新建帖子"的 post id：仅 type==='created' 且 data.id 为正整数时返回。 */
+fun extractCreatedPostId(event: MessageBusEvent?): Long? {
+    if (event?.type != "message" || event.data == null || event.data.type != "created") return null
+    val postId = event.data?.id ?: return null
+    if (postId <= 0) return null
+    return postId
+}
 
 object MessageBusEventBus {
     private val listeners = mutableMapOf<Long, MessageBusListener>()
@@ -45,16 +89,7 @@ object MessageBusEventBus {
      */
     fun publishPayload(payload: String) {
         val event = runCatching {
-            val obj = json.parseToJsonElement(payload).jsonObject
-            MessageBusEvent(
-                type = obj["type"]?.jsonPrimitive?.contentOrNull,
-                channel = obj["channel"]?.jsonPrimitive?.contentOrNull,
-                messageId = obj["message_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull(),
-                data = obj["data"]?.jsonPrimitive?.contentOrNull,
-                statusCode = obj["statusCode"]?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
-                stage = obj["stage"]?.jsonPrimitive?.contentOrNull,
-                message = obj["message"]?.jsonPrimitive?.contentOrNull
-            )
+            json.decodeFromString<MessageBusEvent>(payload)
         }.getOrElse {
             Timber.w(it, "[ArkDO][MessageBus] payload parse failed len=%d", payload.length)
             return

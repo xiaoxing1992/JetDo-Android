@@ -74,7 +74,7 @@ data class TopicPoster(
     @SerialName("extras") val extras: String? = null
 )
 
-/** 用户。 */
+/** 用户。id 为必填，username 通常必填（历史/匿名数据可能缺省为 ""）。 */
 @Serializable
 data class User(
     @SerialName("id") val id: Long,
