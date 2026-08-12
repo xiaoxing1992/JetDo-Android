@@ -45,6 +45,7 @@ fun ArkWebHost(
         factory = { ctx ->
             Timber.i("[ArkDO][ArkWebHost] factory: creating WebView via attachHost")
             Timber.i("[ArkDO][ArkWebHost] context=${ctx.javaClass.simpleName}")
+            Timber.i("[ArkDO][ArkWebHost] thread=${Thread.currentThread().name}")
 
             try {
                 // 使用 ArkWebNetworkBridge 的 attachHost 方法创建 WebView
@@ -58,12 +59,25 @@ fun ArkWebHost(
 
                 Timber.i("[ArkDO][ArkWebHost] WebView created successfully")
                 Timber.i("[ArkDO][ArkWebHost] WebView.url=${webView.url}")
+                Timber.i("[ArkDO][ArkWebHost] WebView.width=${webView.width} height=${webView.height}")
                 Timber.i("[ArkDO][ArkWebHost] waiting for onPageFinished callback...")
 
                 webView
             } catch (e: Exception) {
                 Timber.e(e, "[ArkDO][ArkWebHost] FATAL: Failed to create WebView")
                 throw e
+            }
+        },
+        update = { webView ->
+            // 确保 WebView 有尺寸（可能需要触发布局）
+            if (webView.width == 0 || webView.height == 0) {
+                Timber.w("[ArkDO][ArkWebHost] update: WebView has zero size, forcing measure")
+                webView.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(1, android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(1, android.view.View.MeasureSpec.EXACTLY)
+                )
+                webView.layout(0, 0, 1, 1)
+                Timber.i("[ArkDO][ArkWebHost] update: after layout width=${webView.width} height=${webView.height}")
             }
         }
     )
