@@ -193,6 +193,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
      * 加载 HOST_BOOTSTRAP_URL 定 origin；onPageFinished → attachController + markHostReady。
      */
     fun attachHost(context: Context): WebView {
+        Timber.i("[ArkDO][Network] attachHost: creating WebView")
         val web = WebView(context.applicationContext)
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
@@ -201,19 +202,39 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
         web.alpha = 0.01f
         web.setBackgroundColor(0x00000000)
+        Timber.i("[ArkDO][Network] attachHost: WebView settings configured")
+
         WebSessionManagerInternal.configure(web, "host")
+        Timber.i("[ArkDO][Network] attachHost: WebSessionManager configured")
+
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                Timber.i("[ArkDO][Network] attachHost: onPageStarted url=%s", url)
                 markHostReloading()
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                Timber.i("[ArkDO][Network] attachHost: onPageFinished url=%s", url)
                 attachController(web)
                 markHostReady()
+                Timber.i("[ArkDO][Network] attachHost: controller attached, host ready")
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: android.webkit.WebResourceRequest?,
+                error: android.webkit.WebResourceError?
+            ) {
+                Timber.e("[ArkDO][Network] attachHost: onReceivedError url=%s code=%d msg=%s",
+                    request?.url, error?.errorCode, error?.description)
             }
         }
+
         web.addJavascriptInterface(ensureWebviewExecutor(web).getCallbackProxy(), "ArkDOBridge")
+        Timber.i("[ArkDO][Network] attachHost: JavascriptInterface added")
+
         this.webView = web
+        Timber.i("[ArkDO][Network] attachHost: loading URL=%s", AppConstants.HOST_BOOTSTRAP_URL)
         web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
         return web
     }
