@@ -22,14 +22,16 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ArkDO"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true"
         android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.ArkDO"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:hardwareAccelerated="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -43,12 +45,6 @@
                 <data android:scheme="arkdo" android:host="notification" />
             </intent-filter>
         </activity>
-
-        <!-- 隐藏 WebView 宿主 Service（用于网络桥接） -->
-        <service
-            android:name=".services.network.WebViewBridgeService"
-            android:enabled="true"
-            android:exported="false" />
 
     </application>
 
