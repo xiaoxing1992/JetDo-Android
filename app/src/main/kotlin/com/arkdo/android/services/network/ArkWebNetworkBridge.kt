@@ -228,6 +228,26 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 Timber.e("[ArkDO][Network] attachHost: onReceivedError url=%s code=%d msg=%s",
                     request?.url, error?.errorCode, error?.description)
             }
+
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: android.webkit.SslErrorHandler?,
+                error: android.net.http.SslError?
+            ) {
+                Timber.e("[ArkDO][Network] attachHost: onReceivedSslError primaryError=%d url=%s",
+                    error?.primaryError, error?.url)
+                // 为了调试，暂时接受所有证书（生产环境不应该这样做）
+                handler?.proceed()
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: android.webkit.WebResourceRequest?,
+                errorResponse: android.webkit.WebResourceResponse?
+            ) {
+                Timber.e("[ArkDO][Network] attachHost: onReceivedHttpError url=%s statusCode=%d",
+                    request?.url, errorResponse?.statusCode)
+            }
         }
 
         web.addJavascriptInterface(ensureWebviewExecutor(web).getCallbackProxy(), "ArkDOBridge")
