@@ -254,8 +254,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         Timber.i("[ArkDO][Network] attachHost: JavascriptInterface added")
 
         this.webView = web
-        Timber.i("[ArkDO][Network] attachHost: loading URL=%s", AppConstants.HOST_BOOTSTRAP_URL)
-        web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
+
+        // 延迟 loadUrl 到 WebView attach 到视图树之后
+        // 如果在视图树 attach 前调用 loadUrl，WebView 不会触发 onPageStarted/onPageFinished
+        web.post {
+            Timber.i("[ArkDO][Network] attachHost: loading URL=%s (post-attach)", AppConstants.HOST_BOOTSTRAP_URL)
+            web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
+        }
+
         return web
     }
 
