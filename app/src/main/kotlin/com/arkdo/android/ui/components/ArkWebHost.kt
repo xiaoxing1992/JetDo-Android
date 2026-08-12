@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.arkdo.android.services.network.ArkWebNetworkBridge
+import kotlinx.coroutines.delay
 import timber.log.Timber
 
 /**
@@ -15,7 +16,7 @@ import timber.log.Timber
  *
  * 职责：
  * - 初始化 ArkWebNetworkBridge 的 WebView
- * - 加载 HOST_BOOTSTRAP_URL (https://linux.do/)
+ * - 加载 HOST_BOOTSTRAP_URL (https://linux.do/session/csrf.json)
  * - 监听页面加载完成，调用 onReady 回调
  * - 处理加载失败，调用 onLoadFailed 回调
  */
@@ -27,8 +28,11 @@ fun ArkWebHost(
 ) {
     val context = LocalContext.current
     var hasNotifiedReady by remember { mutableStateOf(false) }
+    var hasNotifiedFailed by remember { mutableStateOf(false) }
+    var checkCount by remember { mutableStateOf(0) }
 
     DisposableEffect(Unit) {
+        Timber.i("[ArkDO][ArkWebHost] ========== WebView Host Init Start ==========")
         Timber.i("[ArkDO][ArkWebHost] stage=hostInitStart ts=${System.currentTimeMillis()}")
 
         onDispose {
@@ -39,26 +43,59 @@ fun ArkWebHost(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            Timber.i("[ArkDO][ArkWebHost] creating WebView via attachHost")
+            Timber.i("[ArkDO][ArkWebHost] factory: creating WebView via attachHost")
+            Timber.i("[ArkDO][ArkWebHost] context=${ctx.javaClass.simpleName}")
 
-            // 使用 ArkWebNetworkBridge 的 attachHost 方法创建 WebView
-            val webView = ArkWebNetworkBridge.attachHost(ctx)
+            try {
+                // 使用 ArkWebNetworkBridge 的 attachHost 方法创建 WebView
+                // attachHost 内部会：
+                // 1. 创建 WebView
+                // 2. 配置 settings (JS enabled, DOM storage, etc.)
+                // 3. 添加 JavascriptInterface
+                // 4. 设置 WebViewClient (监听 onPageFinished)
+                // 5. loadUrl(HOST_BOOTSTRAP_URL) = https://linux.do/session/csrf.json
+                val webView = ArkWebNetworkBridge.attachHost(ctx)
 
-            Timber.i("[ArkDO][ArkWebHost] WebView created, waiting for page load")
+                Timber.i("[ArkDO][ArkWebHost] WebView created successfully")
+                Timber.i("[ArkDO][ArkWebHost] WebView.url=${webView.url}")
+                Timber.i("[ArkDO][ArkWebHost] waiting for onPageFinished callback...")
 
-            webView
+                webView
+            } catch (e: Exception) {
+                Timber.e(e, "[ArkDO][ArkWebHost] FATAL: Failed to create WebView")
+                throw e
+            }
         }
     )
 
-    // 监听 Bridge 就绪状态
+    // 监听 Bridge 就绪状态（轮询检查）
     LaunchedEffect(Unit) {
-        // 轮询检查 Bridge 是否就绪
-        while (!hasNotifiedReady) {
-            kotlinx.coroutines.delay(500)
-            if (ArkWebNetworkBridge.canFetch()) {
+        Timber.i("[ArkDO][ArkWebHost] LaunchedEffect: start polling canFetch()")
+
+        while (!hasNotifiedReady && !hasNotifiedFailed) {
+            delay(500)
+            checkCount++
+
+            val canFetch = ArkWebNetworkBridge.canFetch()
+            Timber.d("[ArkDO][ArkWebHost] poll #$checkCount: canFetch=$canFetch")
+
+            if (canFetch) {
                 hasNotifiedReady = true
-                Timber.i("[ArkDO][ArkWebHost] Bridge ready, notifying onReady")
+                Timber.i("[ArkDO][ArkWebHost] ✅ Bridge ready! Notifying onReady()")
+                Timber.i("[ArkDO][ArkWebHost] stage=hostPageEndReady ts=${System.currentTimeMillis()}")
                 onReady()
+                break
+            }
+
+            // 超时检测：30 秒后仍未就绪，认为失败
+            if (checkCount >= 60) { // 60 * 500ms = 30s
+                hasNotifiedFailed = true
+                Timber.e("[ArkDO][ArkWebHost] ❌ Timeout: canFetch() still false after 30s")
+                Timber.e("[ArkDO][ArkWebHost] Possible reasons:")
+                Timber.e("[ArkDO][ArkWebHost]   1. Network error (cannot reach linux.do)")
+                Timber.e("[ArkDO][ArkWebHost]   2. WebView onPageFinished not fired")
+                Timber.e("[ArkDO][ArkWebHost]   3. Cloudflare blocking the request")
+                onLoadFailed()
                 break
             }
         }
