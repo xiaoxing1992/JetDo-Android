@@ -46,7 +46,8 @@ fun buildCsrfScript(
     return """
         (() => {
             const requestId = '$requestIdToken';
-            const requestUrl = new URL($urlExpr, window.location.origin);
+            const baseUrl = 'https://linux.do';
+            const requestUrl = new URL($urlExpr, baseUrl);
             let csrfSource = 'none';
             let csrfLength = 0;
             const fail = (error) => {
@@ -64,7 +65,7 @@ fun buildCsrfScript(
               return el ? (el.getAttribute('content') || '') : '';
             };
             const readCsrf = () => {
-              return fetch(new URL('/session/csrf.json', window.location.origin).toString(), {
+              return fetch(new URL('/session/csrf.json', baseUrl).toString(), {
                 credentials: 'include',
                 cache: 'no-store',
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }

@@ -19,7 +19,9 @@ object WebFetchScriptFactory {
         return """
         (() => {
             const requestId = '$requestIdToken';
-            const requestUrl = new URL($encodedPath, window.location.origin);
+            // 硬编码域名，避免依赖 window.location.origin（页面加载失败时会是 chrome-error://）
+            const baseUrl = 'https://linux.do';
+            const requestUrl = new URL($encodedPath, baseUrl);
             fetch(requestUrl.toString(), {
               credentials: 'include',
               cache: 'no-store',
@@ -72,7 +74,8 @@ object WebFetchScriptFactory {
         return """
         (() => {
             const requestId = '$requestIdToken';
-            const requestUrl = new URL($encodedPath, window.location.origin);
+            const baseUrl = 'https://linux.do';
+            const requestUrl = new URL($encodedPath, baseUrl);
             const fail = (error) => {
               window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0,
@@ -119,8 +122,9 @@ object WebFetchScriptFactory {
         return """
         (() => {
             const requestId = '$requestIdToken';
-            const requestUrl = new URL($encodedTarget, window.location.origin);
-            const sameOrigin = requestUrl.origin === window.location.origin;
+            const baseUrl = 'https://linux.do';
+            const requestUrl = new URL($encodedTarget, baseUrl);
+            const sameOrigin = requestUrl.origin === baseUrl;
             const fail = (error) => {
               window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0, contentType: '', body: '', errorMessage: String(error)

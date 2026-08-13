@@ -195,11 +195,31 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     fun attachHost(context: Context): WebView {
         Timber.i("[ArkDO][Network] attachHost: creating WebView")
         val web = WebView(context.applicationContext)
+
+        // 基础设置
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         web.settings.databaseEnabled = true
         web.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+
+        // 设置 User-Agent 为 Chrome 桌面版，避免被 Cloudflare 识别为移动端 WebView
+        // 移动端 WebView 的默认 UA 可能触发额外的验证流程
+        val chromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        web.settings.userAgentString = chromeUA
+        Timber.i("[ArkDO][Network] attachHost: User-Agent set to desktop Chrome")
+
+        // 启用现代网络特性
+        web.settings.setSupportMultipleWindows(false)
+        web.settings.loadWithOverviewMode = true
+        web.settings.useWideViewPort = true
+
+        // 关键：禁用阻塞网络请求（某些 WebView 版本默认开启）
+        web.settings.blockNetworkLoads = false
+        web.settings.blockNetworkImage = false
+        Timber.i("[ArkDO][Network] attachHost: network blocking disabled")
+
         web.alpha = 0.01f
         web.setBackgroundColor(0x00000000)
         Timber.i("[ArkDO][Network] attachHost: WebView settings configured")
@@ -236,8 +256,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             ) {
                 Timber.e("[ArkDO][Network] attachHost: onReceivedSslError primaryError=%d url=%s",
                     error?.primaryError, error?.url)
-                // 为了调试，暂时接受所有证书（生产环境不应该这样做）
-                handler?.proceed()
+                // SSL 错误：取消加载
+                handler?.cancel()
             }
 
             override fun onReceivedHttpError(
@@ -250,16 +270,60 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             }
         }
 
+        // 添加 WebChromeClient 以获取 JS 控制台输出和页面加载进度
+        web.webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onConsoleMessage(message: android.webkit.ConsoleMessage?): Boolean {
+                message?.let {
+                    Timber.d("[ArkDO][WebView Console] [%s] %s:%d - %s",
+                        it.messageLevel(), it.sourceId(), it.lineNumber(), it.message())
+                }
+                return true
+            }
+
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                if (newProgress % 25 == 0) {  // 每 25% 记录一次
+                    Timber.i("[ArkDO][Network] attachHost: page loading progress=%d%%", newProgress)
+                }
+            }
+        }
+
         web.addJavascriptInterface(ensureWebviewExecutor(web).getCallbackProxy(), "ArkDOBridge")
         Timber.i("[ArkDO][Network] attachHost: JavascriptInterface added")
 
         this.webView = web
 
-        // 延迟 loadUrl 到 WebView attach 到视图树之后
-        // 如果在视图树 attach 前调用 loadUrl，WebView 不会触发 onPageStarted/onPageFinished
-        web.post {
-            Timber.i("[ArkDO][Network] attachHost: loading URL=%s (post-attach)", AppConstants.HOST_BOOTSTRAP_URL)
-            web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
+        // 关键修复：确保 loadUrl 在 WebView 附着到窗口后执行
+        // 策略：
+        // 1. 如果 WebView 已经附着（isAttachedToWindow == true），立即在下一帧加载
+        // 2. 如果 WebView 尚未附着，监听 onViewAttachedToWindow 回调
+        var hasLoaded = false
+
+        fun tryLoadUrl() {
+            if (!hasLoaded) {
+                hasLoaded = true
+                Timber.i("[ArkDO][Network] attachHost: loading URL=%s", AppConstants.HOST_BOOTSTRAP_URL)
+                Timber.i("[ArkDO][Network] attachHost: isAttachedToWindow=%s width=%d height=%d",
+                    web.isAttachedToWindow, web.width, web.height)
+                web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
+            }
+        }
+
+        web.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: android.view.View) {
+                Timber.i("[ArkDO][Network] attachHost: onViewAttachedToWindow callback fired")
+                tryLoadUrl()
+            }
+
+            override fun onViewDetachedFromWindow(v: android.view.View) {
+                // 不需要处理
+            }
+        })
+
+        // 如果 WebView 已经附着到窗口（AndroidView factory 执行时可能已附着），
+        // 直接在下一帧加载，因为 onViewAttachedToWindow 不会再触发
+        if (web.isAttachedToWindow) {
+            Timber.i("[ArkDO][Network] attachHost: WebView already attached, loading in next frame")
+            web.post { tryLoadUrl() }
         }
 
         return web
@@ -273,13 +337,19 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     }
 
     private fun attachController(webView: WebView) {
+        Timber.i("[ArkDO][Network] attachController: before setExecutor, executor=%s", executor)
         this.webView = webView
         setExecutor(ensureWebviewExecutor(webView))
+        Timber.i("[ArkDO][Network] attachController: after setExecutor, executor=%s", executor)
         configureDownloadDelegate()
     }
 
     /** host webview 是否已真正就绪到可发请求。 */
-    fun canFetch(): Boolean = executor != null
+    fun canFetch(): Boolean {
+        val result = executor != null
+        Timber.v("[ArkDO][Network] canFetch: executor=%s result=%s", executor, result)
+        return result
+    }
 
     /** 记录用于保存下载文件的沙箱上下文（filesDir）。 */
     fun setDownloadContext(context: Context) {
