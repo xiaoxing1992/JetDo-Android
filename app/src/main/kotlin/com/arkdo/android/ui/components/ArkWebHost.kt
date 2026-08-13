@@ -54,12 +54,26 @@ fun ArkWebHost(
                 // 2. 配置 settings (JS enabled, DOM storage, etc.)
                 // 3. 添加 JavascriptInterface
                 // 4. 设置 WebViewClient (监听 onPageFinished)
-                // 5. loadUrl(HOST_BOOTSTRAP_URL) = https://linux.do/session/csrf.json
+                // 5. loadUrl 会在 post {} 中延迟到窗口附着后执行
                 val webView = ArkWebNetworkBridge.attachHost(ctx)
+
+                // 关键：添加 onAttachedToWindow 监听，确保 WebView 真正附着到窗口后才开始加载
+                // 这对应鸿蒙版本的 .onControllerAttached() 回调
+                webView.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: android.view.View) {
+                        Timber.i("[ArkDO][ArkWebHost] ✅ WebView attached to window")
+                        Timber.i("[ArkDO][ArkWebHost] width=${v.width} height=${v.height}")
+                        Timber.i("[ArkDO][ArkWebHost] isAttachedToWindow=${v.isAttachedToWindow}")
+                    }
+
+                    override fun onViewDetachedFromWindow(v: android.view.View) {
+                        Timber.i("[ArkDO][ArkWebHost] WebView detached from window")
+                    }
+                })
 
                 Timber.i("[ArkDO][ArkWebHost] WebView created successfully")
                 Timber.i("[ArkDO][ArkWebHost] WebView.url=${webView.url}")
-                Timber.i("[ArkDO][ArkWebHost] WebView.width=${webView.width} height=${webView.height}")
+                Timber.i("[ArkDO][ArkWebHost] WebView.isAttachedToWindow=${webView.isAttachedToWindow}")
                 Timber.i("[ArkDO][ArkWebHost] waiting for onPageFinished callback...")
 
                 webView
@@ -69,14 +83,15 @@ fun ArkWebHost(
             }
         },
         update = { webView ->
-            // 确保 WebView 有尺寸（可能需要触发布局）
+            // 确保 WebView 有足够的尺寸来完成 Cloudflare Turnstile 验证
+            // Turnstile 需要至少 300x65 像素才能正常工作
             if (webView.width == 0 || webView.height == 0) {
                 Timber.w("[ArkDO][ArkWebHost] update: WebView has zero size, forcing measure")
                 webView.measure(
-                    android.view.View.MeasureSpec.makeMeasureSpec(1, android.view.View.MeasureSpec.EXACTLY),
-                    android.view.View.MeasureSpec.makeMeasureSpec(1, android.view.View.MeasureSpec.EXACTLY)
+                    android.view.View.MeasureSpec.makeMeasureSpec(400, android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(300, android.view.View.MeasureSpec.EXACTLY)
                 )
-                webView.layout(0, 0, 1, 1)
+                webView.layout(0, 0, 400, 300)
                 Timber.i("[ArkDO][ArkWebHost] update: after layout width=${webView.width} height=${webView.height}")
             }
         }

@@ -6,15 +6,22 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
 import com.arkdo.android.navigation.ArkDoNavHost
+import com.arkdo.android.services.challenge.ChallengeEventBus
+import com.arkdo.android.services.challenge.ChallengeRecoveryCoordinator
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.AppStateEventBus
 import com.arkdo.android.services.session.observeLifecycle
 import com.arkdo.android.ui.components.ArkWebHost
+import com.arkdo.android.ui.screens.PrivateDnsGuideScreen
 import com.arkdo.android.ui.theme.ArkDoTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -34,6 +41,8 @@ import timber.log.Timber
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private var challengeCoordinator: ChallengeRecoveryCoordinator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,16 +64,36 @@ class MainActivity : ComponentActivity() {
         setContent {
             ArkDoTheme {
                 var isWebViewReady by remember { mutableStateOf(false) }
+                var showPrivateDnsGuide by remember { mutableStateOf(false) }
+                var showChallengeSheet by remember { mutableStateOf(false) }
+
+                // 初始化 Challenge 恢复协调器
+                LaunchedEffect(Unit) {
+                    challengeCoordinator = ChallengeRecoveryCoordinator(
+                        onRecovered = {
+                            Timber.i("[ArkDO][MainActivity] Challenge resolved, dismissing sheet")
+                            showChallengeSheet = false
+                        },
+                        onEscalateToSheet = {
+                            Timber.i("[ArkDO][MainActivity] Challenge escalated to user interaction")
+                            showChallengeSheet = true
+                        }
+                    )
+
+                    // 订阅 Challenge 事件
+                    val unsubscribe = ChallengeEventBus.subscribe { event ->
+                        Timber.i("[ArkDO][MainActivity] Challenge detected: source=${event.source} status=${event.statusCode}")
+                        challengeCoordinator?.handleChallengeSignal(event.source)
+                    }
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Box {
-                        // 主界面（在上层）
-                        ArkDoNavHost()
-
-                        // 隐藏的 WebView 宿主（在底层，1x1 像素，近透明）
+                        // 隐藏的 WebView 宿主（在底层，可见但透明度很低）
+                        // 必须可见且在屏幕内，否则 Cloudflare Turnstile 无法完成验证
                         ArkWebHost(
                             onReady = {
                                 Timber.i("[ArkDO][MainActivity] WebView bridge ready")
@@ -72,9 +101,45 @@ class MainActivity : ComponentActivity() {
                             },
                             onLoadFailed = {
                                 Timber.e("[ArkDO][MainActivity] WebView bridge load failed")
-                                // TODO: 显示降级 UI，引导用户开启 DoH
-                            }
+                                showPrivateDnsGuide = true
+                            },
+                            modifier = Modifier
+                                .size(400.dp, 300.dp)  // 足够大以完成 Turnstile 验证
+                                .alpha(0.01f)          // 几乎透明，用户基本看不见
                         )
+
+                        // 主界面（在上层，完全覆盖 WebView）
+                        ArkDoNavHost()
+
+                        // Private DNS 配置引导页面（全屏覆盖）
+                        if (showPrivateDnsGuide) {
+                            PrivateDnsGuideScreen(
+                                onDismiss = { showPrivateDnsGuide = false },
+                                onConfigured = {
+                                    showPrivateDnsGuide = false
+                                    // 用户配置完成后，可以触发 WebView 重新加载
+                                    // 这里暂时只关闭引导页，WebView 会在下次冷启动时重试
+                                }
+                            )
+                        }
+
+                        // Cloudflare Challenge 验证页面（全屏覆盖）
+                        if (showChallengeSheet) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = MaterialTheme.colorScheme.background
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    // 这里应该显示一个可见的 WebView 让用户完成验证
+                                    // 暂时先显示提示信息
+                                    androidx.compose.material3.Text(
+                                        text = "正在完成 Cloudflare 验证...\n请稍候",
+                                        modifier = Modifier.align(androidx.compose.ui.Alignment.Center),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
