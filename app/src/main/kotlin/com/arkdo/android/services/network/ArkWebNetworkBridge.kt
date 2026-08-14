@@ -1,6 +1,7 @@
 package com.arkdo.android.services.network
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
@@ -14,6 +15,7 @@ import com.arkdo.android.services.content.DownloadEventBus
 import com.arkdo.android.services.content.DownloadResult
 import com.arkdo.android.services.message.MessageBusEventBus
 import com.arkdo.android.services.network.webscript.MessageBusScriptTemplate
+import com.arkdo.android.services.web.WebSessionManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -177,6 +179,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     private var reloading = false
     private val readyWaiters = mutableListOf<() -> Unit>()
+    private val reloadCompleteCallbacks = mutableListOf<() -> Unit>()
 
     private var downloadContext: Context? = null
     private var downloadDelegateReady = false
@@ -203,12 +206,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         web.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
 
-        // 设置 User-Agent 为 Chrome 桌面版，避免被 Cloudflare 识别为移动端 WebView
-        // 移动端 WebView 的默认 UA 可能触发额外的验证流程
-        val chromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        web.settings.userAgentString = chromeUA
-        Timber.i("[ArkDO][Network] attachHost: User-Agent set to desktop Chrome")
+        // 设置 User-Agent 必须与 CfChallengeScreen 完全一致
+        // Cloudflare 的 cf_clearance cookie 与 User-Agent 绑定
+        web.settings.userAgentString = AppConstants.DEFAULT_USER_AGENT
+        Timber.i("[ArkDO][Network] attachHost: User-Agent set to %s", AppConstants.DEFAULT_USER_AGENT)
 
         // 启用现代网络特性
         web.settings.setSupportMultipleWindows(false)
@@ -230,14 +231,83 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 Timber.i("[ArkDO][Network] attachHost: onPageStarted url=%s", url)
+
+                // 检查当前 Cookie - 测试多个 URL
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                val urlsToTest = listOf(
+                    "https://linux.do",
+                    "https://linux.do/",
+                    "https://linux.do/session/csrf.json"
+                )
+
+                for (testUrl in urlsToTest) {
+                    val cookies = cookieManager.getCookie(testUrl)
+                    val hasCfClearance = cookies?.contains("cf_clearance=") == true
+                    Timber.i("[ArkDO][Network] Cookie for '%s': hasCf=%b length=%d",
+                        testUrl, hasCfClearance, cookies?.length ?: 0)
+                }
+                Timber.i("[ArkDO][Network] attachHost: onPageStarted User-Agent=%s", view?.settings?.userAgentString)
+
                 markHostReloading()
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 Timber.i("[ArkDO][Network] attachHost: onPageFinished url=%s", url)
-                attachController(web)
-                markHostReady()
-                Timber.i("[ArkDO][Network] attachHost: controller attached, host ready")
+
+                // 检查页面是否有有效的 origin（避免 CORS 错误）
+                view?.evaluateJavascript("window.location.origin") { origin ->
+                    Timber.i("[ArkDO][Network] attachHost: page origin=%s", origin)
+
+                    if (origin == "\"null\"" || origin == "null" || origin.isNullOrEmpty()) {
+                        Timber.w("[ArkDO][Network] attachHost: invalid origin, retrying bootstrap load in 2s")
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            Timber.i("[ArkDO][Network] attachHost: retrying bootstrap load")
+                            markHostReloading()
+                            web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
+                        }, 2000)
+                        return@evaluateJavascript
+                    }
+
+                    // Origin 有效，继续初始化
+                    attachController(web)
+                    markHostReady()
+                    Timber.i("[ArkDO][Network] attachHost: controller attached, host ready with origin=%s", origin)
+
+                    // 检测页面是否是 Cloudflare 挑战页面
+                    view.evaluateJavascript(
+                        """
+                        (function() {
+                            const title = document.title || '';
+                            const body = document.body ? document.body.innerText : '';
+                            const url = window.location.href || '';
+                            const hasChallengeKeywords = title.includes('Just a moment') ||
+                                                         body.includes('Checking your browser') ||
+                                                         body.includes('Verify you are human') ||
+                                                         url.includes('/cdn-cgi/challenge-platform/') ||
+                                                         document.querySelector('[name="cf-turnstile-response"]') !== null;
+                            return JSON.stringify({
+                                hasChallenge: hasChallengeKeywords,
+                                title: title.substring(0, 50),
+                                bodyPreview: body.substring(0, 100),
+                                url: url
+                            });
+                        })();
+                        """.trimIndent()
+                    ) { result ->
+                        Timber.i("[ArkDO][Network] attachHost: challenge detection raw result=%s", result)
+                        val isChallengePage = result?.contains("\"hasChallenge\":true") == true
+
+                        // 额外检查：如果标题是"请稍候…"也认为是挑战页面
+                        val hasPendingTitle = result?.contains("请稍候") == true
+
+                        Timber.i("[ArkDO][Network] attachHost: isChallengePage=%s hasPendingTitle=%s", isChallengePage, hasPendingTitle)
+
+                        if ((isChallengePage || hasPendingTitle) && url?.contains("linux.do") == true) {
+                            Timber.w("[ArkDO][Network] attachHost: Cloudflare challenge page detected, notifying ChallengeEventBus")
+                            ChallengeEventBus.notifyChallengeRequired("bootstrap", 403, ChallengeState.REQUIRED)
+                        }
+                    }
+                }
             }
 
             override fun onReceivedError(
@@ -247,6 +317,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             ) {
                 Timber.e("[ArkDO][Network] attachHost: onReceivedError url=%s code=%d msg=%s",
                     request?.url, error?.errorCode, error?.description)
+
+                // 如果是主页面加载失败（ERR_CONNECTION_CLOSED 等），尝试重新加载
+                // 这避免了 origin='null' 导致的 CORS 错误
+                if (request?.isForMainFrame == true && error?.errorCode == -6) {
+                    Timber.w("[ArkDO][Network] attachHost: main frame load failed, will retry on next fetch")
+                    // 标记需要重新加载，但不立即重载（避免循环）
+                    // onPageFinished 会设置 executor，但首次 fetch 失败后会触发 reloadHost
+                }
             }
 
             override fun onReceivedSslError(
@@ -265,8 +343,44 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 request: android.webkit.WebResourceRequest?,
                 errorResponse: android.webkit.WebResourceResponse?
             ) {
+                val url = request?.url?.toString()
+                val statusCode = errorResponse?.statusCode ?: 0
                 Timber.e("[ArkDO][Network] attachHost: onReceivedHttpError url=%s statusCode=%d",
-                    request?.url, errorResponse?.statusCode)
+                    url, statusCode)
+
+                // 如果是主页面的 403 错误，很可能是 Cloudflare 挑战
+                if (request?.isForMainFrame == true && statusCode == 403 && url?.contains("linux.do") == true) {
+                    Timber.w("[ArkDO][Network] attachHost: 403 on main frame, likely Cloudflare challenge")
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        // 延迟检测，给挑战页面时间渲染
+                        view?.evaluateJavascript(
+                            """
+                            (function() {
+                                const url = window.location.href || '';
+                                const title = document.title || '';
+                                const body = document.body ? document.body.innerText : '';
+                                const hasChallenge = url.includes('/cdn-cgi/challenge-platform/') ||
+                                                   title.includes('Just a moment') ||
+                                                   title.includes('请稍候') ||
+                                                   body.includes('Checking your browser') ||
+                                                   body.includes('Verify you are human') ||
+                                                   document.querySelector('[name="cf-turnstile-response"]') !== null;
+                                return JSON.stringify({
+                                    hasChallenge: hasChallenge,
+                                    title: title,
+                                    url: url
+                                });
+                            })();
+                            """.trimIndent()
+                        ) { result ->
+                            Timber.i("[ArkDO][Network] attachHost: 403 challenge check result=%s", result)
+                            if (result?.contains("\"hasChallenge\":true") == true) {
+                                Timber.w("[ArkDO][Network] attachHost: Cloudflare challenge confirmed on 403, notifying")
+                                ChallengeEventBus.notifyChallengeRequired("bootstrap", 403, ChallengeState.REQUIRED)
+                            }
+                        }
+                    }, 1000)  // 延迟 1 秒让挑战页面渲染
+                }
             }
         }
 
@@ -369,6 +483,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             Timber.i("[ArkDO][Network] media cache clear failed error=%s", it.message)
         }
     }
+
+
 
     // ---------- 下载 ----------
 
@@ -501,10 +617,19 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     }
 
     /** 主动重载 host 首页：让 CF 挑战 JS 在真浏览器环境里运行以拿 cf_clearance。 */
-    fun reloadHost(): Boolean {
+    fun reloadHost(onComplete: (() -> Unit)? = null): Boolean {
         val web = webView ?: return false
         return runCatching {
+            // 重新加载前检查 cookie 状态
+            val cfClearance = WebSessionManager.getCfClearanceValue()
+            val hasCfClearance = WebSessionManager.hasCfClearance()
+            Timber.i("[ArkDO][Network] reloadHost: BEFORE reload cf_clearance=%s hasCfClearance=%b",
+                cfClearance.take(20), hasCfClearance)
+
             markHostReloading()
+            if (onComplete != null) {
+                reloadCompleteCallbacks.add(onComplete)
+            }
             web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
             true
         }.onFailure {
@@ -516,10 +641,17 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     /** host webview 重载完成（onPageFinished）：放行所有排队的 fetch。 */
     fun markHostReady() {
         reloading = false
-        if (readyWaiters.isEmpty()) return
+        if (readyWaiters.isEmpty() && reloadCompleteCallbacks.isEmpty()) return
+
+        // 放行所有排队的 fetch
         val waiters = readyWaiters.toList()
         readyWaiters.clear()
         waiters.forEach { it() }
+
+        // 触发重新加载完成的回调
+        val callbacks = reloadCompleteCallbacks.toList()
+        reloadCompleteCallbacks.clear()
+        callbacks.forEach { it() }
     }
 
     private suspend fun whenHostReady() {
@@ -758,6 +890,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     // ---------- 信封处理 ----------
 
+    @kotlinx.serialization.Serializable
     private data class WebFetchEnvelope(
         val statusCode: Int? = null,
         val contentType: String? = null,

@@ -71,8 +71,14 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     challengeCoordinator = ChallengeRecoveryCoordinator(
                         onRecovered = {
-                            Timber.i("[ArkDO][MainActivity] Challenge resolved, dismissing sheet")
+                            Timber.i("[ArkDO][MainActivity] Challenge resolved, reloading WebView")
                             showChallengeSheet = false
+                            // 重新加载 WebView，完成后再广播 SessionChanged
+                            com.arkdo.android.services.network.ArkWebNetworkBridge.reloadHost {
+                                Timber.i("[ArkDO][MainActivity] WebView reload complete, broadcasting SessionChanged")
+                                // 广播会话刷新——复查登录态、刷新列表
+                                com.arkdo.android.services.session.SessionEventBus.notifySessionChanged()
+                            }
                         },
                         onEscalateToSheet = {
                             Timber.i("[ArkDO][MainActivity] Challenge escalated to user interaction")
@@ -81,7 +87,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     // 订阅 Challenge 事件
-                    val unsubscribe = ChallengeEventBus.subscribe { event ->
+                    val unsubscribeChallengeEvent = ChallengeEventBus.subscribe { event ->
                         Timber.i("[ArkDO][MainActivity] Challenge detected: source=${event.source} status=${event.statusCode}")
                         challengeCoordinator?.handleChallengeSignal(event.source)
                     }
@@ -109,7 +115,7 @@ class MainActivity : ComponentActivity() {
                         )
 
                         // 主界面（在上层，完全覆盖 WebView）
-                        ArkDoNavHost()
+                        ArkDoNavHost(isWebViewReady = isWebViewReady)
 
                         // Private DNS 配置引导页面（全屏覆盖）
                         if (showPrivateDnsGuide) {
@@ -125,20 +131,18 @@ class MainActivity : ComponentActivity() {
 
                         // Cloudflare Challenge 验证页面（全屏覆盖）
                         if (showChallengeSheet) {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                color = MaterialTheme.colorScheme.background
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    // 这里应该显示一个可见的 WebView 让用户完成验证
-                                    // 暂时先显示提示信息
-                                    androidx.compose.material3.Text(
-                                        text = "正在完成 Cloudflare 验证...\n请稍候",
-                                        modifier = Modifier.align(androidx.compose.ui.Alignment.Center),
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                            com.arkdo.android.ui.screens.CfChallengeScreen(
+                                bridge = com.arkdo.android.services.network.ArkWebNetworkBridge,
+                                onClose = {
+                                    showChallengeSheet = false
+                                    Timber.i("[ArkDO][MainActivity] Challenge sheet closed by user")
+                                },
+                                onChallengeResolved = {
+                                    showChallengeSheet = false
+                                    Timber.i("[ArkDO][MainActivity] Challenge resolved, closing sheet")
+                                    challengeCoordinator?.notifySheetResolved()
                                 }
-                            }
+                            )
                         }
                     }
                 }

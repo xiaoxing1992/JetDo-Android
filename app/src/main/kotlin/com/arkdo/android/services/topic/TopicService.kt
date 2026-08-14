@@ -132,13 +132,18 @@ class TopicService(private val bridge: JsonNetworkClient) {
      * 话题列表通用解析
      */
     private suspend fun getTopicListPage(path: String, page: Int): NetworkResult<TopicPage> {
+        timber.log.Timber.i("[ArkDO][TopicService] getTopicListPage: path=%s", path)
         val response = bridge.getJson(path)
+        timber.log.Timber.i("[ArkDO][TopicService] getTopicListPage: response success=%s statusCode=%d dataLength=%d",
+            response.success, response.statusCode, response.data?.length ?: 0)
+
         if (!response.success) {
             return NetworkResults.forwardFailure(response)
         }
 
         val data = response.data
         if (data == null) {
+            timber.log.Timber.e("[ArkDO][TopicService] getTopicListPage: response data is null")
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -147,10 +152,13 @@ class TopicService(private val bridge: JsonNetworkClient) {
         }
 
         return try {
+            timber.log.Timber.d("[ArkDO][TopicService] getTopicListPage: parsing JSON, length=%d", data.length)
             val payload = json.decodeFromString<DiscourseLatestResponse>(data)
             val topicList = payload.topic_list
 
             if (topicList == null || topicList.topics == null) {
+                timber.log.Timber.e("[ArkDO][TopicService] getTopicListPage: topicList=%s topics=%s",
+                    topicList, topicList?.topics)
                 return NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
@@ -158,21 +166,24 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 )
             }
 
+            val mappedTopics = mapTopics(topicList.topics, payload.users)
+            timber.log.Timber.i("[ArkDO][TopicService] getTopicListPage: parsed %d topics", mappedTopics.size)
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
                 challengeState = response.challengeState,
                 data = TopicPage(
-                    topics = mapTopics(topicList.topics, payload.users),
+                    topics = mappedTopics,
                     page = page,
                     hasMore = topicList.more_topics_url != null
                 )
             )
         } catch (e: Exception) {
+            timber.log.Timber.e(e, "[ArkDO][TopicService] getTopicListPage: JSON parse failed")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 帖子列表响应不是有效 JSON。"
+                "Linux.do 帖子列表响应不是有效 JSON: ${e.message}"
             )
         }
     }

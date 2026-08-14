@@ -28,6 +28,7 @@ import com.arkdo.android.ui.topic.TopicDetailScreen
  */
 @Composable
 fun ArkDoNavHost(
+    isWebViewReady: Boolean = false,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
     startDestination: String = Routes.ROOT
@@ -39,7 +40,10 @@ fun ArkDoNavHost(
     ) {
         // Root Tab 容器（首页、通知、个人中心）
         composable(Routes.ROOT) {
-            RootTabScreen(navController = navController)
+            RootTabScreen(
+                isWebViewReady = isWebViewReady,
+                navController = navController
+            )
         }
 
         // 话题详情页

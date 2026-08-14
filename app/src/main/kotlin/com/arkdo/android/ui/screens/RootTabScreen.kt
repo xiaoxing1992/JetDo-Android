@@ -33,6 +33,7 @@ import com.arkdo.android.ui.home.HomeScreen
  */
 @Composable
 fun RootTabScreen(
+    isWebViewReady: Boolean = false,
     navController: NavHostController,
     modifier: Modifier = Modifier
 ) {
@@ -80,6 +81,7 @@ fun RootTabScreen(
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
+                    isWebViewReady = isWebViewReady,
                     onTopicClick = { topicId ->
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId")
                     }
