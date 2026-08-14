@@ -428,8 +428,8 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 TopicPoster(userId = it.user_id ?: 0L, description = "", extras = null)
             } ?: emptyList()
 
-            val tags = source.tags?.map { tagName ->
-                TopicTag(id = null, name = tagName, slug = null)
+            val tags = source.tags?.map { tag ->
+                TopicTag(id = tag.id, name = tag.name ?: "", slug = tag.slug)
             } ?: emptyList()
 
             Topic(
@@ -575,9 +575,16 @@ data class DiscourseTopic(
     val excerpt: String? = null,
     val image_url: String? = null,
     val posters: List<DiscoursePoster>? = null,
-    val tags: List<String>? = null,
+    val tags: List<DiscourseTag>? = null,
     val fancy_title: String? = null,
     val has_accepted_answer: Boolean? = null
+)
+
+@Serializable
+data class DiscourseTag(
+    val id: Long? = null,
+    val name: String? = null,
+    val slug: String? = null
 )
 
 @Serializable
