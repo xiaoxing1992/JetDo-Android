@@ -38,7 +38,9 @@ object AppConstants {
     // host webview 因 session 变化被重载时，注入式 fetch 排队等待 onPageEnd 的兜底超时。
     const val HOST_RELOAD_READY_TIMEOUT_MS = 5_000L
 
-    // Cloudflare 校验 UA 且 cf_clearance 与请求时 UA 绑定，验证页与后台请求必须用同一 UA。
+    // 仅作 UserAgentProvider 取不到系统默认 UA 时的回退值。
+    // 运行时 UA 由 services/web/UserAgentProvider 从真实内核生成(版本必须与引擎一致,
+    // 否则 CF 指纹判定不一致导致盾频繁);cf_clearance 与签发时 UA 绑定,全 app 统一取用。
     const val DEFAULT_USER_AGENT =
         "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
 

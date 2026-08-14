@@ -179,6 +179,10 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 )
             )
         } catch (e: Exception) {
+            // e.message 含 kotlinx 的字段路径与 offset;单独一行输出并附响应体开头,
+            // 避免堆栈首行被 logcat 环形缓冲冲掉后丢失定位信息(2026-08-14 曾发生)。
+            timber.log.Timber.e("[ArkDO][TopicService] getTopicListPage: JSON parse failed: %s | bodyHead=%s",
+                e.message, data.take(400))
             timber.log.Timber.e(e, "[ArkDO][TopicService] getTopicListPage: JSON parse failed")
             NetworkResults.unexpectedResponse(
                 response.statusCode,

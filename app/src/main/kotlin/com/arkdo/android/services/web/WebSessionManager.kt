@@ -40,7 +40,7 @@ object WebSessionManager {
 
     fun applyUserAgent(webView: WebView, source: String) {
         runCatching {
-            webView.settings.userAgentString = AppConstants.DEFAULT_USER_AGENT
+            webView.settings.userAgentString = UserAgentProvider.get(webView.context)
             Timber.i("%s user agent applied source=%s", LOG_TAG, source)
         }.onFailure {
             Timber.i("%s user agent apply failed source=%s error=%s", LOG_TAG, source, it.message)

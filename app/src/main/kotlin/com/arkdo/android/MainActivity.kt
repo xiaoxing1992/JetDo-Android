@@ -14,16 +14,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import com.arkdo.android.navigation.ArkDoNavHost
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryCoordinator
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.AppStateEventBus
 import com.arkdo.android.services.session.observeLifecycle
+import com.arkdo.android.services.web.WebSessionManager
 import com.arkdo.android.ui.components.ArkWebHost
 import com.arkdo.android.ui.screens.PrivateDnsGuideScreen
 import com.arkdo.android.ui.theme.ArkDoTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -43,6 +46,7 @@ import timber.log.Timber
 class MainActivity : ComponentActivity() {
 
     private var challengeCoordinator: ChallengeRecoveryCoordinator? = null
+    private var unsubscribeAppState: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,6 +55,17 @@ class MainActivity : ComponentActivity() {
 
         // 监听前后台状态（onStart → 前台，onStop → 后台）
         AppStateEventBus.observeLifecycle(this)
+
+        // 退后台把 WebView cookie(含 cf_clearance)刷盘,对齐鸿蒙 EntryAbility.onBackground
+        // 的 saveCookies('onBackground')。否则进程被杀时未落盘的 clearance 丢失,
+        // 下次冷启动被迫重新过盾。
+        unsubscribeAppState = AppStateEventBus.subscribe { isForeground ->
+            if (!isForeground) {
+                lifecycleScope.launch {
+                    WebSessionManager.saveCookies("onBackground")
+                }
+            }
+        }
 
         // 设置 WebView 下载上下文
         ArkWebNetworkBridge.setDownloadContext(this)
@@ -151,6 +166,12 @@ class MainActivity : ComponentActivity() {
 
         // 处理推送通知深链接（如果是从通知点击启动）
         handleNotificationIntent()
+    }
+
+    override fun onDestroy() {
+        unsubscribeAppState?.invoke()
+        unsubscribeAppState = null
+        super.onDestroy()
     }
 
     private fun handleNotificationIntent() {
