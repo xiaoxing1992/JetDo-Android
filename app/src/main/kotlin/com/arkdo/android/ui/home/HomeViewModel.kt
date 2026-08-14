@@ -6,6 +6,9 @@ import com.arkdo.android.data.models.Topic
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.ui.home.HomeConstants.FAB_TOP_HIDE_RATIO
+import com.arkdo.android.ui.home.HomeConstants.FAB_TOP_SHOW_RATIO
+import com.arkdo.android.ui.home.HomeConstants.PAGE_SIZE
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -418,9 +421,7 @@ class HomeViewModel @Inject constructor(
     }
 
     companion object {
-        // FAB 切换阈值（单位：视口高度的倍数）
-        private const val FAB_TOP_SHOW_RATIO = 1.5f
-        private const val FAB_TOP_HIDE_RATIO = 1.2f
+        // FAB 切换阈值已移至 HomeConstants.kt
     }
 }
 

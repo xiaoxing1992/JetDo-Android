@@ -33,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.Topic
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
+import com.arkdo.android.ui.components.TopicListItem as EnhancedTopicListItem
 import kotlinx.coroutines.launch
 
 /**
@@ -335,20 +336,22 @@ private fun TopicList(
 ) {
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 8.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         items(
             items = topics,
             key = { it.id }
         ) { topic ->
-            TopicListItem(
+            EnhancedTopicListItem(
                 topic = topic,
+                category = null, // TODO: 从 categories map 查找
+                parentCategory = null,
                 onClick = { onTopicClick(topic.id) },
+                onUnreadBadgeClick = { onTopicClick(topic.id) },
                 onCategoryClick = onCategoryClick,
-                onTagClick = onTagClick
+                onTagClick = onTagClick,
+                badgesTappable = true
             )
-            HorizontalDivider()
         }
 
         // 加载更多指示器
@@ -369,44 +372,6 @@ private fun TopicList(
                         CircularProgressIndicator()
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TopicListItem(
-    topic: Topic,
-    onClick: () -> Unit,
-    onCategoryClick: (TopicCategory) -> Unit = {},
-    onTagClick: (TopicTag) -> Unit = {}
-) {
-    // 简化版话题卡片，完整实现需添加头像、标签、统计数据等
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = topic.title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    text = "${topic.postsCount} 回复",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${topic.views} 浏览",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
