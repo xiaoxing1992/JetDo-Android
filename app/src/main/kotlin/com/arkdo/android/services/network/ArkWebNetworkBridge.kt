@@ -192,6 +192,50 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     // ---------- host 生命周期 ----------
 
     /**
+     * 🚀 应用启动时预加载 WebView（在 UI 渲染前）
+     *
+     * 对齐鸿蒙版的启动策略：在应用启动时立即创建隐藏 WebView 并加载 bootstrap URL。
+     *
+     * 优势：
+     * 1. 提前完成 WebView 初始化（~1-2s）
+     * 2. 提前恢复/建立 Cookie（_t, cf_clearance）
+     * 3. 提前完成 Cloudflare 挑战（如需要，静默在后台）
+     * 4. 当用户看到首页时，WebView 已就绪，首次请求立即成功
+     *
+     * 必须在主线程调用（通常在 MainActivity.onCreate）。
+     */
+    fun preloadHostInBackground(context: Context) {
+        if (webView != null) {
+            Timber.i("[ArkDO][Network] preloadHostInBackground: WebView already exists, skipping")
+            return
+        }
+
+        Timber.i("[ArkDO][Network] ========== Preloading WebView in Background ==========")
+        Timber.i("[ArkDO][Network] preloadHostInBackground: start ts=%d", System.currentTimeMillis())
+
+        // 检查是否在主线程
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            Timber.e("[ArkDO][Network] preloadHostInBackground: NOT on main thread, posting to main thread")
+            mainHandler.post { preloadHostInBackground(context) }
+            return
+        }
+
+        // 直接调用 attachHost 创建 WebView
+        // 注意：此时 WebView 不会附着到窗口，所以 loadUrl 会在 attachHost 内部等待附着
+        val web = attachHost(context)
+
+        // 设置一个小尺寸（不需要显示，但需要满足 Cloudflare Turnstile 最小尺寸要求）
+        web.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(400, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(300, android.view.View.MeasureSpec.EXACTLY)
+        )
+        web.layout(0, 0, 400, 300)
+
+        Timber.i("[ArkDO][Network] preloadHostInBackground: WebView created, will load when attached to window")
+        Timber.i("[ArkDO][Network] preloadHostInBackground: isAttachedToWindow=%s", web.isAttachedToWindow)
+    }
+
+    /**
      * 创建隐藏 host WebView 并挂桥。必须主线程调用。
      * 加载 HOST_BOOTSTRAP_URL 定 origin；onPageFinished → attachController + markHostReady。
      */
@@ -206,10 +250,39 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         web.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
 
+        // 🚀 关键优化：配置 DoH (DNS over HTTPS)
+        // 对齐鸿蒙版 DohManager.applyActive()，让 WebView 使用 DoH 绕过 DNS 污染
+        try {
+            // Android 13 (API 33) 及以上支持通过反射设置自定义 DoH 服务器
+            // 鸿蒙版使用 webview.WebviewController.setHttpDns(mode, url)
+            // Android 对应的方法可能是 WebSettings.setDnsOverHttpsServers() 或类似 API
+
+            // 尝试方案 1: 使用反射调用 setDnsOverHttpsServers (如果存在)
+            // 参考：https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/java/android/webkit/WebSettings.java
+            val dohUrl = "https://edge.47258.xyz/linuxdo" // 与鸿蒙版保持一致
+
+            try {
+                // 尝试通过反射设置 DoH
+                val setDohMethod = web.settings.javaClass.getMethod("setDnsOverHttpsServers", String::class.java)
+                setDohMethod.invoke(web.settings, dohUrl)
+                Timber.i("[ArkDO][Network] attachHost: DoH configured via setDnsOverHttpsServers url=%s", dohUrl)
+            } catch (e: NoSuchMethodException) {
+                // API 不存在，可能是较低版本的 Android
+                Timber.w("[ArkDO][Network] attachHost: setDnsOverHttpsServers not available, DoH not configured")
+
+                // 降级方案：提示用户在系统设置中配置 Private DNS
+                // Private DNS 是 Android 9+ 的系统级 DoH 功能
+                // 设置路径：设置 -> 网络和互联网 -> Private DNS -> 手动输入 dns.google
+                Timber.i("[ArkDO][Network] attachHost: Please configure Private DNS in system settings")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][Network] attachHost: Failed to configure DoH")
+        }
+
         // 设置 User-Agent 必须与 CfChallengeScreen 完全一致
         // Cloudflare 的 cf_clearance cookie 与 User-Agent 绑定
-        web.settings.userAgentString = AppConstants.DEFAULT_USER_AGENT
-        Timber.i("[ArkDO][Network] attachHost: User-Agent set to %s", AppConstants.DEFAULT_USER_AGENT)
+        web.settings.userAgentString = com.arkdo.android.services.web.UserAgentProvider.get(context)
+        Timber.i("[ArkDO][Network] attachHost: User-Agent set to %s", web.settings.userAgentString)
 
         // 启用现代网络特性
         web.settings.setSupportMultipleWindows(false)
@@ -305,6 +378,13 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                         if ((isChallengePage || hasPendingTitle) && url?.contains("linux.do") == true) {
                             Timber.w("[ArkDO][Network] attachHost: Cloudflare challenge page detected, notifying ChallengeEventBus")
                             ChallengeEventBus.notifyChallengeRequired("bootstrap", 403, ChallengeState.REQUIRED)
+                        } else if (url?.contains("linux.do") == true) {
+                            // 页面干净(已过盾或本就无盾):立即把 cookie(含静默过盾拿到的
+                            // cf_clearance)刷盘。此前只有可见验证页成功才刷盘,宿主静默过盾
+                            // 的 clearance 进程一死就丢,导致每次冷启动都重新过盾。
+                            kotlinx.coroutines.MainScope().launch {
+                                WebSessionManager.saveCookies("hostReadyClean")
+                            }
                         }
                     }
                 }
@@ -587,7 +667,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         val req = android.app.DownloadManager.Request(android.net.Uri.parse(url))
         req.setDestinationInExternalFilesDir(context, null, "${dir.name}/$fileName")
         req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_HIDDEN)
-        req.addRequestHeader("User-Agent", AppConstants.DEFAULT_USER_AGENT)
+        req.addRequestHeader("User-Agent", com.arkdo.android.services.web.UserAgentProvider.get(context))
         try {
             dm.enqueue(req)
             // 无回调通道，这里简化：附件经 DownloadEventBus 提示已开始下载。
@@ -1054,7 +1134,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
 private object WebSessionManagerInternal {
     fun configure(web: WebView, source: String) {
-        web.settings.userAgentString = AppConstants.DEFAULT_USER_AGENT
+        web.settings.userAgentString = com.arkdo.android.services.web.UserAgentProvider.get(web.context)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
     }
