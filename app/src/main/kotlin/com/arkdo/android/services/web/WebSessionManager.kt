@@ -52,10 +52,19 @@ object WebSessionManager {
         cookieSaveMutex.withLock {
             // 用 withLock 保证串行：前一次 flush 完成后才执行下一次。
             runCatching {
+                // 保存前先记录当前 cookie 状态
+                val beforeCfClearance = getCfClearanceValue()
+                val beforeSnapshot = getCookiePresenceSnapshot("_t")
+                Timber.i("%s BEFORE save: source=%s cf_clearance=%s authCookiePresent=%b cookieHeaderLength=%d",
+                    LOG_TAG, source, beforeCfClearance.take(20), beforeSnapshot.hasCookie, beforeSnapshot.headerLength)
+
                 CookieManager.getInstance().flush()
-                val snapshot = getCookiePresenceSnapshot("_t")
-                Timber.i("%s cookie save success source=%s authCookiePresent=%b cookieHeaderLength=%d",
-                    LOG_TAG, source, snapshot.hasCookie, snapshot.headerLength)
+
+                // 保存后再检查
+                val afterCfClearance = getCfClearanceValue()
+                val afterSnapshot = getCookiePresenceSnapshot("_t")
+                Timber.i("%s AFTER save: source=%s cf_clearance=%s authCookiePresent=%b cookieHeaderLength=%d",
+                    LOG_TAG, source, afterCfClearance.take(20), afterSnapshot.hasCookie, afterSnapshot.headerLength)
             }.onFailure {
                 Timber.i("%s cookie save failed source=%s error=%s", LOG_TAG, source, it.message)
             }

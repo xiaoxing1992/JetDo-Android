@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -29,21 +30,37 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadInitial()
+        Timber.i("[ArkDO][HomeViewModel] init: waiting for WebView bridge to be ready")
+        // 不再在 init 中立即加载，而是等待外部通知 bridge 就绪
+
+        // 订阅 Session 事件：验证通过后自动刷新
+        com.arkdo.android.services.session.SessionEventBus.subscribe { version ->
+            Timber.i("[ArkDO][HomeViewModel] Session changed version=$version, refreshing topics")
+            refresh()
+        }
     }
 
     /**
      * 初始加载（冷启动）
+     * 应该在 WebView bridge 就绪后由外部调用
      */
-    private fun loadInitial() {
+    fun loadInitial() {
+        Timber.i("[ArkDO][HomeViewModel] loadInitial: isInitialLoading=%s topics.size=%d",
+            _uiState.value.isInitialLoading, _uiState.value.topics.size)
+
         if (_uiState.value.isInitialLoading || _uiState.value.topics.isNotEmpty()) {
+            Timber.w("[ArkDO][HomeViewModel] loadInitial: skipped (already loading or has topics)")
             return
         }
 
+        Timber.i("[ArkDO][HomeViewModel] loadInitial: setting isInitialLoading=true")
         _uiState.update { it.copy(isInitialLoading = true, error = null) }
 
         viewModelScope.launch {
+            Timber.i("[ArkDO][HomeViewModel] loadInitial: calling topicService.getLatestTopicsPage(0)")
             val result = topicService.getLatestTopicsPage(page = 0)
+            Timber.i("[ArkDO][HomeViewModel] loadInitial: result success=%s data=%s",
+                result.success, result.data)
             _uiState.update { state ->
                 if (result.success && result.data != null) {
                     state.copy(

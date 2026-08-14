@@ -33,6 +33,7 @@ import com.arkdo.android.data.models.Topic
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    isWebViewReady: Boolean = false,
     viewModel: HomeViewModel = hiltViewModel(),
     onTopicClick: (Long) -> Unit = {},
     onProfileClick: () -> Unit = {},
@@ -41,6 +42,13 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    // 当 WebView bridge 就绪且列表为空时，触发初始加载
+    LaunchedEffect(isWebViewReady) {
+        if (isWebViewReady && uiState.topics.isEmpty() && !uiState.isInitialLoading) {
+            viewModel.loadInitial()
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),

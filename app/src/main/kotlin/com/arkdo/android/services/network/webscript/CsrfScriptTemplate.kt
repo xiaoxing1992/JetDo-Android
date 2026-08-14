@@ -50,6 +50,8 @@ fun buildCsrfScript(
             const requestUrl = new URL($urlExpr, baseUrl);
             let csrfSource = 'none';
             let csrfLength = 0;
+            console.log('[ArkDO][CsrfScript] document.cookie=', document.cookie.substring(0, 200));
+            console.log('[ArkDO][CsrfScript] document.location.href=', document.location.href);
             const fail = (error) => {
               window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0,
