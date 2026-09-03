@@ -2,6 +2,19 @@ package com.arkdo.android.data.models
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.nullable
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * 站点元数据
@@ -32,6 +45,8 @@ data class SiteDef(
  */
 enum class FeedKey(val value: String) {
     LATEST("latest"),
+    // Discourse 没有按发布时间的 filter，走 latest 路由挂 order=created 换排序键。
+    CREATED("created"),
     TOP("top"),
     HOT("hot"),
     UNREAD("unread"),
@@ -66,15 +81,39 @@ internal data class DiscourseCategory(
     @SerialName("text_color") val textColor: String? = null,
     @SerialName("slug") val slug: String? = null,
     @SerialName("parent_category_id") val parentCategoryId: Long? = null,
-    @SerialName("uploaded_logo") val uploadedLogo: UploadedLogoUnion? = null,
+    @SerialName("uploaded_logo")
+    @Serializable(with = UploadedLogoSerializer::class)
+    val uploadedLogo: String? = null,
     @SerialName("icon") val icon: String? = null,
     @SerialName("read_restricted") val readRestricted: Boolean? = null
 )
 
-@Serializable
-internal data class DiscourseUploadedLogo(
-    @SerialName("url") val url: String? = null
-)
+/**
+ * `uploaded_logo` 在 /site.json 里有两种形态：字符串 URL，或
+ * `{"url": ..., "width": ..., "height": ...}` 对象（Discourse 新版是后者）。
+ *
+ * 这里必须两种都收。之前把它简化成 String 直接接，遇到对象形态会抛
+ * SerializationException —— 而那个异常被 SiteService 的 catch 吞掉，
+ * 最终表现是「整站版块一个都加载不出来」，且没有任何错误提示。
+ * ignoreUnknownKeys 对这种类型不匹配是无效的。
+ */
+internal object UploadedLogoSerializer : KSerializer<String?> {
 
-// 处理 uploaded_logo 可能是 string 或 object
-internal typealias UploadedLogoUnion = String // 简化处理，实际可能需要自定义序列化器
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("UploadedLogo", PrimitiveKind.STRING).nullable
+
+    override fun deserialize(decoder: Decoder): String? {
+        val input = decoder as? JsonDecoder ?: return null
+        return when (val element = input.decodeJsonElement()) {
+            is JsonNull -> null
+            is JsonPrimitive -> element.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            is JsonObject -> element["url"]?.jsonPrimitive?.contentOrNull
+                ?.trim()?.takeIf { it.isNotEmpty() }
+            else -> null
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: String?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeString(value)
+    }
+}

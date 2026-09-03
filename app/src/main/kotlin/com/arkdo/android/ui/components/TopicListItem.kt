@@ -1,30 +1,19 @@
 package com.arkdo.android.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,30 +21,61 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.data.models.Topic
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
-import com.arkdo.android.data.models.User
+import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.ui.utils.RelativeTime
 
+// ==========================================================================
+// 对齐鸿蒙版 views/components/TopicListItem.ets。
+//
+// 几何取自鸿蒙 TopicListStylePrefs 的默认档（该侧这些值用户可在设置里调，
+// Android 尚未移植设置页，先按默认值硬编码，字段名保持一致便于后续接上）：
+//   标题 17 / 字重 500 / 行高 17*1.35≈23 / 行内边距 8 / 头像 48
+//   次要文字 17-4=13 / 未读药丸 17-5=12（圆角 12*0.75≈9）/ 小蓝点 17-9=8
+//   头像间距 max(6, 48/6)=8 / meta 行间距 max(2, 8*3/8)=3 / 摘要间距 max(2, 8/2)=4
+// ==========================================================================
+
+private const val TITLE_FONT_SIZE = 17
+private const val ROW_PADDING = 8
+private const val AVATAR_SIZE = 48
+
+private val TITLE_LINE_HEIGHT = (TITLE_FONT_SIZE * 1.35f).toInt().sp   // 23
+private val SECONDARY_FONT_SIZE = (TITLE_FONT_SIZE - 4).sp              // 13
+private val UNREAD_BADGE_FONT_SIZE = (TITLE_FONT_SIZE - 5).sp           // 12
+private val UNREAD_BADGE_RADIUS = 9.dp                                  // round(12 * 0.75)
+private val UNSEEN_DOT_FONT_SIZE = (TITLE_FONT_SIZE - 9).sp             // 8
+private val INLINE_ICON_SIZE = 15.dp
+private val INLINE_ICON_GAP = 5.dp
+private val AVATAR_GAP = 8.dp
+private val META_ROW_GAP = 3.dp
+private val BLURB_GAP = 4.dp
+
+private const val INLINE_BOOKMARK = "bookmark"
+private const val INLINE_SOLVED = "solved"
+private const val INLINE_UNREAD = "unread"
+
 /**
- * 话题列表项组件 - 1:1 对齐鸿蒙版 TopicListItem.ets
+ * 话题列表项。
  *
- * 核心功能：
- * - 用户头像 + 用户名
- * - 标题（支持已读/未读状态、收藏标记、已解决标记）
- * - 未读回复徽章 / 未读小圆点
- * - 分类和标签徽章（可点击筛选）
- * - 相对时间显示
- * - 搜索结果高亮摘要
- * - 增量插入动画（首页实时新话题）
+ * 标题**不限行数**、不省略号 —— 这是鸿蒙侧的行为，长标题会撑高整行。
  */
 @Composable
 fun TopicListItem(
@@ -68,83 +88,64 @@ fun TopicListItem(
     onTagClick: ((TopicTag) -> Unit)? = null,
     badgesTappable: Boolean = false,
     searchHighlights: List<String> = emptyList(),
-    contentHorizontalPadding: Int = 16,
+    contentHorizontalPadding: Int = 12,
     incomingHighlightActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val colors = arkdoColors
     val hasUnreadBadge = (topic.unreadPosts ?: 0) > 0
-    val clickHandler = if (hasUnreadBadge && onUnreadBadgeClick != null) {
-        onUnreadBadgeClick
-    } else {
-        onClick
-    }
+    val clickHandler = if (hasUnreadBadge && onUnreadBadgeClick != null) onUnreadBadgeClick else onClick
 
-    // 增量插入高亮背景色动画
-    val backgroundColor by animateDpAsState(
-        targetValue = if (incomingHighlightActive) 2.dp else 0.dp,
+    // 淡出终点是同色 alpha=0，不是 Transparent —— 否则过渡中途会先褪成灰再消失。
+    val bgColor by animateColorAsState(
+        targetValue = if (incomingHighlightActive) colors.incomingHighlight else colors.incomingHighlightFaded,
         animationSpec = tween(durationMillis = 600),
         label = "incomingHighlight"
     )
 
-    val bgColor = if (incomingHighlightActive) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-    } else {
-        Color.Transparent
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(bgColor)
             .clickable(onClick = clickHandler)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(bgColor)
                 .padding(
                     start = contentHorizontalPadding.dp,
                     end = contentHorizontalPadding.dp,
-                    top = 12.dp,
-                    bottom = 12.dp
+                    top = ROW_PADDING.dp,
+                    bottom = ROW_PADDING.dp
                 ),
             verticalAlignment = Alignment.Top
         ) {
-            // 用户头像（ID=1 用户自动使用方形，其余用户使用圆形）
             UserAvatar(
                 user = topic.author,
-                avatarSize = 40.dp,
+                avatarSize = AVATAR_SIZE.dp,
                 showFlair = true
             )
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(AVATAR_GAP))
 
-            // 右侧内容区
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                // 标题行（含状态图标和未读徽章）
-                TitleRow(
-                    topic = topic,
-                    searchHighlights = searchHighlights
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                TitleRow(topic = topic, searchHighlights = searchHighlights)
 
-                // 搜索摘要（仅搜索结果）
                 if (!topic.searchBlurb.isNullOrEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SearchBlurb(
-                        blurb = topic.searchBlurb!!,
-                        highlights = searchHighlights
-                    )
+                    Spacer(modifier = Modifier.height(BLURB_GAP))
+                    SearchBlurb(blurb = topic.searchBlurb!!, highlights = searchHighlights)
                 }
 
-                // 元数据行：分类/标签 + 时间
-                if (category != null || topic.tags.isNotEmpty() || topic.lastPostedAt != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                // 按格式化后的时间串判空：解析失败时不该留出一条空的 meta 行。
+                val relativeTime = RelativeTime.fromNow(topic.lastPostedAt)
+                val hasBadges = category != null || topic.tags.isNotEmpty()
+                if (hasBadges || relativeTime.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(META_ROW_GAP))
                     MetadataRow(
                         category = category,
                         parentCategory = parentCategory,
                         tags = topic.tags,
-                        lastPostedAt = topic.lastPostedAt,
+                        relativeTime = relativeTime,
                         badgesTappable = badgesTappable,
                         onCategoryClick = onCategoryClick,
                         onTagClick = onTagClick
@@ -153,122 +154,159 @@ fun TopicListItem(
             }
         }
 
-        // 分隔线
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.padding(horizontal = contentHorizontalPadding.dp),
-            color = MaterialTheme.colorScheme.outlineVariant,
-            thickness = 0.5.dp
+            color = colors.border,
+            thickness = 1.dp
         )
     }
 }
 
 /**
- * 标题行：状态图标 + 标题文本 + 未读徽章/小圆点
+ * 标题行：书签 / 已解决图标 → 标题 → 未读药丸或小蓝点，全部内联在一个 Text 里。
  */
 @Composable
 private fun TitleRow(
     topic: Topic,
     searchHighlights: List<String>
 ) {
+    val colors = arkdoColors
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+
+    val iconSp = with(density) { INLINE_ICON_SIZE.toSp() }
+    // 占位要把图标和它右侧的间距一起算进去，所以先在 Dp 上相加再换算。
+    val iconSlotSp = with(density) { (INLINE_ICON_SIZE + INLINE_ICON_GAP).toSp() }
+
+    val unreadCount = topic.unreadPosts ?: 0
+    // 药丸内部用不换行空格，保证换行时不会被从中间劈开、留半截背景在上一行。
+    val pillLabel = " $unreadCount "
+    val pillWidthSp = if (unreadCount > 0) {
+        val measured = measurer.measure(
+            AnnotatedString(pillLabel),
+            TextStyle(fontSize = UNREAD_BADGE_FONT_SIZE, fontWeight = FontWeight.Medium)
+        ).size.width
+        with(density) { measured.toSp() }
+    } else {
+        0.sp
+    }
+
     val titleText = buildAnnotatedString {
-        // 收藏图标
-        if (topic.bookmarked == true) {
-            append("📑 ")
-        }
+        if (topic.bookmarked == true) appendInlineContent(INLINE_BOOKMARK, "🔖")
+        if (topic.hasAcceptedAnswer == true) appendInlineContent(INLINE_SOLVED, "✔")
 
-        // 已解决图标
-        if (topic.hasAcceptedAnswer == true) {
-            append("✅ ")
-        }
-
-        // 标题（搜索场景高亮）
         if (searchHighlights.isNotEmpty()) {
-            highlightText(topic.title, searchHighlights)
+            highlightText(topic.title, searchHighlights, colors.brand)
         } else {
             append(topic.title)
         }
 
-        // 未读徽章
-        val unreadCount = topic.unreadPosts ?: 0
         if (unreadCount > 0) {
-            append("  ")
-            withStyle(
-                style = SpanStyle(
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    background = Color(0xFF66CCFF)
-                )
-            ) {
-                append(" $unreadCount ")
-            }
+            // 两个普通空格是整条标题里唯一允许在药丸前断行的位置。
+            withStyle(SpanStyle(fontSize = UNREAD_BADGE_FONT_SIZE)) { append("  ") }
+            appendInlineContent(INLINE_UNREAD, pillLabel)
         } else if (topic.unseen == true) {
-            // 未读小圆点
-            append(" ")
-            withStyle(
-                style = SpanStyle(
-                    color = Color(0xFF66CCFF),
-                    fontSize = 10.sp
-                )
-            ) {
-                append("●")
+            withStyle(SpanStyle(fontSize = UNSEEN_DOT_FONT_SIZE, color = ArkdoFixedColors.Unread)) {
+                append(" ●")
             }
+        }
+    }
+
+    val inlineContent = buildMap {
+        put(
+            INLINE_BOOKMARK,
+            InlineTextContent(
+                Placeholder(iconSlotSp, iconSp, PlaceholderVerticalAlign.Center)
+            ) {
+                Row {
+                    // SVG 里已烘死 #919191，不再染色。
+                    FaIconRaw("bookmark-gray.svg", INLINE_ICON_SIZE)
+                    Spacer(Modifier.width(INLINE_ICON_GAP))
+                }
+            }
+        )
+        put(
+            INLINE_SOLVED,
+            InlineTextContent(
+                Placeholder(iconSlotSp, iconSp, PlaceholderVerticalAlign.Center)
+            ) {
+                Row {
+                    FaIconRaw("far-square-check-green.svg", INLINE_ICON_SIZE)
+                    Spacer(Modifier.width(INLINE_ICON_GAP))
+                }
+            }
+        )
+        if (unreadCount > 0) {
+            put(
+                INLINE_UNREAD,
+                InlineTextContent(
+                    Placeholder(pillWidthSp, UNREAD_BADGE_FONT_SIZE, PlaceholderVerticalAlign.Center)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(UNREAD_BADGE_RADIUS))
+                            .background(ArkdoFixedColors.Unread),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = pillLabel,
+                            fontSize = UNREAD_BADGE_FONT_SIZE,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                    }
+                }
+            )
         }
     }
 
     Text(
         text = titleText,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis
+        inlineContent = inlineContent,
+        fontSize = TITLE_FONT_SIZE.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = TITLE_LINE_HEIGHT,
+        color = colors.textBody,
+        modifier = Modifier.fillMaxWidth()
     )
 }
 
-/**
- * 搜索摘要：高亮命中词
- */
 @Composable
 private fun SearchBlurb(
     blurb: String,
     highlights: List<String>
 ) {
+    val colors = arkdoColors
     val blurbText = buildAnnotatedString {
-        if (highlights.isNotEmpty()) {
-            highlightText(blurb, highlights)
-        } else {
-            append(blurb)
-        }
+        if (highlights.isNotEmpty()) highlightText(blurb, highlights, colors.brand) else append(blurb)
     }
 
     Text(
         text = blurbText,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = SECONDARY_FONT_SIZE,
+        color = colors.textSecondary,
         maxLines = 2,
-        overflow = TextOverflow.Ellipsis
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth()
     )
 }
 
-/**
- * 元数据行：分类/标签徽章 + 相对时间
- */
 @Composable
 private fun MetadataRow(
     category: TopicCategory?,
     parentCategory: TopicCategory?,
     tags: List<TopicTag>,
-    lastPostedAt: String?,
+    relativeTime: String,
     badgesTappable: Boolean,
     onCategoryClick: ((TopicCategory) -> Unit)?,
     onTagClick: ((TopicTag) -> Unit)?
 ) {
+    val colors = arkdoColors
+
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 分类和标签徽章（占剩余宽度，可横向滚动）
         if (category != null || tags.isNotEmpty()) {
             TopicMetadataBadges(
                 category = category,
@@ -283,25 +321,24 @@ private fun MetadataRow(
             Spacer(modifier = Modifier.weight(1f))
         }
 
-        // 相对时间
-        val relativeTime = RelativeTime.fromNow(lastPostedAt)
         if (relativeTime.isNotEmpty()) {
-            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = relativeTime,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = SECONDARY_FONT_SIZE,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
     }
 }
 
 /**
- * 高亮文本中的关键词
+ * 高亮命中词。字重显式回填 Medium，与标题非命中段保持一致。
  */
-private fun androidx.compose.ui.text.AnnotatedString.Builder.highlightText(
+private fun AnnotatedString.Builder.highlightText(
     text: String,
-    highlights: List<String>
+    highlights: List<String>,
+    highlightColor: Color
 ) {
     if (highlights.isEmpty()) {
         append(text)
@@ -313,7 +350,6 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.highlightText(
     var cursor = 0
 
     while (cursor < text.length) {
-        // 找到最早出现的高亮词
         var bestPos = -1
         var bestLen = 0
         for (term in lowerHighlights) {
@@ -326,23 +362,13 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.highlightText(
         }
 
         if (bestPos < 0) {
-            // 没有更多高亮词，追加剩余文本
             append(text.substring(cursor))
             break
         }
 
-        // 追加普通文本
-        if (bestPos > cursor) {
-            append(text.substring(cursor, bestPos))
-        }
+        if (bestPos > cursor) append(text.substring(cursor, bestPos))
 
-        // 追加高亮文本
-        withStyle(
-            style = SpanStyle(
-                color = Color(0xFFC4612F), // 品牌色 terracotta
-                fontWeight = FontWeight.Medium
-            )
-        ) {
+        withStyle(SpanStyle(color = highlightColor, fontWeight = FontWeight.Medium)) {
             append(text.substring(bestPos, bestPos + bestLen))
         }
 

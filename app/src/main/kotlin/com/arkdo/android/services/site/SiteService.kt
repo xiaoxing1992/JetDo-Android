@@ -8,6 +8,7 @@ import com.arkdo.android.services.network.JsonNetworkClient
 import com.arkdo.android.services.network.NetworkResult
 import com.arkdo.android.services.network.NetworkResults
 import kotlinx.serialization.json.Json
+import timber.log.Timber
 
 /**
  * 站点服务
@@ -49,15 +50,18 @@ class SiteService(private val bridge: JsonNetworkClient) {
                 )
             }
 
+            val mapped = mapCategories(categories)
+            Timber.i("[ArkDO][Site] /site.json 已解析 categories=%d", mapped.size)
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
                 challengeState = response.challengeState,
-                data = SiteMetadata(
-                    categories = mapCategories(categories)
-                )
+                data = SiteMetadata(categories = mapped)
             )
         } catch (e: Exception) {
+            // 一定要打出来：/site.json 里任何一个字段的类型对不上都会整份解析失败，
+            // 表现成「版块一个都没有」。之前这里静默吞掉，排查时完全没有线索。
+            Timber.e(e, "[ArkDO][Site] /site.json 解析失败 len=%d", data.length)
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -66,36 +70,45 @@ class SiteService(private val bridge: JsonNetworkClient) {
         }
     }
 
-    private fun mapCategories(sourceCategories: List<DiscourseCategory>): List<TopicCategory> {
-        return sourceCategories.mapNotNull { mapCategory(it) }
-    }
+    private fun mapCategories(sourceCategories: List<DiscourseCategory>): List<TopicCategory> =
+        Companion.mapCategories(sourceCategories)
 
-    private fun mapCategory(source: DiscourseCategory): TopicCategory? {
-        val id = source.id ?: return null
-        val name = source.name ?: return null
+    companion object {
+        /**
+         * DiscourseCategory -> TopicCategory。纯映射，不碰网络，
+         * 所以单测可以直接拿真实 /site.json 的解析结果过一遍。
+         *
+         * uploaded_logo 的 string|object 两种形态在反序列化层就已经归一成 String?
+         * （见 UploadedLogoSerializer），这里拿到的就是可用的地址或 null。
+         */
+        internal fun mapCategories(sourceCategories: List<DiscourseCategory>): List<TopicCategory> =
+            sourceCategories.mapNotNull { mapCategory(it) }
 
-        return TopicCategory(
-            id = id,
-            name = name,
-            color = normalizeHex(source.color, "6B7280"),
-            textColor = normalizeHex(source.textColor, "FFFFFF"),
-            slug = source.slug?.takeIf { it.isNotEmpty() },
-            parentCategoryId = source.parentCategoryId,
-            uploadedLogo = mapUploadedLogo(source.uploadedLogo),
-            icon = source.icon?.takeIf { it.isNotEmpty() },
-            readRestricted = source.readRestricted
-        )
-    }
+        /** 单测入口，语义同 [mapCategories]。 */
+        internal fun mapCategoriesForTest(sourceCategories: List<DiscourseCategory>): List<TopicCategory> =
+            mapCategories(sourceCategories)
 
-    private fun mapUploadedLogo(uploadedLogo: String?): String? {
-        // 简化处理：直接返回字符串
-        // HarmonyOS 版本支持 string | object，这里先简化为 string
-        return uploadedLogo?.trim()?.takeIf { it.isNotEmpty() }
-    }
+        private fun mapCategory(source: DiscourseCategory): TopicCategory? {
+            val id = source.id ?: return null
+            val name = source.name ?: return null
 
-    private fun normalizeHex(value: String?, fallback: String): String {
-        if (value == null) return fallback
-        val normalized = value.replace("#", "").trim()
-        return normalized.ifEmpty { fallback }
+            return TopicCategory(
+                id = id,
+                name = name,
+                color = normalizeHex(source.color, "6B7280"),
+                textColor = normalizeHex(source.textColor, "FFFFFF"),
+                slug = source.slug?.takeIf { it.isNotEmpty() },
+                parentCategoryId = source.parentCategoryId,
+                uploadedLogo = source.uploadedLogo?.trim()?.takeIf { it.isNotEmpty() },
+                icon = source.icon?.takeIf { it.isNotEmpty() },
+                readRestricted = source.readRestricted
+            )
+        }
+
+        private fun normalizeHex(value: String?, fallback: String): String {
+            if (value == null) return fallback
+            val normalized = value.replace("#", "").trim()
+            return normalized.ifEmpty { fallback }
+        }
     }
 }

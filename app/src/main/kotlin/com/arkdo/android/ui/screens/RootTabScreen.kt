@@ -21,7 +21,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.arkdo.android.navigation.Routes
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeScreen
+import com.arkdo.android.ui.home.HomeViewModel
 
 /**
  * Root Tab 容器
@@ -41,6 +44,12 @@ fun RootTabScreen(
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
+    // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和 HomeScreen 共用同一个实例。
+    // 顺带的好处是切标签页时首页状态不再被销毁重建。
+    val homeViewModel: HomeViewModel = hiltViewModel()
+
+    // 抽屉包在最外层，才能盖住底部标签栏和上下系统栏。
+    HomeDrawerHost(viewModel = homeViewModel) {
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -82,6 +91,7 @@ fun RootTabScreen(
             composable(Routes.HOME) {
                 HomeScreen(
                     isWebViewReady = isWebViewReady,
+                    viewModel = homeViewModel,
                     onTopicClick = { topicId ->
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId")
                     }
@@ -94,6 +104,7 @@ fun RootTabScreen(
                 ProfileScreen(navController = navController)
             }
         }
+    }
     }
 }
 

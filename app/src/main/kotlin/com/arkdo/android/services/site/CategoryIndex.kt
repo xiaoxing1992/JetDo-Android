@@ -86,10 +86,14 @@ class CategoryIndex {
         /**
          * 仅供单测复位静态缓存
          */
-        fun resetForTest() {
+        /** 丢掉缓存，下次 loadIfNeeded 会真的重新请求。用户点「重试」时用。 */
+        fun clearCache() {
             cachedCategories = null
             inflight = null
         }
+
+        /** 仅供单测复位静态缓存。 */
+        fun resetForTest() = clearCache()
 
         /**
          * 按 id 查找分类

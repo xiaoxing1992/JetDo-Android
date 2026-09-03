@@ -9,6 +9,10 @@ import com.arkdo.android.services.network.NetworkResult
 import com.arkdo.android.services.network.NetworkResults
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import timber.log.Timber
+
+/** 标签联想每次最多回几条，对齐鸿蒙 TAG_SEARCH_LIMIT。 */
+private const val TAG_SEARCH_LIMIT = 5
 
 /**
  * Topic 服务 - 话题列表/详情/互动
@@ -53,6 +57,16 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
+     * 按查询条件取一页话题。对齐鸿蒙 HomePage 的取数路径 ——
+     * filter（排序）与 scope（版块/标签）两个维度正交，路径由 [buildTopicListPath] 统一拼。
+     *
+     * 上面那几个 getXxxTopicsPage 是只覆盖单一维度的旧入口，新代码一律走这个。
+     */
+    suspend fun getTopicsPage(query: TopicListQuery, page: Int): NetworkResult<TopicPage> {
+        return getTopicListPage(buildTopicListPath(query, page), page)
+    }
+
+    /**
      * 获取最新话题（分页）
      */
     suspend fun getLatestTopicsPage(page: Int): NetworkResult<TopicPage> {
@@ -91,6 +105,58 @@ class TopicService(private val bridge: JsonNetworkClient) {
             "/c/${category.id}/l/latest.json$suffix"
         }
         return getTopicListPage(path, page)
+    }
+
+    /**
+     * 全站标签联想。抽屉的标签搜索框用它，对齐鸿蒙 TopicService.searchTagsSiteWide()。
+     *
+     * pm_only 的标签不在公开列表里出现，直接滤掉。
+     */
+    suspend fun searchTagsSiteWide(query: String): NetworkResult<List<TagSuggestion>> {
+        val path = "/tags/filter/search?q=${
+            java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20")
+        }&limit=$TAG_SEARCH_LIMIT&filterForInput=true"
+
+        val response = bridge.getJson(path)
+        if (!response.success || response.data == null) {
+            return NetworkResult(
+                success = false,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = null
+            )
+        }
+
+        return runCatching {
+            val payload = json.decodeFromString<DiscourseTagFilterResponse>(response.data)
+            val tags = payload.results.orEmpty().mapNotNull { item ->
+                if (item.pm_only == true || item.id == null || item.name == null) {
+                    null
+                } else {
+                    TagSuggestion(
+                        id = item.id,
+                        name = item.name,
+                        text = item.text ?: item.name,
+                        count = item.count ?: 0,
+                        description = item.description
+                    )
+                }
+            }
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = tags
+            )
+        }.getOrElse {
+            Timber.e(it, "[ArkDO][Topic] 标签联想解析失败")
+            NetworkResult(
+                success = false,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = null
+            )
+        }
     }
 
     /**
@@ -436,6 +502,14 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 TopicTag(id = tag.id, name = tag.name ?: "", slug = tag.slug)
             } ?: emptyList()
 
+            // 调试日志：检查原始 API 数据和映射后的标签
+            if (source.tags != null && source.tags.isNotEmpty()) {
+                android.util.Log.d("TopicService", "Topic ${source.id}: Raw tags from API = ${source.tags.map { "${it.name}(${it.id})" }}")
+                android.util.Log.d("TopicService", "Topic ${source.id}: Mapped tags = ${tags.map { it.name }}")
+            } else {
+                android.util.Log.d("TopicService", "Topic ${source.id}: No tags in API response")
+            }
+
             Topic(
                 id = source.id,
                 title = source.title,
@@ -654,4 +728,31 @@ data class DiscourseBookmarkResponse(
 @Serializable
 data class DiscourseBookmarkDeleteResponse(
     val topic_bookmarked: Boolean? = null
+)
+
+/**
+ * 标签联想项。发帖 payload 里 tags[] 用的是 name（不是 slug），搜索 refine 用的是 id。
+ * count/description 供选择器展示（热度 + 版块说明）。
+ */
+data class TagSuggestion(
+    val id: Long,
+    val name: String,
+    val text: String,
+    val count: Int,
+    val description: String? = null
+)
+
+@Serializable
+data class DiscourseTagFilterResponse(
+    val results: List<DiscourseTagResult>? = null
+)
+
+@Serializable
+data class DiscourseTagResult(
+    val id: Long? = null,
+    val name: String? = null,
+    val text: String? = null,
+    val count: Int? = null,
+    val description: String? = null,
+    val pm_only: Boolean? = null
 )

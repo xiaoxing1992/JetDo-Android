@@ -1,110 +1,103 @@
 package com.arkdo.android.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 
 /**
  * ArkDO 主题系统
  *
- * - Android 12+ 支持 Material You 动态主题（从壁纸提取颜色）
- * - 降级方案使用固定配色（温暖土色调）
- * - 三态深色模式：跟随系统 / 强制浅色 / 强制深色
+ * 配色对齐鸿蒙版 resources/{base,dark}/element/color.json —— 蓝灰体系，
+ * 不是之前注释里写的"温暖土色调"（那套赤陶橙与鸿蒙侧毫无关系）。
+ *
+ * 动态主题（Material You 壁纸取色）默认关闭：它会覆盖 onSurface / surfaceVariant /
+ * outlineVariant / primaryContainer 等几乎所有角色色，一开就没有任何视觉对齐可言。
+ * 需要像素级对齐鸿蒙的地方直接用 [arkdoColors]，Material token 只作兜底。
  */
 
-// 浅色主题固定配色（温暖土色调，对齐 HarmonyOS 版本）
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFFC4612F),           // 赤陶橙（主色调）
+    primary = ArkdoLightColors.brand,
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFF2E3D6),  // 柔和赤陶色背景
-    onPrimaryContainer = Color(0xFF5C2E10),
+    primaryContainer = ArkdoLightColors.infoSoftBg,
+    onPrimaryContainer = ArkdoLightColors.ldAccent,
 
-    secondary = Color(0xFF8B7355),
+    secondary = ArkdoLightColors.ldAccent,
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFE7DDD0),
-    onSecondaryContainer = Color(0xFF3A2F23),
+    secondaryContainer = ArkdoLightColors.surfaceMuted,
+    onSecondaryContainer = ArkdoLightColors.textBody,
 
-    tertiary = Color(0xFF6B8E7C),
+    tertiary = ArkdoLightColors.ldAccent,
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFD5E8DC),
-    onTertiaryContainer = Color(0xFF2A3D34),
+    tertiaryContainer = ArkdoLightColors.fillSubtle,
+    onTertiaryContainer = ArkdoLightColors.textBody,
 
-    background = Color(0xFFF7F4EF),        // 温暖奶油背景
-    onBackground = Color(0xFF1F2421),      // 墨色文字
+    background = ArkdoLightColors.pageBg,
+    onBackground = ArkdoLightColors.textPrimary,
 
-    surface = Color(0xFFFBF9F5),           // 卡片表面
-    onSurface = Color(0xFF1F2421),
-    surfaceVariant = Color(0xFFE7E1D7),    // 温暖分割线
-    onSurfaceVariant = Color(0xFF5C635D),  // 次要文字
+    surface = ArkdoLightColors.pageBg,
+    onSurface = ArkdoLightColors.textPrimary,
+    surfaceVariant = ArkdoLightColors.surfaceMuted,
+    onSurfaceVariant = ArkdoLightColors.textSecondary,
 
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFFDAD6),
     onErrorContainer = Color(0xFF410002),
 
-    outline = Color(0xFFE7E1D7),           // 边框线
-    outlineVariant = Color(0xFFF2EDE3),
+    outline = ArkdoLightColors.border,
+    outlineVariant = ArkdoLightColors.border,
 )
 
-// 深色主题固定配色（温暖炭色调）
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFFFB59A),
-    onPrimary = Color(0xFF5C2E10),
-    primaryContainer = Color(0xFF8B4423),
-    onPrimaryContainer = Color(0xFFF2E3D6),
+    primary = ArkdoDarkColors.brand,
+    onPrimary = Color(0xFF0B1220),
+    primaryContainer = ArkdoDarkColors.infoSoftBg,
+    onPrimaryContainer = ArkdoDarkColors.ldAccent,
 
-    secondary = Color(0xFFD1C4B5),
-    onSecondary = Color(0xFF3A2F23),
-    secondaryContainer = Color(0xFF5C4F3F),
-    onSecondaryContainer = Color(0xFFE7DDD0),
+    secondary = ArkdoDarkColors.ldAccent,
+    onSecondary = Color(0xFF0B1220),
+    secondaryContainer = ArkdoDarkColors.surfaceMuted,
+    onSecondaryContainer = ArkdoDarkColors.textBody,
 
-    tertiary = Color(0xFFB9CCC1),
-    onTertiary = Color(0xFF2A3D34),
-    tertiaryContainer = Color(0xFF4A5E54),
-    onTertiaryContainer = Color(0xFFD5E8DC),
+    tertiary = ArkdoDarkColors.ldAccent,
+    onTertiary = Color(0xFF0B1220),
+    tertiaryContainer = ArkdoDarkColors.fillSubtle,
+    onTertiaryContainer = ArkdoDarkColors.textBody,
 
-    background = Color(0xFF1F2421),        // 温暖炭色背景
-    onBackground = Color(0xFFE7E3DE),
+    background = ArkdoDarkColors.pageBg,
+    onBackground = ArkdoDarkColors.textPrimary,
 
-    surface = Color(0xFF2A2D2A),           // 卡片表面
-    onSurface = Color(0xFFE7E3DE),
-    surfaceVariant = Color(0xFF3D4140),
-    onSurfaceVariant = Color(0xFFC4C7C4),
+    surface = ArkdoDarkColors.pageBg,
+    onSurface = ArkdoDarkColors.textPrimary,
+    surfaceVariant = ArkdoDarkColors.surfaceMuted,
+    onSurfaceVariant = ArkdoDarkColors.textSecondary,
 
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
     onErrorContainer = Color(0xFFFFDAD6),
 
-    outline = Color(0xFF3D4140),
-    outlineVariant = Color(0xFF2A2D2A),
+    outline = ArkdoDarkColors.border,
+    outlineVariant = ArkdoDarkColors.border,
 )
 
 @Composable
 fun ArkDoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true, // Android 12+ 动态主题
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val tokens = if (darkTheme) ArkdoDarkColors else ArkdoLightColors
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalArkdoColors provides tokens) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
