@@ -139,6 +139,18 @@ fun CfChallengeScreen(
                         WebSessionManager.applyUserAgent(this, "CfChallengeScreen")
 
                         webViewClient = object : android.webkit.WebViewClient() {
+                            /**
+                             * 过盾页本身是 linux.do，同样要走 DoH 才解析得到。
+                             * Turnstile 组件来自 challenges.cloudflare.com，拦截器会放行给系统 DNS，
+                             * 与鸿蒙版 applyTransientMode 的取舍一致。
+                             */
+                            override fun shouldInterceptRequest(
+                                view: WebView?,
+                                request: android.webkit.WebResourceRequest?
+                            ): android.webkit.WebResourceResponse? =
+                                com.arkdo.android.services.network.WebViewDohInterceptor.intercept(request)
+                                    ?: super.shouldInterceptRequest(view, request)
+
                             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                 super.onPageStarted(view, url, favicon)
                                 Timber.i("$LOG_TAG page begin url=${safeUrlLabel(url)}")

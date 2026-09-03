@@ -31,11 +31,12 @@ class FeedPrefs private constructor() {
 
         // 可在设置页勾选启用/排序的内置入口（顺序即设置页未启用区的默认排列）
         private val OPTIONAL_FEEDS = listOf(
+            FeedDef(key = FeedKey.CREATED.value, label = "最新发布", requiresLogin = false),
             // 「热门」原先挂在 top 上是名实不符(top 是历史高分榜)，现已归位：hot=热门、top=排行榜
             FeedDef(key = FeedKey.HOT.value, label = "热门", requiresLogin = false),
             FeedDef(key = FeedKey.TOP.value, label = "排行榜", requiresLogin = false),
             FeedDef(key = FeedKey.UNREAD.value, label = "未读", requiresLogin = true),
-            FeedDef(key = FeedKey.NEW.value, label = "新主题", requiresLogin = true)
+            FeedDef(key = FeedKey.NEW.value, label = "未读新帖", requiresLogin = true)
         )
 
         /**

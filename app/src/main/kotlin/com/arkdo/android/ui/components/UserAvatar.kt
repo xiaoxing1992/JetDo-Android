@@ -4,250 +4,211 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.User
+import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.arkdoColors
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
-/**
- * 用户头像组件 - 1:1 对齐鸿蒙版 UserAvatar.ets
- *
- * 支持功能：
- * - 静态头像 / 动态头像（GIF）
- * - 圆形 / 方形（圆角）
- * - 徽章标识覆盖显示
- * - 失败回退到首字母占位符
- *
- * 对齐鸿蒙逻辑：
- * - ID=1 用户使用方形圆角(10%)，其余用户使用圆形头像(50%)
- * - 徽章尺寸 avatarSize * 0.42f
- * - 徽章位置右下角溢出 0.24f
- *
- * @param user 用户数据（包含头像、徽章等信息）
- * @param avatarSize 头像尺寸（默认 40dp）
- * @param showFlair 是否显示徽章标识（默认显示，需 avatarSize >= 32dp）
- * @param modifier 修饰符
- */
+// ==========================================================================
+// 对齐鸿蒙版 views/components/UserAvatar.ets。
+//
+// 形状规则：user.id == 1 走方形（10% 圆角），其余圆形。
+// 头像请求尺寸恒取 96 —— 鸿蒙侧把 avatar_template 的 {size} 写死成 '96'，
+// 不按显示尺寸分档，这样同一张图在各处能共用一份缓存。
+// ==========================================================================
+
+private const val AVATAR_REQUEST_SIZE = "96"
+private val FLAIR_MIN_AVATAR_SIZE = 32.dp
+
 @Composable
 fun UserAvatar(
     user: User?,
-    avatarSize: Dp = 40.dp,
+    avatarSize: Dp = 48.dp,
     showFlair: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val displayName = user?.displayName ?: "?"
-    val initial = displayName.firstOrNull()?.toString()?.uppercase() ?: "?"
+    val colors = arkdoColors
 
-    // 头像形状：严格对齐鸿蒙源码 UserAvatar.ets:352-358
-    // ID=1 的用户使用方形圆角(10%), 其余用户使用圆形头像(50%)
-    val isSquare = user?.id == 1L
-    val shape = if (isSquare) {
-        RoundedCornerShape(avatarSize * 0.1f)  // 方形：10% 圆角
-    } else {
-        CircleShape  // 圆形：50% 圆角
-    }
+    // 鸿蒙取的是 username 首字符，不是 displayName。
+    val initial = (user?.username ?: user?.displayName)
+        ?.firstOrNull()?.toString()?.uppercase() ?: "?"
+
+    // max(12, floor(size * 0.4))，随头像尺寸缩放。
+    val initialFontSize = maxOf(12f, floor(avatarSize.value * 0.4f)).sp
+
+    val shape = if (user?.id == 1L) RoundedCornerShape(avatarSize * 0.1f) else CircleShape
+
+    val avatarUrl = buildAvatarUrl(user)
+    // 首字母只在没有候选或加载失败时露出，不是恒在底层垫着。
+    var showInitial by remember(avatarUrl) { mutableStateOf(avatarUrl == null) }
 
     Box(
+        // 不裁切：flair 角标要探出头像边界。
         modifier = modifier.size(avatarSize),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.BottomEnd
     ) {
-        // 主头像
         Box(
             modifier = Modifier
                 .size(avatarSize)
                 .clip(shape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(colors.surfaceMuted)
+                .border(width = 1.dp, color = ArkdoFixedColors.AvatarBorder, shape = shape),
             contentAlignment = Alignment.Center
         ) {
-            // 始终显示首字母作为背景
-            Text(
-                text = initial,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            if (showInitial) {
+                Text(
+                    text = initial,
+                    fontSize = initialFontSize,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.avatarFg
+                )
+            }
 
-            // 如果有头像 URL，尝试加载图片覆盖在上面
-            val avatarUrl = buildAvatarUrl(user, avatarSize.value.toInt())
             if (avatarUrl != null) {
                 AsyncImage(
                     model = avatarUrl,
-                    contentDescription = "用户头像: ${user?.displayName}",
+                    contentDescription = null,
                     modifier = Modifier
                         .size(avatarSize)
                         .clip(shape),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    onState = { state ->
+                        showInitial = state is AsyncImagePainter.State.Error
+                    }
                 )
             }
         }
 
-        // 徽章标识（右下角小图标）
-        // 对齐鸿蒙版逻辑：
-        // - 最小头像尺寸限制 32dp (flairMinAvatarSize)
-        // - 徽章尺寸 avatarSize * 0.42f
-        // - 轻微溢出头像右下角 0.24f (探出约 1/4)
-        val flairMinAvatarSize = 32.dp
-        if (showFlair && user?.flairUrl != null && avatarSize >= flairMinAvatarSize) {
+        // 对齐鸿蒙 hasFlair()：除了非空和尺寸门槛，还要求它**确实能画出东西** ——
+        // 要么是图片地址，要么是图标集里真有的 FA 名。都不是就整个不画，
+        // 而不是画一个彩色圆圈套着加载失败的图。
+        val flairUrl = user?.flairUrl.orEmpty()
+        val renderableFlair = flairUrl.isNotEmpty() &&
+            (isImageFlair(flairUrl) || FaIconSet.has(context, flairUrl))
+
+        if (showFlair && renderableFlair && avatarSize >= FLAIR_MIN_AVATAR_SIZE) {
             FlairBadge(
-                flairUrl = user.flairUrl,
-                flairBgColor = user.flairBgColor,
-                flairColor = user.flairColor,
-                avatarSize = avatarSize,
-                modifier = Modifier.align(Alignment.BottomEnd)
+                flairUrl = flairUrl,
+                flairBgColor = user?.flairBgColor,
+                flairColor = user?.flairColor,
+                avatarSize = avatarSize
             )
         }
     }
 }
 
 /**
- * 徽章标识组件（覆盖在头像右下角）
+ * 右下角 flair 角标。
  *
- * 对齐鸿蒙版 UserAvatar.ets:111-151:
- * - 徽章尺寸: avatarSize * 0.42
- * - 轻微溢出: avatarSize * 0.24 (探出约 1/4)
- * - 形状: 有底色=圆形(Contain + 内缩让底色露成圆环), 无底色=方形(Cover 铺满方块)
- * - 内缩比例: 有底色时 padding = badgeSize * 0.16
- * - 圆角: 有底色=50%(圆形), 无底色=18%(小圆角方形)
+ * 有底色时用圆形 + Contain + 内缩，让底色露成一圈；无底色时小圆角方块 + Cover 铺满。
+ * 鸿蒙侧没有描边，这里也不要加 —— 加了在深色底上会多出一圈亮边。
  */
 @Composable
 private fun FlairBadge(
     flairUrl: String,
     flairBgColor: String?,
     flairColor: String?,
-    avatarSize: Dp,
-    modifier: Modifier = Modifier
+    avatarSize: Dp
 ) {
-    // 徽章尺寸计算: max(14, avatarSize * 0.42)
-    val flairBadgeSize = maxOf(14.dp, avatarSize * 0.42f)
-    // 溢出量: badgeSize * 0.24
-    val flairOverhang = flairBadgeSize * 0.24f
-    // 是否有底色
-    val hasFlairBg = !flairBgColor.isNullOrBlank()
-    // 底色
-    val backgroundColor = if (hasFlairBg) {
-        parseColor(flairBgColor) ?: Color(0xFFBE123C)  // 默认玫红色
+    val context = LocalContext.current
+
+    val badgeSize = maxOf(14.dp, avatarSize * 0.42f)
+    val overhang = (badgeSize.value * 0.24f).roundToInt().dp
+    val hasBg = !flairBgColor.isNullOrBlank()
+
+    val backgroundColor = if (hasBg) {
+        parseColor(flairBgColor) ?: ArkdoFixedColors.FlairFallbackBg
     } else {
         Color.Transparent
     }
-    // 形状: 有底色=圆形, 无底色=方形(18% 圆角)
-    val shape = if (hasFlairBg) {
-        CircleShape
-    } else {
-        RoundedCornerShape(flairBadgeSize * 0.18f)
-    }
-    // 内缩: 有底色时 padding 16%
-    val padding = if (hasFlairBg) (flairBadgeSize * 0.16f) else 0.dp
+    val shape = if (hasBg) CircleShape else RoundedCornerShape((badgeSize.value * 0.18f).roundToInt().dp)
+    val inset = if (hasBg) (badgeSize.value * 0.16f).roundToInt().dp else 0.dp
 
     Box(
-        modifier = modifier
-            .size(flairBadgeSize)
-            .offset(x = flairOverhang, y = flairOverhang)
+        modifier = Modifier
+            .size(badgeSize)
+            .offset(x = overhang, y = overhang)
             .clip(shape)
-            .background(backgroundColor)
-            .border(
-                width = if (hasFlairBg) 1.dp else 0.dp,
-                color = MaterialTheme.colorScheme.surface,
-                shape = shape
-            ),
+            .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        val fullUrl = if (flairUrl.startsWith("http")) {
-            flairUrl
-        } else if (flairUrl.startsWith("//")) {
-            "https:$flairUrl"
-        } else if (flairUrl.startsWith("/")) {
-            "${AppConstants.BASE_URL}$flairUrl"
-        } else {
-            "${AppConstants.BASE_URL}/$flairUrl"
+        // 判据是 URL 形态，不是"在不在图标集里" —— 对齐鸿蒙 isImageFlair()。
+        // 反过来判会让"不在图标集里的图标名"被当成图片地址去请求。
+        if (isImageFlair(flairUrl)) {
+            AsyncImage(
+                model = resolveFlairUrl(flairUrl),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(badgeSize)
+                    .padding(inset),
+                contentScale = if (hasBg) ContentScale.Fit else ContentScale.Crop
+            )
         }
-
-        AsyncImage(
-            model = fullUrl,
-            contentDescription = "徽章标识",
-            modifier = Modifier
-                .size(flairBadgeSize - padding * 2)
-                .then(if (padding > 0.dp) Modifier.offset(0.dp, 0.dp) else Modifier),
-            contentScale = if (hasFlairBg) ContentScale.Fit else ContentScale.Crop
-        )
     }
 }
 
 /**
- * 构建头像 URL
- * - 优先使用 animatedAvatar（动态头像 GIF）
- * - 回退到 avatarTemplate（静态头像）
- * - avatar_template 格式示例: "/letter_avatar_proxy/v4/letter/a/abc123/{size}.png"
+ * 头像地址：优先动态头像，其次 avatar_template。
+ * 鸿蒙侧是「候选链」逐个失败下移，这里先取第一个可用的，失败后回落首字母。
  */
-private fun buildAvatarUrl(user: User?, size: Int): String? {
+private fun buildAvatarUrl(user: User?): String? {
     if (user == null) return null
 
-    // 优先使用动态头像
-    if (user.animatedAvatar != null) {
-        return if (user.animatedAvatar.startsWith("http")) {
-            user.animatedAvatar
-        } else {
-            "${AppConstants.BASE_URL}${user.animatedAvatar}"
-        }
-    }
+    user.animatedAvatar?.takeIf { it.isNotEmpty() }?.let { return absolutize(it) }
 
-    // 回退到静态头像模板
-    if (user.avatarTemplate != null) {
-        // 选择合适的尺寸（常见尺寸: 24, 32, 48, 96, 144, 240）
-        val targetSize = when {
-            size <= 24 -> 24
-            size <= 32 -> 32
-            size <= 48 -> 48
-            size <= 96 -> 96
-            size <= 144 -> 144
-            else -> 240
-        }
-
-        val path = user.avatarTemplate.replace("{size}", targetSize.toString())
-
-        // 如果是相对路径，添加 baseUrl
-        return if (path.startsWith("http")) {
-            path
-        } else {
-            "${AppConstants.BASE_URL}$path"
-        }
+    user.avatarTemplate?.takeIf { it.isNotEmpty() }?.let {
+        return absolutize(it.replace("{size}", AVATAR_REQUEST_SIZE))
     }
 
     return null
 }
 
-/**
- * 解析颜色字符串（#RRGGBB 或 RRGGBB 格式）
- */
+private fun absolutize(path: String): String =
+    if (path.startsWith("http")) path else "${AppConstants.BASE_URL}$path"
+
+private fun resolveFlairUrl(flairUrl: String): String = when {
+    flairUrl.startsWith("http") -> flairUrl
+    flairUrl.startsWith("//") -> "https:$flairUrl"
+    flairUrl.startsWith("/") -> "${AppConstants.BASE_URL}$flairUrl"
+    else -> "${AppConstants.BASE_URL}/$flairUrl"
+}
+
 private fun parseColor(colorString: String?): Color? {
     if (colorString.isNullOrBlank()) return null
-
-    return try {
-        val hex = if (colorString.startsWith("#")) {
-            colorString.substring(1)
-        } else {
-            colorString
-        }
-
+    return runCatching {
+        val hex = colorString.removePrefix("#")
         if (hex.length == 6) {
-            val r = hex.substring(0, 2).toInt(16)
-            val g = hex.substring(2, 4).toInt(16)
-            val b = hex.substring(4, 6).toInt(16)
-            Color(r, g, b)
+            Color(
+                hex.substring(0, 2).toInt(16),
+                hex.substring(2, 4).toInt(16),
+                hex.substring(4, 6).toInt(16)
+            )
         } else {
             null
         }
-    } catch (e: Exception) {
-        null
-    }
+    }.getOrNull()
 }

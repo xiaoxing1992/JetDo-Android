@@ -250,34 +250,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         web.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         web.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
 
-        // 🚀 关键优化：配置 DoH (DNS over HTTPS)
-        // 对齐鸿蒙版 DohManager.applyActive()，让 WebView 使用 DoH 绕过 DNS 污染
-        try {
-            // Android 13 (API 33) 及以上支持通过反射设置自定义 DoH 服务器
-            // 鸿蒙版使用 webview.WebviewController.setHttpDns(mode, url)
-            // Android 对应的方法可能是 WebSettings.setDnsOverHttpsServers() 或类似 API
-
-            // 尝试方案 1: 使用反射调用 setDnsOverHttpsServers (如果存在)
-            // 参考：https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/java/android/webkit/WebSettings.java
-            val dohUrl = "https://edge.47258.xyz/linuxdo" // 与鸿蒙版保持一致
-
-            try {
-                // 尝试通过反射设置 DoH
-                val setDohMethod = web.settings.javaClass.getMethod("setDnsOverHttpsServers", String::class.java)
-                setDohMethod.invoke(web.settings, dohUrl)
-                Timber.i("[ArkDO][Network] attachHost: DoH configured via setDnsOverHttpsServers url=%s", dohUrl)
-            } catch (e: NoSuchMethodException) {
-                // API 不存在，可能是较低版本的 Android
-                Timber.w("[ArkDO][Network] attachHost: setDnsOverHttpsServers not available, DoH not configured")
-
-                // 降级方案：提示用户在系统设置中配置 Private DNS
-                // Private DNS 是 Android 9+ 的系统级 DoH 功能
-                // 设置路径：设置 -> 网络和互联网 -> Private DNS -> 手动输入 dns.google
-                Timber.i("[ArkDO][Network] attachHost: Please configure Private DNS in system settings")
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][Network] attachHost: Failed to configure DoH")
-        }
+        // DoH：鸿蒙版一句 webview.WebviewController.setHttpDns 就在引擎层全局生效，
+        // Android WebView 没有等价 API，只能在下面的 shouldInterceptRequest 里逐请求接管。
+        // 这里先确保引擎按 DohManager 的当前配置就绪，再 loadUrl。
+        DohService.init(context)
 
         // 设置 User-Agent 必须与 CfChallengeScreen 完全一致
         // Cloudflare 的 cf_clearance cookie 与 User-Agent 绑定
@@ -302,6 +278,16 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         Timber.i("[ArkDO][Network] attachHost: WebSessionManager configured")
 
         web.webViewClient = object : WebViewClient() {
+            /**
+             * 请求改道走 DoH，替代鸿蒙版的 setHttpDns。在 Chromium 的工作线程上调用，
+             * 阻塞式网络请求是允许的。返回 null 表示这条请求交回 WebView 自己发。
+             */
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: android.webkit.WebResourceRequest?
+            ): android.webkit.WebResourceResponse? =
+                WebViewDohInterceptor.intercept(request) ?: super.shouldInterceptRequest(view, request)
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 Timber.i("[ArkDO][Network] attachHost: onPageStarted url=%s", url)
 

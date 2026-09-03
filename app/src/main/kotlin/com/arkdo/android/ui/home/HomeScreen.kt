@@ -1,69 +1,84 @@
 package com.arkdo.android.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.remember
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.*
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.Topic
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
+import com.arkdo.android.services.site.CategoryIndex
+import com.arkdo.android.services.topic.isDefault
+import com.arkdo.android.services.topic.topicListPrimaryTitle
+import com.arkdo.android.ui.components.FaIcon
 import com.arkdo.android.ui.components.TopicListItem as EnhancedTopicListItem
+import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.launch
 
-/**
- * 首页 - 话题列表
- *
- * 1:1 对齐鸿蒙版 HomePage.ets：
- * - 沉浸式标题栏（可折叠）
- * - 侧边版块筛选抽屉（边缘右滑手势）
- * - 实时新话题提醒（顶部提示条）
- * - 智能 FAB（发帖 ↔ 回到顶部双态切换）
- * - 发帖浮层（全屏编辑器）
- * - 左滑拉出个人中心手势
- * - 版本公告弹窗
- *
- * 当前 MVP 版本已实现：
- * - ✅ 话题列表展示
- * - ✅ 下拉刷新
- * - ✅ 上拉加载更多
- * - ✅ 空态/错误态
- * - ✅ 智能 FAB（发帖 ↔ 回到顶部）
- * - ✅ 多维度筛选（版块/标签）
- * - ✅ 实时新话题提醒
- * - ✅ 会话变化自动刷新
- *
- * 待后续迭代：
- * - ⏳ 侧边抽屉（版块树展开/折叠）
- * - ⏳ 发帖浮层（Markdown 编辑器）
- * - ⏳ 手势操作（边缘右滑、左滑转场）
- * - ⏳ 版本公告
- */
+// ==========================================================================
+// 对齐鸿蒙版 views/pages/HomePage.ets 的首页骨架。
+//
+// 已对齐：顶栏构成与尺寸、新话题提示条、双态 FAB、列表页脚、各加载/空/错误态。
+// 尚未移植（鸿蒙侧独立组件，属另一批工作）：
+//   · 侧边版块筛选抽屉 CategoryDrawer + 边缘手势
+//   · 发帖浮层 ComposerPage
+//   · 版本公告 bindSheet
+//   · 沉浸式标题栏（列表穿到标题栏下方 + 渐变模糊）
+// ==========================================================================
+
+/** 顶栏三枚图标按钮统一规格。 */
+private val BAR_BUTTON_SIZE = 42.dp
+private val BAR_HEIGHT = 56.dp
+private val FAB_SIZE = 52.dp
+private val FOOTER_HEIGHT = 54.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -75,49 +90,46 @@ fun HomeScreen(
     onSearchClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val colors = arkdoColors
 
-    // 当 WebView bridge 就绪且列表为空时，触发初始加载
     LaunchedEffect(isWebViewReady) {
+        // 版块单独加载：卡片上的版块徽章要靠它解析，和话题列表是否已有数据无关。
+        viewModel.loadSiteMetadataIfNeeded(isWebViewReady)
         if (isWebViewReady && uiState.topics.isEmpty() && !uiState.isInitialLoading) {
             viewModel.loadInitial()
         }
     }
 
-    // 滚动监听：更新 FAB 模式（发帖 ↔ 回到顶部）
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
         val layoutInfo = listState.layoutInfo
         if (layoutInfo.visibleItemsInfo.isNotEmpty()) {
             val totalOffset = listState.firstVisibleItemIndex * 1000f + listState.firstVisibleItemScrollOffset
-            val viewportHeight = layoutInfo.viewportEndOffset.toFloat()
-            viewModel.updateFabMode(totalOffset, viewportHeight)
+            viewModel.updateFabMode(totalOffset, layoutInfo.viewportEndOffset.toFloat())
         }
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = colors.pageBg,
         topBar = {
             HomeTitleBar(
-                scrollBehavior = scrollBehavior,
                 uiState = uiState,
-                onMenuClick = { /* TODO: 打开抽屉 */ },
+                onMenuClick = { viewModel.openDrawer() },
                 onSearchClick = onSearchClick,
                 onNotificationsClick = onNotificationsClick,
                 onProfileClick = onProfileClick
             )
         },
         floatingActionButton = {
-            HomeFloatingActionButton(
-                showBackToTop = uiState.showBackToTopFab,
-                onCompose = { /* TODO: 打开发帖浮层 */ },
-                onBackToTop = {
-                    coroutineScope.launch {
-                        listState.animateScrollToItem(0)
-                    }
-                }
-            )
+            // 只在有数据时挂载，与鸿蒙一致（空列表页面不该浮着一个发帖按钮）。
+            if (uiState.topics.isNotEmpty()) {
+                HomeFab(
+                    showBackToTop = uiState.showBackToTopFab,
+                    onCompose = { /* TODO: 发帖浮层尚未移植 */ },
+                    onBackToTop = { coroutineScope.launch { listState.animateScrollToItem(0) } }
+                )
+            }
         }
     ) { paddingValues ->
         PullToRefreshBox(
@@ -127,139 +139,147 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                when {
-                    uiState.isInitialLoading -> {
-                        LoadingView()
-                    }
-                    uiState.error != null -> {
-                        ErrorView(
-                            message = uiState.error ?: "未知错误",
-                            onRetry = { viewModel.retry() }
-                        )
-                    }
-                    uiState.topics.isEmpty() -> {
-                        EmptyView()
-                    }
-                    else -> {
-                        Column {
-                            // 实时新话题提醒条
-                            IncomingTopicsPrompt(
-                                visible = uiState.incomingPromptVisible,
-                                count = uiState.incomingTopicIds.size,
-                                loading = uiState.isLoadingIncoming,
-                                onClick = { viewModel.loadIncomingTopics() }
-                            )
+            if (uiState.topics.isEmpty()) {
+                EmptyStateView(
+                    isWebViewReady = isWebViewReady,
+                    isInitialLoading = uiState.isInitialLoading,
+                    error = uiState.error,
+                    feedTitle = feedTitle(uiState),
+                    onRetry = { viewModel.retry() }
+                )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    IncomingTopicsPrompt(
+                        visible = uiState.incomingPromptVisible,
+                        count = uiState.incomingTopicIds.size,
+                        loading = uiState.isLoadingIncoming,
+                        onClick = { viewModel.loadIncomingTopics() }
+                    )
 
-                            // 话题列表
-                            TopicList(
-                                listState = listState,
-                                topics = uiState.topics,
-                                isLoadingMore = uiState.isLoadingMore,
-                                hasMore = uiState.hasMore,
-                                onTopicClick = onTopicClick,
-                                onLoadMore = { viewModel.loadMore() },
-                                onCategoryClick = { category ->
-                                    viewModel.selectCategory(category)
-                                },
-                                onTagClick = { tag ->
-                                    viewModel.selectTag(tag)
-                                }
-                            )
-                        }
-                    }
+                    TopicList(
+                        listState = listState,
+                        topics = uiState.topics,
+                        categories = uiState.categories,
+                        isLoadingMore = uiState.isLoadingMore,
+                        hasMore = uiState.hasMore,
+                        onTopicClick = onTopicClick,
+                        onLoadMore = { viewModel.loadMore() },
+                        onCategoryClick = { viewModel.selectCategory(it) },
+                        onTagClick = { viewModel.selectTag(it) }
+                    )
                 }
             }
         }
     }
 }
 
-// ========== 顶部标题栏 ==========
+/** 当前 feed 标题。默认条件下主标题为空，鸿蒙侧回退文案就是 'ArkDO'。 */
+private fun feedTitle(uiState: HomeUiState): String =
+    topicListPrimaryTitle(uiState.listQuery).ifEmpty { "ArkDO" }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ========== 顶栏 ==========
+
 @Composable
 private fun HomeTitleBar(
-    scrollBehavior: TopAppBarScrollBehavior,
     uiState: HomeUiState,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
-    TopAppBar(
-        title = {
-            Column {
-                // 主标题：版块名 / 标签名 / "首页"
-                Text(
-                    text = when {
-                        uiState.selectedCategory != null -> uiState.selectedCategory.name
-                        uiState.selectedTag != null -> "#${uiState.selectedTag.name}"
-                        else -> "首页"
-                    },
-                    style = MaterialTheme.typography.titleLarge
-                )
+    val colors = arkdoColors
+    val isDefaultQuery = uiState.listQuery.isDefault()
 
-                // 副行：筛选条件摘要（有筛选时才显示）
-                if (uiState.selectedCategory != null || uiState.selectedTag != null) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 2.dp)
-                    ) {
-                        if (uiState.selectedTag != null) {
-                            FilterChip(
-                                label = uiState.selectedTag.name,
-                                onClick = { /* 点击回抽屉 */ }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        scrollBehavior = scrollBehavior,
-        navigationIcon = {
-            IconButton(onClick = onMenuClick) {
-                Icon(Icons.Default.Menu, contentDescription = "菜单")
-            }
-        },
-        actions = {
-            IconButton(onClick = onSearchClick) {
-                Icon(Icons.Default.Search, contentDescription = "搜索")
-            }
-            IconButton(onClick = onNotificationsClick) {
-                Icon(Icons.Default.Notifications, contentDescription = "通知")
-            }
-            IconButton(onClick = onProfileClick) {
-                Icon(Icons.Default.Person, contentDescription = "个人中心")
-            }
-        }
-    )
-}
-
-@Composable
-private fun FilterChip(
-    label: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.height(20.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(BAR_HEIGHT)
+            .background(colors.pageBg)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        MenuButton(onClick = onMenuClick)
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 4.dp),
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                text = feedTitle(uiState),
+                // 默认条件下是大标题；带筛选时缩到 21，给副行让位。
+                fontSize = if (isDefaultQuery) 26.sp else 21.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        BarIconButton(onClick = onSearchClick, endMargin = 4.dp) {
+            FaIcon("magnifying-glass", colors.textPrimary, 20.dp)
+        }
+
+        BarIconButton(onClick = onNotificationsClick, endMargin = 4.dp) {
+            FaIcon("bell", ArkdoFixedColors.Amber, 24.dp)
+        }
+
+        // TODO: 已登录时这里是 UserAvatar(34)，需要 HomeUiState 带上会话用户。
+        BarIconButton(onClick = onProfileClick, endMargin = 0.dp) {
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = "个人中心",
+                tint = colors.brand,
+                modifier = Modifier.size(28.dp)
             )
         }
     }
 }
 
-// ========== 实时新话题提醒 ==========
+/** 汉堡按钮：三条 18×2 的横线，间距 4。 */
+@Composable
+private fun MenuButton(onClick: () -> Unit) {
+    val colors = arkdoColors
+    Box(
+        modifier = Modifier
+            .padding(end = 10.dp)
+            .size(BAR_BUTTON_SIZE)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(3) {
+                HorizontalDivider(
+                    modifier = Modifier.width(18.dp),
+                    thickness = 2.dp,
+                    color = colors.textPrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BarIconButton(
+    onClick: () -> Unit,
+    endMargin: androidx.compose.ui.unit.Dp,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .padding(end = endMargin)
+            .size(BAR_BUTTON_SIZE)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
+}
+
+// ========== 新话题提示条 ==========
 
 @Composable
 private fun IncomingTopicsPrompt(
@@ -268,65 +288,80 @@ private fun IncomingTopicsPrompt(
     loading: Boolean,
     onClick: () -> Unit
 ) {
+    val colors = arkdoColors
+
     AnimatedVisibility(
         visible = visible && count > 0,
-        enter = slideInVertically() + fadeIn(),
-        exit = slideOutVertically() + fadeOut()
+        enter = expandVertically(animationSpec = tween(HomeConstants.INCOMING_PROMPT_ENTER_MS.toInt())) +
+            fadeIn(animationSpec = tween(HomeConstants.INCOMING_PROMPT_ENTER_MS.toInt())),
+        exit = shrinkVertically(animationSpec = tween(HomeConstants.INCOMING_PROMPT_EXIT_MS.toInt())) +
+            fadeOut(animationSpec = tween(HomeConstants.INCOMING_PROMPT_EXIT_MS.toInt()))
     ) {
-        Surface(
-            onClick = onClick,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-        ) {
+        Column {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(HomeConstants.INCOMING_PROMPT_HEIGHT)
+                    .background(colors.infoSoftBg)
+                    .clickable(enabled = !loading, onClick = onClick)
+                    .padding(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    text = "查看 $count 个新的或更新的话题",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = ArkdoFixedColors.BrandBlue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 if (loading) {
+                    Spacer(modifier = Modifier.width(8.dp))
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
+                        strokeWidth = 2.dp,
+                        color = ArkdoFixedColors.BrandBlue
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(
-                    text = "有 $count 条新话题",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
             }
+            HorizontalDivider(thickness = 1.dp, color = colors.border)
         }
     }
 }
 
-// ========== 智能 FAB（发帖 ↔ 回到顶部） ==========
+// ========== 双态 FAB ==========
 
 @Composable
-private fun HomeFloatingActionButton(
+private fun HomeFab(
     showBackToTop: Boolean,
     onCompose: () -> Unit,
     onBackToTop: () -> Unit
 ) {
-    // FAB 图标/文字随模式切换，带 morph 动画
+    val colors = arkdoColors
+
     FloatingActionButton(
-        onClick = if (showBackToTop) onBackToTop else onCompose
+        onClick = if (showBackToTop) onBackToTop else onCompose,
+        modifier = Modifier.size(FAB_SIZE),
+        containerColor = colors.pageBg,
+        contentColor = if (showBackToTop) colors.fabTopFg else colors.fabComposeBg,
+        shape = CircleShape
     ) {
-        Icon(
-            imageVector = if (showBackToTop) Icons.Default.KeyboardArrowUp else Icons.Default.Add,
-            contentDescription = if (showBackToTop) "回到顶部" else "发帖"
+        FaIcon(
+            iconId = if (showBackToTop) "arrow-up" else "pen-to-square",
+            color = if (showBackToTop) colors.fabTopFg else colors.fabComposeBg,
+            size = 22.dp
         )
     }
 }
 
-// ========== 话题列表 ==========
+// ========== 列表 ==========
 
 @Composable
 private fun TopicList(
     listState: androidx.compose.foundation.lazy.LazyListState,
     topics: List<Topic>,
+    categories: List<TopicCategory>,
     isLoadingMore: Boolean,
     hasMore: Boolean,
     onTopicClick: (Long) -> Unit,
@@ -338,14 +373,12 @@ private fun TopicList(
         state = listState,
         modifier = Modifier.fillMaxSize()
     ) {
-        items(
-            items = topics,
-            key = { it.id }
-        ) { topic ->
+        items(items = topics, key = { it.id }) { topic ->
             EnhancedTopicListItem(
                 topic = topic,
-                category = null, // TODO: 从 categories map 查找
-                parentCategory = null,
+                // 对齐鸿蒙 HomePage.ets:707-708，版块徽章靠这两个查出来
+                category = CategoryIndex.find(categories, topic.categoryId),
+                parentCategory = CategoryIndex.findParent(categories, topic.categoryId),
                 onClick = { onTopicClick(topic.id) },
                 onUnreadBadgeClick = { onTopicClick(topic.id) },
                 onCategoryClick = onCategoryClick,
@@ -354,66 +387,119 @@ private fun TopicList(
             )
         }
 
-        // 加载更多指示器
-        if (hasMore) {
-            item {
-                LaunchedEffect(Unit) {
-                    if (!isLoadingMore) {
-                        onLoadMore()
-                    }
-                }
-                if (isLoadingMore) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
+        item {
+            LaunchedEffect(hasMore, isLoadingMore) {
+                if (hasMore && !isLoadingMore) onLoadMore()
             }
+            ListFooter(isLoadingMore = isLoadingMore, hasMore = hasMore)
         }
     }
 }
 
+/** 列表页脚，对齐鸿蒙 ListFooter.ets。 */
 @Composable
-private fun LoadingView() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+private fun ListFooter(isLoadingMore: Boolean, hasMore: Boolean) {
+    val colors = arkdoColors
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(FOOTER_HEIGHT),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator()
+        if (isLoadingMore) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = colors.brand
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(
+            text = when {
+                isLoadingMore -> "正在加载更多"
+                hasMore -> "上拉加载更多"
+                else -> "没有更多了"
+            },
+            fontSize = 13.sp,
+            color = colors.textSecondary
+        )
     }
 }
 
+// ========== 空 / 加载 / 错误态 ==========
+
 @Composable
-private fun ErrorView(
-    message: String,
+private fun EmptyStateView(
+    isWebViewReady: Boolean,
+    isInitialLoading: Boolean,
+    error: String?,
+    feedTitle: String,
     onRetry: () -> Unit
 ) {
+    val colors = arkdoColors
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(text = message)
-            Button(onClick = onRetry) {
-                Text("重试")
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            when {
+                !isWebViewReady -> {
+                    Text(
+                        text = "准备环境中...",
+                        fontSize = 15.sp,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                isInitialLoading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(30.dp),
+                        strokeWidth = 3.dp,
+                        color = colors.ldAccent
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "正在加载$feedTitle",
+                        fontSize = 15.sp,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                error != null -> {
+                    Text(
+                        text = "加载失败，请检查网络后重试",
+                        fontSize = 15.sp,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(19.dp))
+                            .background(colors.fillSubtle)
+                            .clickable(onClick = onRetry)
+                            .padding(horizontal = 18.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "重试", fontSize = 15.sp, color = colors.ldAccent)
+                    }
+                }
+
+                else -> {
+                    Text(
+                        text = "暂无帖子数据",
+                        fontSize = 15.sp,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun EmptyView() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("暂无话题")
     }
 }

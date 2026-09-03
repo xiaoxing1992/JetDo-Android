@@ -1,171 +1,144 @@
 package com.arkdo.android.services.network
 
 import android.content.Context
-import android.util.Log
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import okhttp3.Dns
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.dnsoverhttps.DnsOverHttps
+import timber.log.Timber
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "[ArkDO][DoH]"
-private const val PREFS_NAME = "doh_settings"
-
-private val Context.dohDataStore by preferencesDataStore(name = PREFS_NAME)
 
 /**
- * DoH (DNS over HTTPS) 管理器
+ * DoH 引擎。配置源是 [DohManager]（服务器列表 / 当前选择 / 开关 / 模式，与鸿蒙版同构），
+ * 这里只负责把配置变成可用的 [Dns] 与 [OkHttpClient]。
  *
- * 功能：
- * - 使用 DoH 服务器解析 linux.do 域名，绕过 DNS 污染
- * - 对标 HarmonyOS 版本的 DohManager
- * - 支持自定义 DoH 服务器
- *
- * 使用的 DoH 服务器：
- * - 默认：edge.47258.xyz (与鸿蒙版本保持一致)
- * - 备用：arkdo.ddd.oaifree.com
+ * 鸿蒙版是 webview.WebviewController.setHttpDns 在 ArkWeb 引擎层开 DoH，一次下发全局生效。
+ * Android WebView 没有等价 API，所以解析结果要靠 [WebViewDohInterceptor] 在
+ * shouldInterceptRequest 里逐请求接管才能用上，见那个文件的说明。
  */
 object DohService {
-    private const val DEFAULT_DOH_URL = "https://edge.47258.xyz/linuxdo"
-    private const val FALLBACK_DOH_URL = "https://arkdo.ddd.oaifree.com/query-dns"
 
-    private val PREF_DOH_ENABLED = stringPreferencesKey("doh_enabled")
-    private val PREF_DOH_SERVER = stringPreferencesKey("doh_server")
+    @Volatile private var dnsOverHttps: DnsOverHttps? = null
 
-    private var dnsOverHttps: DnsOverHttps? = null
-    private var isInitialized = false
+    /** SECURE_ONLY：DoH 失败不回退系统 DNS，直接抛。对应鸿蒙 SecureDnsMode.SECURE_ONLY。 */
+    @Volatile private var secureOnly: Boolean = false
+
+    /** 当前生效的 DoH 服务器地址；空串表示 DoH 已关闭。 */
+    @Volatile private var activeUrl: String = ""
+
+    /** DoH 是否处于可用状态。拦截器据此决定要不要接管请求。 */
+    val isActive: Boolean
+        get() = dnsOverHttps != null
+
+    /** 当前生效的 DoH 服务器地址，供日志与设置页展示。 */
+    fun activeServerUrl(): String = activeUrl
 
     /**
-     * 初始化 DoH 客户端
-     *
-     * 在 Application.onCreate() 中调用
+     * 从 [DohManager] 读取配置并下发。可重复调用（切服务器/改模式时）。
+     * 同步方法：内部只读 SharedPreferences 和构造对象，不发网络请求。
      */
-    suspend fun init(context: Context) {
-        if (isInitialized) return
+    fun init(context: Context) {
+        val enabled = DohManager.isEnabled(context)
+        val server = DohManager.getActiveServer(context)
+        if (!enabled || server.url.isEmpty()) {
+            configure("", secureOnly = false)
+            return
+        }
+        configure(server.url, DohManager.getMode(context) == DohResolveMode.SECURE_ONLY)
+    }
 
-        val enabled = isEnabled(context)
-        if (!enabled) {
-            Log.i(TAG, "DoH disabled by user")
+    /**
+     * 直接下发一份配置。[url] 为空表示关闭 DoH（此后拦截器不再接管，全部走系统 DNS）。
+     */
+    fun configure(url: String, secureOnly: Boolean) {
+        this.secureOnly = secureOnly
+
+        if (url.isEmpty()) {
+            if (dnsOverHttps != null) Timber.i("$TAG 已关闭，回落系统 DNS")
+            dnsOverHttps = null
+            activeUrl = ""
             return
         }
 
-        val serverUrl = getServerUrl(context)
-        Log.i(TAG, "Initializing DoH with server: $serverUrl")
+        if (url == activeUrl && dnsOverHttps != null) {
+            Timber.i("$TAG 配置未变，跳过重建 url=%s secureOnly=%b", url, secureOnly)
+            return
+        }
 
-        try {
+        runCatching {
+            // bootstrap 客户端负责解析 DoH 服务器自己的域名，只能走系统 DNS，
+            // 所以内置 IP 兜底：DoH 服务器域名本身被污染时仍能建连。
             val bootstrapClient = OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
-            dnsOverHttps = DnsOverHttps.Builder()
+            DnsOverHttps.Builder()
                 .client(bootstrapClient)
-                .url(serverUrl.toHttpUrl())
+                .url(url.toHttpUrl())
                 .bootstrapDnsHosts(
-                    // 使用公共 DNS 作为 bootstrap
                     InetAddress.getByName("8.8.8.8"),
                     InetAddress.getByName("1.1.1.1")
                 )
                 .build()
-
-            isInitialized = true
-            Log.i(TAG, "DoH initialized successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize DoH: ${e.message}", e)
+        }.onSuccess {
+            dnsOverHttps = it
+            activeUrl = url
+            Timber.i("$TAG 已启用 url=%s secureOnly=%b", url, secureOnly)
+        }.onFailure {
+            dnsOverHttps = null
+            activeUrl = ""
+            Timber.e(it, "$TAG 初始化失败 url=%s", url)
         }
     }
 
     /**
-     * 通过 DoH 解析域名
+     * 供 OkHttp 使用的解析器。
      *
-     * @param hostname 要解析的域名
-     * @return 解析得到的 IP 地址列表
+     * 注意这只替换地址解析：TLS 的 SNI 与证书校验仍按原域名走，
+     * 所以调用方不需要（也不应该）手工改写 Host 头。
      */
-    fun lookup(hostname: String): List<InetAddress> {
-        if (!isInitialized || dnsOverHttps == null) {
-            Log.w(TAG, "DoH not initialized, falling back to system DNS")
-            return try {
-                InetAddress.getAllByName(hostname).toList()
-            } catch (e: UnknownHostException) {
-                emptyList()
-            }
+    val dns: Dns = Dns { hostname ->
+        val doh = dnsOverHttps
+        if (doh == null) {
+            if (secureOnly) throw UnknownHostException("$TAG DoH 未就绪且为 SECURE_ONLY：$hostname")
+            return@Dns Dns.SYSTEM.lookup(hostname)
         }
-
-        return try {
-            Log.d(TAG, "Looking up $hostname via DoH")
-            val addresses = dnsOverHttps!!.lookup(hostname)
-            Log.i(TAG, "DoH lookup for $hostname: ${addresses.joinToString()}")
-            addresses
+        try {
+            doh.lookup(hostname).ifEmpty {
+                throw UnknownHostException("$TAG DoH 解析结果为空：$hostname")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "DoH lookup failed for $hostname: ${e.message}")
-            // 降级到系统 DNS
-            try {
-                InetAddress.getAllByName(hostname).toList()
-            } catch (e2: UnknownHostException) {
-                emptyList()
+            if (secureOnly) {
+                throw e as? UnknownHostException ?: UnknownHostException("$TAG DoH 解析失败：$hostname")
             }
+            Timber.w("$TAG %s 解析失败，回退系统 DNS：%s", hostname, e.message)
+            Dns.SYSTEM.lookup(hostname)
         }
     }
 
     /**
-     * 检查 DoH 是否已启用
+     * 拦截 WebView 请求时用的客户端。
+     *
+     * followRedirects=false：3xx 原样交回 WebView 自己跟，
+     * 这样地址栏 / origin / 同源判定都还是 WebView 说了算，不会被我们悄悄改掉。
      */
-    suspend fun isEnabled(context: Context): Boolean {
-        return context.dohDataStore.data.map { prefs ->
-            prefs[PREF_DOH_ENABLED]?.toBoolean() ?: true // 默认启用
-        }.first()
+    val client: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .dns(dns)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 
-    /**
-     * 设置 DoH 启用状态
-     */
-    suspend fun setEnabled(context: Context, enabled: Boolean) {
-        context.dohDataStore.edit { prefs ->
-            prefs[PREF_DOH_ENABLED] = enabled.toString()
-        }
-        if (enabled && !isInitialized) {
-            init(context)
-        }
-    }
-
-    /**
-     * 获取当前 DoH 服务器 URL
-     */
-    suspend fun getServerUrl(context: Context): String {
-        return context.dohDataStore.data.map { prefs ->
-            prefs[PREF_DOH_SERVER] ?: DEFAULT_DOH_URL
-        }.first()
-    }
-
-    /**
-     * 设置 DoH 服务器 URL
-     */
-    suspend fun setServerUrl(context: Context, url: String) {
-        context.dohDataStore.edit { prefs ->
-            prefs[PREF_DOH_SERVER] = url
-        }
-        // 需要重新初始化
-        isInitialized = false
-        init(context)
-    }
-}
-
-// HttpUrl 扩展
-private fun String.toHttpUrl(): okhttp3.HttpUrl {
-    return okhttp3.HttpUrl.Builder()
-        .scheme(if (startsWith("https://")) "https" else "http")
-        .host(substringAfter("://").substringBefore("/"))
-        .apply {
-            val path = substringAfter("://").substringAfter("/", "")
-            if (path.isNotEmpty()) {
-                addPathSegments(path)
-            }
-        }
-        .build()
+    /** 主动解析一个域名，仅用于诊断/日志。失败返回空列表。 */
+    fun lookup(hostname: String): List<InetAddress> = runCatching { dns.lookup(hostname) }
+        .onFailure { Timber.w("$TAG lookup(%s) 失败：%s", hostname, it.message) }
+        .getOrDefault(emptyList())
 }

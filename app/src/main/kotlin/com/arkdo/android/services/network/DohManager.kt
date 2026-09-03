@@ -11,9 +11,9 @@ import timber.log.Timber
 // 集中管理 DoH 配置：preferences 持久化服务器列表/当前选择/开关/模式。
 //
 // Android 差异：WebviewController.setHttpDns 无等价物（Android 只有系统级 Private DNS/DoT，
-// 无公开 API 给 WebView 指定 DoH 服务器）。故保留完整的持久化/UI/测速逻辑，
-// applyActive/applyTransientMode 降级为 no-op + 日志（接受系统 DNS）。
-// 若后续想给原生 OkHttp 客户端自建 DoH，可在这里扩展（见 DohSpeedTester）。
+// 无公开 API 给 WebView 指定 DoH 服务器）。改由 DohService 持有解析器，
+// WebViewDohInterceptor 在 shouldInterceptRequest 里逐请求接管，效果等价但只覆盖 GET，
+// 覆盖边界见 WebViewDohInterceptor 的注释。
 // ==========================================================================
 
 /** 内置 DoH：不可删除，首次启动种子数据，也是删除 active 后的兜底。 */
@@ -148,24 +148,33 @@ object DohManager {
         applyActive(context)
     }
 
-    /** 把当前选择下发到网络引擎。Android 无 setHttpDns，no-op + 日志。 */
+    /**
+     * 把当前选择下发到网络引擎。
+     *
+     * 鸿蒙版这里调 webview.WebviewController.setHttpDns，ArkWeb 引擎层全局生效。
+     * Android 没有等价 API，改为配置 [DohService]，由 [WebViewDohInterceptor] 在
+     * shouldInterceptRequest 里逐请求接管才真正用上，覆盖范围见那个文件的说明。
+     */
     fun applyActive(context: Context) {
         val enabled = isEnabled(context)
         val active = getActiveServer(context)
         if (!enabled || active.url.isEmpty()) {
-            Timber.i("%s setHttpDns OFF (android no-op)", LOG_TAG)
+            DohService.configure("", secureOnly = false)
+            Timber.i("%s DoH OFF", LOG_TAG)
             return
         }
         val mode = getMode(context)
-        Timber.i("%s setHttpDns mode=%s name=%s (android no-op)", LOG_TAG, mode, active.name)
+        DohService.configure(active.url, secureOnly = mode == DohResolveMode.SECURE_ONLY)
+        Timber.i("%s DoH ON mode=%s name=%s", LOG_TAG, mode, active.name)
     }
 
-    /** 过盾期间临时借用 AUTO：不写 preferences。Android 同样 no-op。 */
+    /** 过盾期间临时借用 AUTO：只改引擎，不写 preferences，用户的持久化设置不变。 */
     fun applyTransientMode(context: Context, mode: DohResolveMode) {
         val enabled = isEnabled(context)
         val active = getActiveServer(context)
         if (!enabled || active.url.isEmpty()) return
-        Timber.i("%s setHttpDns transient mode=%s name=%s (android no-op)", LOG_TAG, mode, active.name)
+        DohService.configure(active.url, secureOnly = mode == DohResolveMode.SECURE_ONLY)
+        Timber.i("%s DoH transient mode=%s name=%s", LOG_TAG, mode, active.name)
     }
 
     // ==================== 私有辅助 ====================

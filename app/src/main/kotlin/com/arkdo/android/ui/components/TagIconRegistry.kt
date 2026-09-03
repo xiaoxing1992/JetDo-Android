@@ -1,10 +1,7 @@
 package com.arkdo.android.ui.components
 
 import android.content.Context
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
@@ -93,65 +90,6 @@ object TagIconRegistry {
             Color(colorInt)
         } catch (e: Exception) {
             null
-        }
-    }
-
-    /**
-     * FontAwesome 图标 ID 到 Material Icons 的映射
-     *
-     * 注：Material Icons 与 FontAwesome 不完全一致，这里选择视觉相近的图标
-     */
-    fun mapIconIdToMaterialIcon(iconId: String): ImageVector? {
-        return when (iconId) {
-            "user-injured" -> Icons.Default.Person
-            "gift" -> Icons.Default.CardGiftcard
-            "faucet" -> Icons.Default.WaterDrop
-            "network-wired" -> Icons.Default.Lan
-            "face-smile" -> Icons.Default.SentimentSatisfied
-            "venus" -> Icons.Default.Face
-            "user-slash" -> Icons.Default.PersonOff
-            "coins" -> Icons.Default.MonetizationOn
-            "bullhorn" -> Icons.Default.Campaign
-            "receipt" -> Icons.Default.Receipt
-            "people-group" -> Icons.Default.Groups
-            "ethernet" -> Icons.Default.Cable
-            "heart-pulse" -> Icons.Default.FitnessCenter
-            "hand-holding-dollar" -> Icons.Default.AttachMoney
-            "droplet-slash" -> Icons.Default.WaterDrop
-            "thumbs-up" -> Icons.Default.ThumbUp
-            "circle-question" -> Icons.Default.Help
-            "route" -> Icons.Default.Route
-            "pepper-hot" -> Icons.Default.LocalDining
-            "terminal" -> Icons.Default.Terminal
-            "car" -> Icons.Default.DirectionsCar
-            "microchip" -> Icons.Default.Memory
-            "hands-praying" -> Icons.Default.Favorite
-            "brain" -> Icons.Default.Psychology
-            "bug" -> Icons.Default.BugReport
-            "spider" -> Icons.Default.BugReport
-            "file-code" -> Icons.Default.Code
-            "comment-dollar" -> Icons.Default.AttachMoney
-            "camera" -> Icons.Default.CameraAlt
-            "tree" -> Icons.Default.Park
-            "database" -> Icons.Default.Storage
-            "calculator" -> Icons.Default.Calculate
-            "droplet" -> Icons.Default.WaterDrop
-            "user-secret" -> Icons.Default.Security
-            "radiation" -> Icons.Default.Warning
-            "book" -> Icons.Default.MenuBook
-            "music" -> Icons.Default.MusicNote
-            "video" -> Icons.Default.Videocam
-            "blog" -> Icons.Default.Article
-            "gamepad" -> Icons.Default.SportsEsports
-            "lightbulb" -> Icons.Default.Lightbulb
-            "briefcase" -> Icons.Default.Work
-            "share" -> Icons.Default.Share
-            "palette" -> Icons.Default.Palette
-            "arrow-pointer" -> Icons.Default.Mouse
-            "headset" -> Icons.Default.Headset
-            "triangle-exclamation" -> Icons.Default.Warning
-            "server" -> Icons.Default.Dns
-            else -> null
         }
     }
 
