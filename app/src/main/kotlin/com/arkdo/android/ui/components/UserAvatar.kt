@@ -52,6 +52,7 @@ fun UserAvatar(
     modifier: Modifier = Modifier
 ) {
     val colors = arkdoColors
+    val flairContext = LocalContext.current
 
     // 鸿蒙取的是 username 首字符，不是 displayName。
     val initial = (user?.username ?: user?.displayName)
@@ -107,10 +108,14 @@ fun UserAvatar(
         // 要么是图片地址，要么是图标集里真有的 FA 名。都不是就整个不画，
         // 而不是画一个彩色圆圈套着加载失败的图。
         val flairUrl = user?.flairUrl.orEmpty()
-        val renderableFlair = flairUrl.isNotEmpty() &&
-            (isImageFlair(flairUrl) || FaIconSet.has(context, flairUrl))
+        val kind = flairKind(
+            flairUrl = flairUrl,
+            avatarSizeDp = avatarSize.value,
+            iconExists = FaIconSet.has(flairContext, flairUrl),
+            minAvatarSizeDp = FLAIR_MIN_AVATAR_SIZE.value
+        )
 
-        if (showFlair && renderableFlair && avatarSize >= FLAIR_MIN_AVATAR_SIZE) {
+        if (showFlair && kind != FlairKind.NONE) {
             FlairBadge(
                 flairUrl = flairUrl,
                 flairBgColor = user?.flairBgColor,
@@ -134,8 +139,6 @@ private fun FlairBadge(
     flairColor: String?,
     avatarSize: Dp
 ) {
-    val context = LocalContext.current
-
     val badgeSize = maxOf(14.dp, avatarSize * 0.42f)
     val overhang = (badgeSize.value * 0.24f).roundToInt().dp
     val hasBg = !flairBgColor.isNullOrBlank()
@@ -167,9 +170,41 @@ private fun FlairBadge(
                     .padding(inset),
                 contentScale = if (hasBg) ContentScale.Fit else ContentScale.Crop
             )
+        } else {
+            // 走到这里说明调用方已经确认过这个名字在图标集里。
+            FaIcon(
+                iconId = flairUrl,
+                color = parseColor(flairColor) ?: Color.White,
+                size = (badgeSize.value * 0.58f).roundToInt().dp
+            )
         }
     }
 }
+
+/** flair 角标该怎么画（或者不画）。 */
+internal enum class FlairKind { NONE, IMAGE, ICON }
+
+/**
+ * flair 角标的渲染决策，抽出来是为了能在 JVM 上直接测 —— 这条规则踩过坑：
+ * 按"在不在图标集里"分支，会把不认识的图标名当成图片地址去请求，
+ * 结果画出一个彩色圆圈套着加载失败的图。鸿蒙是按地址形态判，且两边都不成立就不画。
+ *
+ * @param iconExists 该名字在 FA 图标集里是否存在（调用方查表后传入）
+ */
+internal fun flairKind(
+    flairUrl: String,
+    avatarSizeDp: Float,
+    iconExists: Boolean,
+    minAvatarSizeDp: Float = 32f
+): FlairKind {
+    if (flairUrl.isEmpty() || avatarSizeDp < minAvatarSizeDp) return FlairKind.NONE
+    if (isImageFlair(flairUrl)) return FlairKind.IMAGE
+    return if (iconExists) FlairKind.ICON else FlairKind.NONE
+}
+
+/** flair 是图片还是图标，按地址形态判。对齐鸿蒙 isImageFlair()。 */
+internal fun isImageFlair(flairUrl: String): Boolean =
+    flairUrl.startsWith("http://") || flairUrl.startsWith("https://") || flairUrl.startsWith("//")
 
 /**
  * 头像地址：优先动态头像，其次 avatar_template。
