@@ -603,12 +603,21 @@ class TopicService(private val bridge: JsonNetworkClient) {
         }
     }
 
+    /**
+     * DiscourseUser -> User。空串一律归一成 null，
+     * 下游只需判 null，不用再各自 isNotEmpty 一遍。
+     */
     private fun mapUser(source: DiscourseUser): User {
         return User(
             id = source.id ?: 0,
             username = source.username ?: "",
             name = source.name,
-            avatarTemplate = source.avatar_template
+            avatarTemplate = source.avatar_template,
+            animatedAvatar = source.animated_avatar?.takeIf { it.isNotEmpty() },
+            flairUrl = source.flair_url?.takeIf { it.isNotEmpty() },
+            flairBgColor = source.flair_bg_color?.takeIf { it.isNotEmpty() },
+            flairColor = source.flair_color?.takeIf { it.isNotEmpty() },
+            flairName = source.flair_name?.takeIf { it.isNotEmpty() }
         )
     }
 }
@@ -675,7 +684,13 @@ data class DiscourseUser(
     val id: Long? = null,
     val username: String? = null,
     val name: String? = null,
-    val avatar_template: String? = null
+    val avatar_template: String? = null,
+    // 下面这些以前没声明，导致头像角标和动图头像在列表页永远拿不到值。
+    val animated_avatar: String? = null,
+    val flair_url: String? = null,
+    val flair_bg_color: String? = null,
+    val flair_color: String? = null,
+    val flair_name: String? = null
 )
 
 @Serializable
