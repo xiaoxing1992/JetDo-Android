@@ -82,7 +82,14 @@ fun ArkDoNavHost(
                 slug = slug,
                 title = title,
                 targetPostNumber = target,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToTopic = { navTopicId, navSlug, navTarget ->
+                    val parts = mutableListOf<String>()
+                    navSlug?.let { parts.add("slug=$it") }
+                    navTarget?.let { parts.add("target=$it") }
+                    val query = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$navTopicId$query")
+                }
             )
         }
 

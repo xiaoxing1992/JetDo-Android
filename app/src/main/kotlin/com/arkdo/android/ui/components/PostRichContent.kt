@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,10 +40,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.CookedHtmlParser
+import com.arkdo.android.services.topic.clicksForHref
 import com.arkdo.android.services.content.RichBlock
 import com.arkdo.android.services.content.RichBlockType
 import com.arkdo.android.services.content.RichInlineNode
@@ -79,9 +83,11 @@ private fun headingLineHeight(level: Int) = when {
 fun PostRichContent(
     html: String,
     modifier: Modifier = Modifier,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit = {}
 ) {
     val blocks = remember(html) { CookedHtmlParser.parse(html) }
+    // 链接点击数（随 post JSON 变动的动态数据，不参与块缓存）。
     // 交互状态（剧透已揭示/折叠已展开）按块 key 记录，内容变化时随 remember 重建。
     val expandedKeys = remember(html) { mutableStateListOf<String>() }
 
@@ -91,6 +97,7 @@ fun PostRichContent(
                 block = block,
                 key = "$index",
                 expandedKeys = expandedKeys,
+                linkClicks = linkClicks,
                 onLinkClick = onLinkClick
             )
         }
@@ -102,11 +109,13 @@ private fun BlockView(
     block: RichBlock,
     key: String,
     expandedKeys: MutableList<String>,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit
 ) {
     when (block.type) {
         RichBlockType.PARAGRAPH -> InlineText(
             inlines = block.inlines.orEmpty(),
+            linkClicks = linkClicks,
             onLinkClick = onLinkClick
         )
 
@@ -116,26 +125,27 @@ private fun BlockView(
             lineHeight = headingLineHeight(block.level ?: 2),
             fontWeight = FontWeight.Bold,
             forcePrimary = true,
+            linkClicks = linkClicks,
             onLinkClick = onLinkClick
         )
 
-        RichBlockType.QUOTE -> QuoteBlock(block, key, expandedKeys, onLinkClick)
+        RichBlockType.QUOTE -> QuoteBlock(block, key, expandedKeys, linkClicks, onLinkClick)
 
         RichBlockType.TOPIC_QUOTE -> TopicQuoteBlock(block, key, onLinkClick)
 
-        RichBlockType.CALLOUT -> CalloutBlock(block, key, expandedKeys, onLinkClick)
+        RichBlockType.CALLOUT -> CalloutBlock(block, key, expandedKeys, linkClicks, onLinkClick)
 
         RichBlockType.CODE -> CodeBlock(block)
 
         RichBlockType.IMAGE -> ImageBlock(block, onLinkClick)
 
-        RichBlockType.LIST -> ListBlock(block, key, expandedKeys, onLinkClick)
+        RichBlockType.LIST -> ListBlock(block, key, expandedKeys, linkClicks, onLinkClick)
 
         RichBlockType.TABLE -> TableBlock(block)
 
-        RichBlockType.SPOILER -> SpoilerBlock(block, key, expandedKeys, onLinkClick)
+        RichBlockType.SPOILER -> SpoilerBlock(block, key, expandedKeys, linkClicks, onLinkClick)
 
-        RichBlockType.DISCLOSURE -> DisclosureBlock(block, key, expandedKeys, onLinkClick)
+        RichBlockType.DISCLOSURE -> DisclosureBlock(block, key, expandedKeys, linkClicks, onLinkClick)
 
         RichBlockType.DIVIDER -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -187,6 +197,7 @@ private fun QuoteBlock(
     block: RichBlock,
     key: String,
     expandedKeys: MutableList<String>,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit
 ) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
@@ -198,7 +209,7 @@ private fun QuoteBlock(
                 .padding(10.dp)
         ) {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
-                BlockView(inner, "$key-q$index", expandedKeys, onLinkClick)
+                BlockView(inner, "$key-q$index", expandedKeys, linkClicks, onLinkClick)
             }
         }
     }
@@ -221,14 +232,16 @@ private fun TopicQuoteBlock(
                 .padding(10.dp)
         ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            block.quoteAvatarUrl?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    contentScale = ContentScale.Crop
-                )
-            }
+            // 引用卡头像与列表/楼层共用全局 UserAvatar（动图候选 + 首字母回退），尺寸外部控制。
+            UserAvatar(
+                user = User(
+                    id = 0,
+                    username = block.quoteAuthor ?: "",
+                    animatedAvatar = block.quoteAvatarUrl
+                ),
+                avatarSize = 24.dp,
+                showFlair = false
+            )
             Column(modifier = Modifier.padding(start = 8.dp)) {
                 block.quoteTitle?.let {
                     Text(it, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -246,7 +259,7 @@ private fun TopicQuoteBlock(
             if (!block.text.isNullOrEmpty()) {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     CookedHtmlParser.parse(block.text).forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-p$index", mutableStateListOf(), onLinkClick)
+                        BlockView(inner, "$key-p$index", mutableStateListOf(), null, onLinkClick)
                     }
                 }
             }
@@ -260,6 +273,7 @@ private fun CalloutBlock(
     block: RichBlock,
     key: String,
     expandedKeys: MutableList<String>,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit
 ) {
     val expanded = if (!block.collapsible) true else if (key in expandedKeys) !block.defaultExpanded else block.defaultExpanded
@@ -292,7 +306,7 @@ private fun CalloutBlock(
             if (expanded) {
                 Column(modifier = Modifier.padding(top = 6.dp)) {
                     block.blocks.orEmpty().forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-c$index", expandedKeys, onLinkClick)
+                        BlockView(inner, "$key-c$index", expandedKeys, linkClicks, onLinkClick)
                     }
                 }
             }
@@ -338,6 +352,7 @@ private fun ListBlock(
     block: RichBlock,
     key: String,
     expandedKeys: MutableList<String>,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit
 ) {
     Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
@@ -354,7 +369,7 @@ private fun ListBlock(
                         // 列表项含块级图：文字成段落、图片各自成块级 IMAGE。
                         InlineText(item.inlines, onLinkClick = onLinkClick)
                         item.blocks.forEachIndexed { bi, inner ->
-                            BlockView(inner, "$key-l$index-$bi", expandedKeys, onLinkClick)
+                            BlockView(inner, "$key-l$index-$bi", expandedKeys, linkClicks, onLinkClick)
                         }
                     } else {
                         InlineText(item.inlines, onLinkClick = onLinkClick)
@@ -409,13 +424,14 @@ private fun SpoilerBlock(
     block: RichBlock,
     key: String,
     expandedKeys: MutableList<String>,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit
 ) {
     val revealed = key in expandedKeys
     if (revealed) {
         Column {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
-                BlockView(inner, "$key-s$index", expandedKeys, onLinkClick)
+                BlockView(inner, "$key-s$index", expandedKeys, linkClicks, onLinkClick)
             }
         }
     } else {
@@ -437,6 +453,7 @@ private fun DisclosureBlock(
     block: RichBlock,
     key: String,
     expandedKeys: MutableList<String>,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit
 ) {
     val expanded = toggleState(expandedKeys, key)
@@ -463,7 +480,7 @@ private fun DisclosureBlock(
         if (expanded) {
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) {
                 block.blocks.orEmpty().forEachIndexed { index, inner ->
-                    BlockView(inner, "$key-d$index", expandedKeys, onLinkClick)
+                    BlockView(inner, "$key-d$index", expandedKeys, linkClicks, onLinkClick)
                 }
             }
         }
@@ -556,10 +573,15 @@ private fun InlineText(
     fontWeight: FontWeight? = null,
     forcePrimary: Boolean = false,
     fallbackText: String? = null,
+    linkClicks: Map<String, Int>? = null,
     onLinkClick: (String) -> Unit = {}
 ) {
     val colors = arkdoColors
     val uriHandler = LocalUriHandler.current
+    val isDark = isSystemInDarkTheme()
+    // 行内代码：咖色字 #B45309 + 14sp 等宽，无背景色（以用户实机鸿蒙观感为准）。
+    val codeColor = Color(0xFFB45309)
+    val iconMutedColor = if (isDark) Color(0xFF5C626B) else Color(0xFFBDBDBD)
 
     val imageContents = mutableMapOf<String, InlineTextContent>()
     val text = buildAnnotatedString {
@@ -568,43 +590,90 @@ private fun InlineText(
             return@buildAnnotatedString
         }
         inlines.forEachIndexed { index, token ->
+            val isCode = token.type == RichInlineType.CODE || token.code
             val base = SpanStyle(
-                color = when {
-                    token.type == RichInlineType.CODE || token.code -> colors.textBody
-                    forcePrimary -> MaterialTheme.colorScheme.onSurface
-                    else -> colors.textBody
-                },
+                color = if (isCode) codeColor else colors.textBody,
                 fontWeight = when {
                     token.bold -> FontWeight.Bold
                     fontWeight != null -> fontWeight
                     else -> null
                 },
                 fontStyle = if (token.italic) FontStyle.Italic else null,
-                background = if (token.type == RichInlineType.CODE || token.code) {
-                    colors.surfaceMuted
-                } else {
-                    Color.Unspecified
-                },
-                fontFamily = if (token.type == RichInlineType.CODE || token.code) FontFamily.Monospace else null
+                background = Color.Unspecified,
+                fontFamily = if (isCode) FontFamily.Monospace else null,
+                fontSize = if (isCode) 14.sp else TextUnit.Unspecified
             )
             when (token.type) {
-                RichInlineType.LINK -> withLink(
-                    LinkAnnotation.Clickable(
-                        tag = token.href ?: "",
-                        styles = TextLinkStyles(base.copy(color = colors.brand)),
-                        linkInteractionListener = { token.href?.let(onLinkClick) }
-                    )
-                ) { append(token.text) }
+                RichInlineType.LINK -> {
+                    // 附件下载链接：前置下载图标（鸿蒙用烘蓝 download_blue.svg，这里等价染色）。
+                    if (token.attachment) {
+                        val downloadId = "dl-$index"
+                        imageContents[downloadId] = InlineTextContent(
+                            androidx.compose.ui.text.Placeholder(
+                                16.sp, 16.sp, androidx.compose.ui.text.PlaceholderVerticalAlign.Center
+                            )
+                        ) {
+                            FaIcon("download", colors.brand, 14.dp)
+                        }
+                        appendInlineContent(downloadId, " ")
+                    }
+                    withLink(
+                        LinkAnnotation.Clickable(
+                            tag = token.href ?: "",
+                            styles = TextLinkStyles(
+                                base.copy(color = colors.brand, background = Color.Unspecified, fontFamily = null, fontSize = TextUnit.Unspecified)
+                            ),
+                            linkInteractionListener = { token.href?.let(onLinkClick) }
+                        )
+                    ) { append(token.text) }
+
+                    // 链接点击数角标（对齐官方 span.badge-notification.clicks）：0 次不显示。
+                    val clicks = clicksForHref(linkClicks, token.href)
+                    if (clicks > 0) {
+                        append(" ")
+                        val badgeId = "clicks-$index"
+                        val digits = clicks.toString().length
+                        val badgeFg = if (isDark) Color(0xFF9A9A9A) else Color(0xFF767676)
+                        val badgeBg = if (isDark) Color(0xFF2B2B2B) else Color(0xFFE6E8EB)
+                        imageContents[badgeId] = InlineTextContent(
+                            androidx.compose.ui.text.Placeholder(
+                                (16 + digits * 9).sp, BODY_LINE_HEIGHT,
+                                androidx.compose.ui.text.PlaceholderVerticalAlign.Center
+                            )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth()
+                                    .background(badgeBg, RoundedCornerShape(11.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = clicks.toString(),
+                                    fontSize = 14.sp,
+                                    lineHeight = 22.sp,
+                                    color = badgeFg,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        appendInlineContent(badgeId, " ${clicks} ")
+                    }
+                }
 
                 RichInlineType.CODE, RichInlineType.TEXT -> withStyle(base) {
                     append(token.text)
                 }
 
                 RichInlineType.MATH -> withStyle(
-                    base.copy(fontFamily = FontFamily.Monospace, fontStyle = FontStyle.Italic, fontSize = fontSize * 0.9f)
+                    SpanStyle(
+                        fontFamily = FontFamily.Monospace,
+                        color = colors.textSecondary,
+                        fontSize = 14.sp
+                    )
                 ) { append(token.text) }
 
-                RichInlineType.LINE_BREAK -> append(token.text)
+                RichInlineType.LINE_BREAK -> append(if (token.paragraphBreak) "\n\n" else token.text)
 
                 RichInlineType.IMAGE -> {
                     val placeholderId = "img-$index"

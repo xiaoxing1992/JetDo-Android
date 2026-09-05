@@ -1,6 +1,7 @@
 package com.arkdo.android.data.models
 
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Transient
 import kotlinx.serialization.Serializable
 
 // ==========================================================================
@@ -192,6 +193,9 @@ data class TopicPost(
     @SerialName("like_count") val likeCount: Int? = null,
     @SerialName("read") val read: Boolean? = null,
     @SerialName("user_title") val userTitle: String? = null,
+    /** 正文链接点击数表（键 = resolveUrl 后的 href），渲染层挂灰底角标。服务层构建，非服务端字段。 */
+    @Transient
+    var linkClicks: Map<String, Int>? = null,
     @SerialName("reactions") val reactions: List<PostReaction>? = null,
     @SerialName("reaction_users_count") val reactionUsersCount: Int? = null,
     @SerialName("current_user_reaction") val currentUserReaction: String? = null,

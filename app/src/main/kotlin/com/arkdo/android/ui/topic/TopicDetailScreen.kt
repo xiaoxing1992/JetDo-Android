@@ -15,14 +15,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.User
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.components.TopicPostItem
+import com.arkdo.android.ui.components.UserAvatar
+import com.arkdo.android.ui.utils.RelativeTime
 import com.arkdo.android.ui.components.TopicMetadataBadges
 
 /**
@@ -46,9 +52,39 @@ fun TopicDetailScreen(
     targetPostNumber: Int? = null,
     highlightTarget: String? = null,
     onNavigateBack: () -> Unit,
+    onNavigateToTopic: (topicId: Long, slug: String?, targetPostNumber: Int?) -> Unit = { _, _, _ -> },
     viewModel: TopicDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val listState = rememberLazyListState()
+    val uriHandler = LocalUriHandler.current
+    // 链接路由：linux.do 话题链接（/t/{slug}/{id}[/{楼号}]，引用卡是 /t/topic/{id}/{楼号}）
+    // 应用内开新详情页；其余链接（站外/非话题）走系统浏览器。
+    val topicLinkRegex = Regex("^https?://linux\\.do/t/(?:([^/?#]+)/)?(\\d+)(?:/(\\d+))?")
+    val onOpenUri: (String) -> Unit = { url ->
+        val match = topicLinkRegex.find(url)
+        if (match == null) {
+            try {
+                uriHandler.openUri(url)
+            } catch (_: Exception) {
+            }
+        } else {
+            // slug 为字面量 "topic"（引用卡回跳链接）时不传，让详情页按 id + 当前 slug 开窗。
+            val rawSlug = match.groupValues[1]
+            val slug = rawSlug.takeUnless { it.isEmpty() || it == "topic" }
+            val linkTopicId = match.groupValues[2].toLongOrNull() ?: 0L
+            val postNumber = match.groupValues[3].toIntOrNull()
+            when {
+                linkTopicId <= 0 -> try {
+                    uriHandler.openUri(url)
+                } catch (_: Exception) {
+                }
+                // 本帖内跳楼：不压栈，直接滚动/换窗。
+                linkTopicId == topicId -> postNumber?.let { viewModel.jumpToPostNumber(it) }
+                else -> onNavigateToTopic(linkTopicId, slug, postNumber)
+            }
+        }
+    }
 
     LaunchedEffect(topicId, targetPostNumber) {
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
@@ -58,9 +94,16 @@ fun TopicDetailScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    // 对齐鸿蒙 TopicDetailHeader 双层标题：摘要在视口内时显示静态
+                    // 「帖子详情」，滑出后切换为帖子标题（避免与摘要卡标题重复）。
                     Text(
-                        text = uiState.topic?.title ?: title ?: "话题详情",
-                        maxLines = 1
+                        text = if (listState.firstVisibleItemIndex == 0) {
+                            "帖子详情"
+                        } else {
+                            uiState.topic?.title ?: title ?: "话题详情"
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 navigationIcon = {
@@ -91,6 +134,7 @@ fun TopicDetailScreen(
                 }
                 uiState.topic != null -> {
                     TopicDetailContent(
+                        listState = listState,
                         topic = uiState.topic!!,
                         categories = uiState.categories,
                         posts = uiState.posts,
@@ -98,14 +142,18 @@ fun TopicDetailScreen(
                         hasMore = uiState.hasMore,
                         onLoadMore = { viewModel.loadMorePosts() },
                         targetPostNumber = targetPostNumber,
+                        flashTargetPostId = uiState.flashTargetPostId,
                         // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
                         scrollRequestPostNumber = uiState.scrollRequestPostNumber,
                         onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
-                        flashTargetPostId = uiState.flashTargetPostId,
                         hasEarlier = uiState.hasEarlier,
                         earlierCount = uiState.earlierCount,
                         isLoadingEarlier = uiState.isLoadingEarlier,
-                        onLoadEarlier = { viewModel.loadEarlierPosts() }
+                        onLoadEarlier = { viewModel.loadEarlierPosts() },
+                        onOpenLink = onOpenUri,
+                        onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
+                        onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
+                        onCopyPostLink = { p -> viewModel.postLink(p) }
                     )
                 }
             }
@@ -115,6 +163,7 @@ fun TopicDetailScreen(
 
 @Composable
 private fun TopicDetailContent(
+    listState: androidx.compose.foundation.lazy.LazyListState,
     topic: com.arkdo.android.data.models.TopicDetail,
     categories: List<TopicCategory>,
     posts: List<TopicPost>,
@@ -122,16 +171,18 @@ private fun TopicDetailContent(
     hasMore: Boolean,
     onLoadMore: () -> Unit,
     targetPostNumber: Int? = null,
+    flashTargetPostId: Long? = null,
     scrollRequestPostNumber: Int? = null,
     onScrollRequestConsumed: () -> Unit = {},
-    flashTargetPostId: Long? = null,
     hasEarlier: Boolean = false,
     earlierCount: Int = 0,
     isLoadingEarlier: Boolean = false,
-    onLoadEarlier: () -> Unit = {}
+    onLoadEarlier: () -> Unit = {},
+    onOpenLink: (String) -> Unit = {},
+    onToggleReaction: (TopicPost, String, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
+    onToggleBookmark: (TopicPost, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
+    onCopyPostLink: (TopicPost) -> String? = { null }
 ) {
-    val listState = rememberLazyListState()
-
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
     LaunchedEffect(posts, targetPostNumber) {
@@ -184,7 +235,15 @@ private fun TopicDetailContent(
             items = posts,
             key = { it.id }
         ) { post ->
-            PostItem(post = post, highlighted = flashTargetPostId == post.id)
+            TopicPostItem(
+                post = post,
+                flashTargetPostId = flashTargetPostId,
+                onOpenLink = onOpenLink,
+                onReply = { /* 定向回复输入框：后续切片 */ },
+                onToggleReaction = onToggleReaction,
+                onToggleBookmark = onToggleBookmark,
+                onCopyPostLink = onCopyPostLink
+            )
         }
 
         // 加载更多
@@ -254,59 +313,6 @@ private fun TopicHeader(
         )
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-}
-
-@Composable
-private fun PostItem(post: TopicPost, highlighted: Boolean = false) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                else Color.Transparent
-            )
-            .padding(16.dp)
-    ) {
-        // 作者信息
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = post.username ?: "Unknown",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "楼层 ${post.postNumber}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 正文富内容渲染（cooked HTML → 块/行内节点树 → Compose）
-        PostRichContent(html = post.cookedHtml)
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 互动按钮（简化版）
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            post.reactions?.let { reactions ->
-                if (reactions.isNotEmpty()) {
-                    Text(
-                        text = reactions.joinToString(" ") { "${it.id} ${it.count}" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-    }
 }
 
 @Composable

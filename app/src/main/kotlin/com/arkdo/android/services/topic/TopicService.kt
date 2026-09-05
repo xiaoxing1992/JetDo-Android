@@ -583,7 +583,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 replyToPostNumber = source.reply_to_post_number,
                 likeCount = source.likes_count,
                 read = source.read,
-                userTitle = null,
+                userTitle = source.user_title?.takeIf { it.isNotEmpty() },
                 reactions = null,
                 reactionUsersCount = null,
                 currentUserReaction = null,
@@ -598,11 +598,23 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 name = source.name,
                 avatarTemplate = source.avatar_template,
                 animatedAvatar = source.animated_avatar?.takeIf { it.isNotEmpty() },
-                flairUrl = null,
-                flairBgColor = null,
-                flairColor = null,
-                flairName = null
-            )
+                linkClicks = buildLinkClicks(source.cooked ?: "", source.link_counts),
+                flairUrl = source.flair_url?.takeIf { it.isNotEmpty() },
+                flairBgColor = source.flair_bg_color?.takeIf { it.isNotEmpty() },
+                flairColor = source.flair_color?.takeIf { it.isNotEmpty() },
+                flairName = source.flair_name?.takeIf { it.isNotEmpty() }
+            ).also { post ->
+                // replyToUser 是类体可变字段（非构造参数），构造后赋值。
+                post.replyToUser = source.reply_to_user?.let {
+                    User(
+                        id = it.id ?: 0,
+                        username = it.username ?: "",
+                        name = it.name,
+                        avatarTemplate = it.avatar_template,
+                        animatedAvatar = it.animated_avatar?.takeIf { a -> a.isNotEmpty() }
+                    )
+                }
+            }
         }
     }
 
@@ -732,6 +744,17 @@ data class DiscoursePost(
     val avatar_template: String? = null,
     // 帖子作者同样有动图候选（linux.do 对 BasicUser 系列序列化都附带动图地址）。
     val animated_avatar: String? = null,
+    // 用户头衔（如「不二之选」），楼层作者栏第二行显示。
+    val user_title: String? = null,
+    // 作者 flair 四件套（详情页头像右下角角标），与列表 users[] 同构。
+    val flair_url: String? = null,
+    val flair_bg_color: String? = null,
+    val flair_color: String? = null,
+    val flair_name: String? = null,
+    // 「回复别人」指示器的被回复用户（头像 20dp 用）。
+    val reply_to_user: DiscoursePostUser? = null,
+    // 本楼正文各链接的被点击次数（PostSerializer#link_counts），渲染层据此挂灰底角标。
+    val link_counts: List<DiscourseLinkCount>? = null,
     val cooked: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null,
@@ -740,6 +763,25 @@ data class DiscoursePost(
     val user_id: Long? = null,
     val likes_count: Int? = null,
     val read: Boolean? = null
+)
+
+/** 帖子内嵌用户（reply_to_user 等）：头像候选 + 展示字段。 */
+@Serializable
+data class DiscoursePostUser(
+    val id: Long? = null,
+    val username: String? = null,
+    val name: String? = null,
+    val avatar_template: String? = null,
+    val animated_avatar: String? = null
+)
+
+/** link_counts 的一项。url 与 cooked 里的 href 同源（站内链接也是绝对地址），据此配对挂角标。 */
+@Serializable
+data class DiscourseLinkCount(
+    val url: String? = null,
+    val clicks: Int? = null,
+    // reflection = 反链（别的帖引用了本帖），不在本楼正文里，不挂角标。
+    val reflection: Boolean? = null
 )
 
 @Serializable

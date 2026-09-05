@@ -3,6 +3,7 @@ package com.arkdo.android.ui.topic
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.TopicDetail
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.topic.PostDataSource
@@ -226,6 +227,44 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update { it.copy(categories = loaded) }
             }
         }
+    }
+
+    /**
+     * 表情回应切换（点赞 = heart）：请求先行，结果经 done 回调（成功 true）。
+     * 成功后的本地计数/已点态刷新依赖详情重拉，暂以回调通知屏幕。
+     */
+    fun toggleReaction(post: TopicPost, reaction: String, done: (Boolean) -> Unit) {
+        val topicId = currentTopicId ?: return done(false)
+        viewModelScope.launch {
+            val result = topicService.toggleReaction(post.id, topicId, reaction)
+            done(result.success)
+        }
+    }
+
+    /** 书签 toggle：加书签直接加；移除需要 bookmarkId（详情接口暂未下发，暂不支持移除）。 */
+    fun toggleBookmark(post: TopicPost, done: (Boolean) -> Unit) {
+        val topicId = currentTopicId ?: return done(false)
+        viewModelScope.launch {
+            if (post.bookmarked == true) {
+                val bookmarkId = post.bookmarkId
+                if (bookmarkId == null) {
+                    done(true)
+                    return@launch
+                }
+                val result = topicService.removeBookmark(bookmarkId, topicId)
+                done(result.success)
+            } else {
+                val result = topicService.addBookmark(post.id, topicId)
+                done(result.success)
+            }
+        }
+    }
+
+    /** 楼层永久链接（拷贝链接用）。 */
+    fun postLink(post: TopicPost): String? {
+        val topic = _uiState.value.topic ?: return null
+        val slug = topic.slug ?: return null
+        return "${AppConstants.BASE_URL}/t/$slug/${topic.id}/${post.postNumber}"
     }
 
     /** 屏幕消费一次性滚动请求后调用，避免重组时重复触发。 */
