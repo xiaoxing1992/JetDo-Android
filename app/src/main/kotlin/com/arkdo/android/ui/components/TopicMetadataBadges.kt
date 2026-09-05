@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +47,14 @@ private val BADGE_ROW_HEIGHT = 20.dp
 private val CATEGORY_BADGE_HEIGHT = 18.dp
 private val BADGE_ICON_SIZE = 10.dp
 private val BADGE_TEXT_SIZE = 14.sp
+
+// Android 默认 includeFontPadding 会在文本框顶部留一块音标区，
+// 字形视觉中心整体下坠 —— 和垂直居中的 10dp 小图标一比就是歪的
+// （鸿蒙 ArkUI 没这块留白，所以鸿蒙看着是正的）。关掉它，让文本框
+// 收紧到字形本身，Row 的 CenterVertically 才真的居中。
+private val BADGE_TEXT_STYLE = TextStyle(
+    platformStyle = PlatformTextStyle(includeFontPadding = false)
+)
 
 @Composable
 fun TopicMetadataBadges(
@@ -158,7 +168,8 @@ private fun CategoryBadge(
             text = category.name,
             fontSize = BADGE_TEXT_SIZE,
             fontWeight = FontWeight.Normal,
-            color = colors.textSecondary
+            color = colors.textSecondary,
+            style = BADGE_TEXT_STYLE
         )
     }
 }
@@ -207,7 +218,8 @@ private fun TagBadge(
             text = tag.name,
             fontSize = BADGE_TEXT_SIZE,
             fontWeight = FontWeight.Normal,
-            color = colors.textSecondary
+            color = colors.textSecondary,
+            style = BADGE_TEXT_STYLE
         )
     }
 }
