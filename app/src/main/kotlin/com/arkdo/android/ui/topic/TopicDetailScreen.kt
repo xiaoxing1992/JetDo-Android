@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.topic
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,9 +14,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.TopicPost
+import com.arkdo.android.ui.components.PostRichContent
 
 /**
  * 话题详情页
@@ -42,8 +45,8 @@ fun TopicDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(topicId) {
-        viewModel.loadTopic(topicId, slug, title)
+    LaunchedEffect(topicId, targetPostNumber) {
+        viewModel.loadTopic(topicId, slug, title, targetPostNumber)
     }
 
     Scaffold(
@@ -88,7 +91,15 @@ fun TopicDetailScreen(
                         isLoadingMore = uiState.isLoadingMore,
                         hasMore = uiState.hasMore,
                         onLoadMore = { viewModel.loadMorePosts() },
-                        targetPostNumber = targetPostNumber
+                        targetPostNumber = targetPostNumber,
+                        // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
+                        scrollRequestPostNumber = uiState.scrollRequestPostNumber,
+                        onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
+                        flashTargetPostId = uiState.flashTargetPostId,
+                        hasEarlier = uiState.hasEarlier,
+                        earlierCount = uiState.earlierCount,
+                        isLoadingEarlier = uiState.isLoadingEarlier,
+                        onLoadEarlier = { viewModel.loadEarlierPosts() }
                     )
                 }
             }
@@ -103,16 +114,33 @@ private fun TopicDetailContent(
     isLoadingMore: Boolean,
     hasMore: Boolean,
     onLoadMore: () -> Unit,
-    targetPostNumber: Int? = null
+    targetPostNumber: Int? = null,
+    scrollRequestPostNumber: Int? = null,
+    onScrollRequestConsumed: () -> Unit = {},
+    flashTargetPostId: Long? = null,
+    hasEarlier: Boolean = false,
+    earlierCount: Int = 0,
+    isLoadingEarlier: Boolean = false,
+    onLoadEarlier: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
 
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
-    // 目标楼层还没在当前窗口里时不滚，等 loadMore 把它带进来后再滚。
+    // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
     LaunchedEffect(posts, targetPostNumber) {
         val target = targetPostNumber ?: return@LaunchedEffect
         val index = posts.indexOfFirst { it.postNumber == target }
         if (index >= 0) listState.animateScrollToItem(index + 1)
+    }
+
+    // VM 发起的跳楼（引用跳楼/换窗定位）：一次性请求，滚完立刻消费清除。
+    LaunchedEffect(scrollRequestPostNumber) {
+        val target = scrollRequestPostNumber ?: return@LaunchedEffect
+        val index = posts.indexOfFirst { it.postNumber == target }
+        if (index >= 0) {
+            listState.animateScrollToItem(index + 1)
+        }
+        onScrollRequestConsumed()
     }
 
     LazyColumn(
@@ -124,12 +152,32 @@ private fun TopicDetailContent(
             TopicHeader(topic = topic)
         }
 
+        // 窗口式进入时往上补更早楼层（自动触发：出现在列表顶部即拉）。
+        if (hasEarlier) {
+            item(key = "earlier_loader") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLoadingEarlier) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    } else {
+                        TextButton(onClick = onLoadEarlier) {
+                            Text(if (earlierCount > 0) "加载更早（还有 $earlierCount 楼）" else "加载更早")
+                        }
+                    }
+                }
+            }
+        }
+
         // 回复列表
         items(
             items = posts,
             key = { it.id }
         ) { post ->
-            PostItem(post = post)
+            PostItem(post = post, highlighted = flashTargetPostId == post.id)
         }
 
         // 加载更多
@@ -197,10 +245,14 @@ private fun TopicHeader(topic: com.arkdo.android.data.models.TopicDetail) {
 }
 
 @Composable
-private fun PostItem(post: TopicPost) {
+private fun PostItem(post: TopicPost, highlighted: Boolean = false) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                else Color.Transparent
+            )
             .padding(16.dp)
     ) {
         // 作者信息
@@ -221,11 +273,8 @@ private fun PostItem(post: TopicPost) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 内容（简化版，实际需要 HTML 渲染）
-        Text(
-            text = post.cookedHtml,
-            style = MaterialTheme.typography.bodyMedium
-        )
+        // 正文富内容渲染（cooked HTML → 块/行内节点树 → Compose）
+        PostRichContent(html = post.cookedHtml)
 
         Spacer(modifier = Modifier.height(8.dp))
 
