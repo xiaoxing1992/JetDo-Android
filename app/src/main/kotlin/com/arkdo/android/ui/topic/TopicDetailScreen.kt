@@ -3,6 +3,7 @@ package com.arkdo.android.ui.topic
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -86,7 +87,8 @@ fun TopicDetailScreen(
                         posts = uiState.posts,
                         isLoadingMore = uiState.isLoadingMore,
                         hasMore = uiState.hasMore,
-                        onLoadMore = { viewModel.loadMorePosts() }
+                        onLoadMore = { viewModel.loadMorePosts() },
+                        targetPostNumber = targetPostNumber
                     )
                 }
             }
@@ -100,9 +102,21 @@ private fun TopicDetailContent(
     posts: List<TopicPost>,
     isLoadingMore: Boolean,
     hasMore: Boolean,
-    onLoadMore: () -> Unit
+    onLoadMore: () -> Unit,
+    targetPostNumber: Int? = null
 ) {
+    val listState = rememberLazyListState()
+
+    // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
+    // 目标楼层还没在当前窗口里时不滚，等 loadMore 把它带进来后再滚。
+    LaunchedEffect(posts, targetPostNumber) {
+        val target = targetPostNumber ?: return@LaunchedEffect
+        val index = posts.indexOfFirst { it.postNumber == target }
+        if (index >= 0) listState.animateScrollToItem(index + 1)
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize()
     ) {
         // 话题标题

@@ -92,8 +92,10 @@ fun RootTabScreen(
                 HomeScreen(
                     isWebViewReady = isWebViewReady,
                     viewModel = homeViewModel,
-                    onTopicClick = { topicId ->
-                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId")
+                    onTopicClick = { topicId, targetPostNumber ->
+                        // target 非空 = 未读行跳楼：详情页加载后滚动到该楼层。
+                        val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
+                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
                     }
                 )
             }

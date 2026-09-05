@@ -115,6 +115,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.coil.svg)
+    // GIF 动图解码(头像/动图 flair):linux.do 的 avatar_template 常是动图内容,
+    // 无此扩展则只能解出首帧静态。服务加载器会自动注册 AnimatedImageDecoder/GifDecoder。
+    implementation(libs.coil.gif)
 
     // OkHttp
     implementation(libs.okhttp)

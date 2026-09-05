@@ -195,9 +195,13 @@ class HomeViewModel @Inject constructor(
             val result = fetchCurrentQueryPage(nextPage)
             _uiState.update { current ->
                 if (result.success && result.data != null) {
+                    val merged = appendTopicsUnique(current.topics, result.data.topics)
+                    if (merged.size == current.topics.size) {
+                        Timber.i("[ArkDO][Home] loadMore: 第 %d 页与现有列表完全重叠，无新增", nextPage)
+                    }
                     current.copy(
                         isLoadingMore = false,
-                        topics = current.topics + result.data.topics,
+                        topics = merged,
                         currentPage = nextPage,
                         hasMore = result.data.hasMore
                     )
@@ -579,6 +583,18 @@ class HomeViewModel @Inject constructor(
         /** 标签联想防抖，对齐鸿蒙 TAG_DEBOUNCE_MS。 */
         private const val TAG_DEBOUNCE_MS = 300L
     }
+}
+
+/**
+ * 按 id 去重地追加一页话题（同页内重复也只留第一个）。
+ *
+ * 必须去重：LazyColumn 用 topic.id 做 key，而 Discourse 分页在话题被顶帖/移动时
+ * 页与页会重叠（置顶帖每页都出现），裸拼接产生重复 id 会让 Compose 在测量阶段
+ * 抛 "Key was already used" 直接闪退。鸿蒙列表不强制唯一 key，同样数据不炸。
+ */
+internal fun appendTopicsUnique(existing: List<Topic>, incoming: List<Topic>): List<Topic> {
+    val seen = existing.mapTo(HashSet()) { it.id }
+    return existing + incoming.filter { seen.add(it.id) }
 }
 
 /**

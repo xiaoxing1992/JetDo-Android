@@ -594,7 +594,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 username = source.username,
                 name = source.name,
                 avatarTemplate = source.avatar_template,
-                animatedAvatar = null,
+                animatedAvatar = source.animated_avatar?.takeIf { it.isNotEmpty() },
                 flairUrl = null,
                 flairBgColor = null,
                 flairColor = null,
@@ -725,6 +725,8 @@ data class DiscoursePost(
     val username: String? = null,
     val name: String? = null,
     val avatar_template: String? = null,
+    // 帖子作者同样有动图候选（linux.do 对 BasicUser 系列序列化都附带动图地址）。
+    val animated_avatar: String? = null,
     val cooked: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null,

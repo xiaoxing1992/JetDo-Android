@@ -30,6 +30,7 @@ import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.User
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
+import timber.log.Timber
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -63,9 +64,12 @@ fun UserAvatar(
 
     val shape = if (user?.id == 1L) RoundedCornerShape(avatarSize * 0.1f) else CircleShape
 
-    val avatarUrl = buildAvatarUrl(user)
-    // 首字母只在没有候选或加载失败时露出，不是恒在底层垫着。
-    var showInitial by remember(avatarUrl) { mutableStateOf(avatarUrl == null) }
+    // 鸿蒙是「候选链」逐个失败下移：动图候选加载失败退静态候选，全失败才露首字母。
+    val avatarCandidates = remember(user) { avatarCandidates(user) }
+    var candidateIndex by remember(avatarCandidates) { mutableStateOf(0) }
+    // 首字母只在没有候选或全部候选失败时露出，不是恒在底层垫着。
+    var showInitial by remember(avatarCandidates) { mutableStateOf(avatarCandidates.isEmpty()) }
+    val avatarUrl = avatarCandidates.getOrNull(candidateIndex)
 
     Box(
         // 不裁切：flair 角标要探出头像边界。
@@ -98,7 +102,24 @@ fun UserAvatar(
                         .clip(shape),
                     contentScale = ContentScale.Crop,
                     onState = { state ->
-                        showInitial = state is AsyncImagePainter.State.Error
+                        // 失败退下一候选（动图→静态），到头才露首字母。对齐鸿蒙 advanceCandidate()。
+                        if (state is AsyncImagePainter.State.Error) {
+                            if (candidateIndex + 1 < avatarCandidates.size) {
+                                Timber.w(
+                                    "[UserAvatar] 候选加载失败，退下一候选 failed=%s rest=%s",
+                                    avatarUrl,
+                                    avatarCandidates.drop(candidateIndex + 1)
+                                )
+                                candidateIndex += 1
+                            } else {
+                                Timber.w(
+                                    "[UserAvatar] 全部候选失败 url=%s user=%s",
+                                    avatarUrl,
+                                    user?.username
+                                )
+                                showInitial = true
+                            }
+                        }
                     }
                 )
             }
@@ -206,31 +227,27 @@ internal fun flairKind(
 internal fun isImageFlair(flairUrl: String): Boolean =
     flairUrl.startsWith("http://") || flairUrl.startsWith("https://") || flairUrl.startsWith("//")
 
-/**
- * 头像地址：优先动态头像，其次 avatar_template。
- * 鸿蒙侧是「候选链」逐个失败下移，这里先取第一个可用的，失败后回落首字母。
- */
-private fun buildAvatarUrl(user: User?): String? {
-    if (user == null) return null
+/** 候选地址列表：动图在前、静态在后，空串一律跳过。抽成纯函数供 JVM 测试。 */
+internal fun avatarCandidates(user: User?, requestSize: String = AVATAR_REQUEST_SIZE): List<String> =
+    buildList {
+        if (user == null) return@buildList
 
-    user.animatedAvatar?.takeIf { it.isNotEmpty() }?.let { return absolutize(it) }
+        user.animatedAvatar?.takeIf { it.isNotEmpty() }?.let { add(resolveAvatarUrl(it)) }
 
-    user.avatarTemplate?.takeIf { it.isNotEmpty() }?.let {
-        return absolutize(it.replace("{size}", AVATAR_REQUEST_SIZE))
+        user.avatarTemplate?.takeIf { it.isNotEmpty() }?.let {
+            add(resolveAvatarUrl(it.replace("{size}", requestSize)))
+        }
     }
 
-    return null
+/** 对齐鸿蒙 resolveAvatarUrl()：http(s) 直用，// 补 https，/ 拼 BASE_URL，其余补斜杠拼。 */
+internal fun resolveAvatarUrl(path: String): String = when {
+    path.startsWith("http://") || path.startsWith("https://") -> path
+    path.startsWith("//") -> "https:$path"
+    path.startsWith("/") -> "${AppConstants.BASE_URL}$path"
+    else -> "${AppConstants.BASE_URL}/$path"
 }
 
-private fun absolutize(path: String): String =
-    if (path.startsWith("http")) path else "${AppConstants.BASE_URL}$path"
-
-private fun resolveFlairUrl(flairUrl: String): String = when {
-    flairUrl.startsWith("http") -> flairUrl
-    flairUrl.startsWith("//") -> "https:$flairUrl"
-    flairUrl.startsWith("/") -> "${AppConstants.BASE_URL}$flairUrl"
-    else -> "${AppConstants.BASE_URL}/$flairUrl"
-}
+private fun resolveFlairUrl(flairUrl: String): String = resolveAvatarUrl(flairUrl)
 
 private fun parseColor(colorString: String?): Color? {
     if (colorString.isNullOrBlank()) return null
