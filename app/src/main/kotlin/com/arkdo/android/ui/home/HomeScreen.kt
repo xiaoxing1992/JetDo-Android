@@ -163,9 +163,7 @@ fun HomeScreen(
                         isLoadingMore = uiState.isLoadingMore,
                         hasMore = uiState.hasMore,
                         onTopicClick = onTopicClick,
-                        onLoadMore = { viewModel.loadMore() },
-                        onCategoryClick = { viewModel.selectCategory(it) },
-                        onTagClick = { viewModel.selectTag(it) }
+                        onLoadMore = { viewModel.loadMore() }
                     )
                 }
             }
@@ -365,9 +363,7 @@ private fun TopicList(
     isLoadingMore: Boolean,
     hasMore: Boolean,
     onTopicClick: (topicId: Long, targetPostNumber: Int?) -> Unit,
-    onLoadMore: () -> Unit,
-    onCategoryClick: (TopicCategory) -> Unit,
-    onTagClick: (TopicTag) -> Unit
+    onLoadMore: () -> Unit
 ) {
     LazyColumn(
         state = listState,
@@ -383,10 +379,9 @@ private fun TopicList(
                 // 对齐鸿蒙 handleUnreadBadgeClick：未读行点击直跳第一条未读楼，
                 // 不是和普通行一样从顶部打开 —— 之前这两个 lambda 传的是同一个，
                 // 鸿蒙的跳楼语义整条丢失。
-                onUnreadBadgeClick = { onTopicClick(topic.id, topic.firstUnreadPostNumber()) },
-                onCategoryClick = onCategoryClick,
-                onTagClick = onTagClick,
-                badgesTappable = true
+                onUnreadBadgeClick = { onTopicClick(topic.id, topic.firstUnreadPostNumber()) }
+                // 版块/标签徽标不可点：对齐鸿蒙 TopicListItem（列表徽标无点击事件），
+                // 点徽标就是点整行进详情。
             )
         }
 
