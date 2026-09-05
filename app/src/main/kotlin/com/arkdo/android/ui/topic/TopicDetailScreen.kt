@@ -15,10 +15,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.TopicPost
+import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.components.TopicMetadataBadges
 
 /**
  * 话题详情页
@@ -87,6 +92,7 @@ fun TopicDetailScreen(
                 uiState.topic != null -> {
                     TopicDetailContent(
                         topic = uiState.topic!!,
+                        categories = uiState.categories,
                         posts = uiState.posts,
                         isLoadingMore = uiState.isLoadingMore,
                         hasMore = uiState.hasMore,
@@ -110,6 +116,7 @@ fun TopicDetailScreen(
 @Composable
 private fun TopicDetailContent(
     topic: com.arkdo.android.data.models.TopicDetail,
+    categories: List<TopicCategory>,
     posts: List<TopicPost>,
     isLoadingMore: Boolean,
     hasMore: Boolean,
@@ -149,7 +156,7 @@ private fun TopicDetailContent(
     ) {
         // 话题标题
         item {
-            TopicHeader(topic = topic)
+            TopicHeader(topic = topic, categories = categories)
         }
 
         // 窗口式进入时往上补更早楼层（自动触发：出现在列表顶部即拉）。
@@ -203,45 +210,50 @@ private fun TopicDetailContent(
 }
 
 @Composable
-private fun TopicHeader(topic: com.arkdo.android.data.models.TopicDetail) {
+private fun TopicHeader(
+    topic: com.arkdo.android.data.models.TopicDetail,
+    categories: List<TopicCategory>
+) {
+    // 1:1 对齐鸿蒙 TopicSummaryCard：标题(22 加粗) → 分类/标签徽章行(8) →
+    // 元信息行(12 次要色,8)。全部左对齐，底部 1dp 分隔。
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(start = 10.dp, end = 10.dp, top = 20.dp, bottom = 16.dp)
     ) {
-        // 标题
         Text(
             text = topic.title,
-            style = MaterialTheme.typography.headlineMedium
+            fontSize = 22.sp,
+            lineHeight = 30.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 元数据
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "👁 ${topic.viewCount ?: 0}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "💬 ${topic.replyCount ?: 0}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "❤️ ${topic.likeCount ?: 0}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        val category = CategoryIndex.find(categories, topic.categoryId)
+        val parentCategory = CategoryIndex.findParent(categories, topic.categoryId)
+        if (category != null || topic.tags.isNotEmpty()) {
+            TopicMetadataBadges(
+                category = category,
+                parentCategory = parentCategory,
+                tags = topic.tags,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
+        val postsCount = topic.postsCount ?: 0
+        val replyCount = topic.replyCount ?: 0
+        val likeCount = topic.likeCount ?: 0
+        val viewCount = topic.viewCount ?: 0
+        Text(
+            text = "${postsCount} 帖 · ${replyCount} 回复 · ${likeCount} 赞 · ${viewCount} 浏览",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable

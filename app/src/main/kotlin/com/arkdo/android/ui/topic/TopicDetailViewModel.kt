@@ -3,9 +3,12 @@ package com.arkdo.android.ui.topic
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.TopicDetail
+import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.PostStreamPager
+import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.TopicService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -65,6 +68,7 @@ class TopicDetailViewModel @Inject constructor(
             if (result.success && result.data != null) {
                 applyDetail(result.data)
                 _uiState.update { it.copy(isLoading = false) }
+                loadCategoriesIfNeeded()
                 // 对齐鸿蒙：带目标楼进入时首屏照常从一楼加载，随后走跳楼分流。
                 if (targetPostNumber != null) {
                     jumpToPostNumber(targetPostNumber)
@@ -207,6 +211,23 @@ class TopicDetailViewModel @Inject constructor(
         }
     }
 
+    /** 按需加载站点分类（应用级缓存），供摘要卡分类徽章显示。对齐鸿蒙 loadSiteMetadataIfNeeded。 */
+    private fun loadCategoriesIfNeeded() {
+        if (_uiState.value.categories.isNotEmpty()) {
+            return
+        }
+        viewModelScope.launch {
+            CategoryIndex.loadIfNeeded(
+                bridge = ArkWebNetworkBridge,
+                ready = true,
+                alreadyLoaded = _uiState.value.categories.isNotEmpty(),
+                logTag = "[ArkDO][TopicDetail]"
+            )?.let { loaded ->
+                _uiState.update { it.copy(categories = loaded) }
+            }
+        }
+    }
+
     /** 屏幕消费一次性滚动请求后调用，避免重组时重复触发。 */
     fun consumeScrollRequest() {
         _uiState.update { it.copy(scrollRequestPostNumber = null) }
@@ -273,5 +294,6 @@ data class TopicDetailUiState(
     val earlierCount: Int = 0,
     val loadMoreMessage: String = "",
     val scrollRequestPostNumber: Int? = null,
-    val flashTargetPostId: Long? = null
+    val flashTargetPostId: Long? = null,
+    val categories: List<TopicCategory> = emptyList()
 )
