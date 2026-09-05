@@ -308,6 +308,8 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 data = mapTopicDetail(payload)
             )
         } catch (e: Exception) {
+            // 别让异常静默：日志页/adb 都靠它定位是字段类型不符还是响应被盾页顶掉。
+            Timber.e(e, "[ArkDO][TopicService] getTopicDetail parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -355,6 +357,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 data = mapPosts(payload.post_stream?.posts ?: emptyList())
             )
         } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][TopicService] loadMorePosts parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -546,8 +549,8 @@ class TopicService(private val bridge: JsonNetworkClient) {
         val posts = mapPosts(payload.post_stream?.posts ?: emptyList())
         val stream = payload.post_stream?.stream ?: emptyList()
 
-        val tags = payload.tags?.map { tagName ->
-            TopicTag(id = null, name = tagName, slug = null)
+        val tags = payload.tags?.map { tag ->
+            TopicTag(id = tag.id, name = tag.name ?: "", slug = tag.slug)
         } ?: emptyList()
 
         return TopicDetail(
@@ -708,7 +711,9 @@ data class DiscourseTopicDetail(
     val archived: Boolean? = null,
     val created_at: String? = null,
     val post_stream: DiscoursePostStream? = null,
-    val tags: List<String>? = null,
+    // linux.do 详情接口的 tags 是对象数组（{id,name,slug}），不是字符串数组 ——
+    // 按 List<String> 解析会在 $.tags[0] 直接抛 "Expected beginning of the string"。
+    val tags: List<DiscourseTag>? = null,
     val fancy_title: String? = null
 )
 

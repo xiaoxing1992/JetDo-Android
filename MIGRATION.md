@@ -50,8 +50,8 @@
 - [x] `services/topic/TopicService.ets` → `TopicService.kt`（已完成）
 - [x] `models/Topic.ets` / `TopicDetail.ets` → `TopicModels.kt`（已完成，320 行）
 - [ ] `services/topic/TopicDataSource.ets` → 待定（使用 ViewModel StateFlow 代替）
-- [ ] `services/topic/PostDataSource.ets` → 待定（使用 ViewModel StateFlow 代替）
-- [ ] `services/topic/PostStreamPager.ets` → 待定（逻辑内联到 ViewModel）
+- [x] `services/topic/PostDataSource.ets` → `PostDataSource.kt`（1:1 插入语义；鸿蒙 IDataSource ADD 通知在 Compose 由状态驱动重组替代，平台差异已注释）
+- [x] `services/topic/PostStreamPager.ets` → `PostStreamPager.kt`（1:1 方向化分页纯逻辑，JVM 测试锁定）
 - [-] `services/topic/TopicApiTypes.ets` → 不需要（类型已合并到 TopicModels.kt）
 
 ### 7. 首页 ✅
@@ -62,9 +62,9 @@
 
 ### 8. 详情页 ✅
 - [x] `views/pages/TopicDetailPage.ets` → `ui/topic/TopicDetailScreen.kt`（已完成，简化版）
-- [x] `TopicDetailViewModel.kt`（已完成，状态管理）
+- [x] `TopicDetailViewModel.kt`（已完成窗口式加载：双向分页/跳楼重开窗口/落地高亮，对齐 TopicDetailPage 数据流）
 - [x] `views/components/TopicPostItem.ets` → 内联到 `TopicDetailScreen.kt`（PostCard 组件）
-- [ ] 详情依赖组件（CommentInputBar、PostRichContent 等）→ 待定（里程碑二）
+- [ ] 详情依赖组件（CommentInputBar、PostRichContent 等）→ 进行中：`services/content/RichContentTypes.ets` → `RichContentTypes.kt` 已 1:1 移植（节点模型）；InlineHtmlParser.ets → InlineHtmlParser.kt（11 用例）与 CookedHtmlParser.ets → CookedHtmlParser.kt（13 用例，18 种块类型全量：段落合并/引用卡/callout/代码/lightbox 图片/列表/表格/剧透/折叠/onebox/poll/math/媒体）均已 1:1 移植，jsoup 树遍历实现同一输出语义；余 HtmlContentUtils 部分函数按需补
 
 ### 9. 收尾 ✅
 - [x] `views/pages/RootTabPage.ets` → `ui/screens/RootTabScreen.kt`（已对等化）

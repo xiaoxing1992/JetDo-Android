@@ -120,6 +120,8 @@ dependencies {
     implementation(libs.coil.gif)
 
     // OkHttp
+    // cooked HTML 解析（PostRichContent 的块/行内节点树来源）
+    implementation(libs.jsoup)
     implementation(libs.okhttp)
     implementation(libs.okhttp.dnsoverhttps)
 
