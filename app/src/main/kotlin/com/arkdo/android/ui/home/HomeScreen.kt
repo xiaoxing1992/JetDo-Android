@@ -84,7 +84,7 @@ private val FOOTER_HEIGHT = 54.dp
 fun HomeScreen(
     isWebViewReady: Boolean = false,
     viewModel: HomeViewModel = hiltViewModel(),
-    onTopicClick: (Long) -> Unit = {},
+    onTopicClick: (topicId: Long, targetPostNumber: Int?) -> Unit = { _, _ -> },
     onProfileClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onSearchClick: () -> Unit = {}
@@ -364,7 +364,7 @@ private fun TopicList(
     categories: List<TopicCategory>,
     isLoadingMore: Boolean,
     hasMore: Boolean,
-    onTopicClick: (Long) -> Unit,
+    onTopicClick: (topicId: Long, targetPostNumber: Int?) -> Unit,
     onLoadMore: () -> Unit,
     onCategoryClick: (TopicCategory) -> Unit,
     onTagClick: (TopicTag) -> Unit
@@ -379,8 +379,11 @@ private fun TopicList(
                 // 对齐鸿蒙 HomePage.ets:707-708，版块徽章靠这两个查出来
                 category = CategoryIndex.find(categories, topic.categoryId),
                 parentCategory = CategoryIndex.findParent(categories, topic.categoryId),
-                onClick = { onTopicClick(topic.id) },
-                onUnreadBadgeClick = { onTopicClick(topic.id) },
+                onClick = { onTopicClick(topic.id, null) },
+                // 对齐鸿蒙 handleUnreadBadgeClick：未读行点击直跳第一条未读楼，
+                // 不是和普通行一样从顶部打开 —— 之前这两个 lambda 传的是同一个，
+                // 鸿蒙的跳楼语义整条丢失。
+                onUnreadBadgeClick = { onTopicClick(topic.id, topic.firstUnreadPostNumber()) },
                 onCategoryClick = onCategoryClick,
                 onTagClick = onTagClick,
                 badgesTappable = true

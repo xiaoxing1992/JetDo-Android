@@ -2,6 +2,7 @@ package com.arkdo.android.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -49,17 +50,30 @@ fun ProfileScreen(
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "个人中心正在开发中...\n\n待实现功能：\n" +
-                        "• 用户信息展示\n" +
-                        "• 登录/登出\n" +
-                        "• 我的话题/回复/点赞\n" +
-                        "• 书签/草稿管理\n" +
-                        "• 等级进度与徽章墙\n" +
-                        "• 设置入口",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "个人中心正在开发中...\n\n待实现功能：\n" +
+                            "• 用户信息展示\n" +
+                            "• 登录/登出\n" +
+                            "• 我的话题/回复/点赞\n" +
+                            "• 书签/草稿管理\n" +
+                            "• 等级进度与徽章墙\n" +
+                            "• 设置入口",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // 没数据线的测试机靠它拿日志：闪退堆栈在下次启动回读进该页，一键复制。
+                OutlinedButton(onClick = {
+                    navController.navigate(Routes.DEBUG_LOG)
+                }) {
+                    Icon(Icons.Default.BugReport, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("调试日志")
+                }
+            }
         }
     }
 }

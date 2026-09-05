@@ -64,6 +64,18 @@ data class Topic(
 
     /** 列表页作者 = posters[0].user_id 到 payload.users[] 查表，映射时填充。 */
     var author: User? = null
+
+    /**
+     * 未读行的跳楼目标：第一条未读楼（lastRead+1），封顶最高楼。
+     * 无阅读记录（lastRead<=0）时返回 null —— 按普通打开处理。
+     * 对齐鸿蒙 HomePage.handleUnreadBadgeClick。
+     */
+    fun firstUnreadPostNumber(): Int? {
+        val lastRead = lastReadPostNumber ?: 0
+        if (lastRead <= 0) return null
+        val highest = highestPostNumber ?: 0
+        return if (highest > 0) minOf(lastRead + 1, highest) else lastRead + 1
+    }
 }
 
 /** 话题参与者（列表接口 posters[]）。 */

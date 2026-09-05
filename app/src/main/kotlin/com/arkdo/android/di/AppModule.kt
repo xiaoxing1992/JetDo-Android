@@ -4,7 +4,10 @@ import android.content.Context
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.svg.SvgDecoder
+import coil3.util.DebugLogger
+import com.arkdo.android.BuildConfig
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.topic.TopicService
 import dagger.Module
@@ -12,7 +15,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 /**
@@ -37,6 +42,21 @@ object AppModule {
             .components {
                 // 支持 SVG 图片（用于徽章、图标）
                 add(SvgDecoder.Factory())
+                // 自带网络层：动图头像是 CDN 原图（单文件可达数 MB），Coil 默认
+                // OkHttp 的 10s 读超时在弱网下会把大文件中途判死，表现成
+                // 「动图头像永远退到静态兜底」。放宽超时并复用同一个 client。
+                add(
+                    OkHttpNetworkFetcherFactory(
+                        callFactory = {
+                            OkHttpClient.Builder()
+                                .connectTimeout(15, TimeUnit.SECONDS)
+                                .readTimeout(30, TimeUnit.SECONDS)
+                                .writeTimeout(15, TimeUnit.SECONDS)
+                                .callTimeout(90, TimeUnit.SECONDS)
+                                .build()
+                        }
+                    )
+                )
             }
             .memoryCache {
                 MemoryCache.Builder()
@@ -49,6 +69,8 @@ object AppModule {
                     .maxSizeBytes(50 * 1024 * 1024) // 50 MB
                     .build()
             }
+            // 调试构建下输出请求级日志（成败、数据源、失败原因），便于排查图片加载问题。
+            .logger(if (BuildConfig.DEBUG) DebugLogger() else null)
             .build()
     }
 

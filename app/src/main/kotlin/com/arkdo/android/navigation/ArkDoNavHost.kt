@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.topic.TopicDetailScreen
 
@@ -48,7 +49,7 @@ fun ArkDoNavHost(
 
         // 话题详情页
         composable(
-            route = Routes.TOPIC_DETAIL + "/{topicId}?slug={slug}&title={title}",
+            route = Routes.TOPIC_DETAIL + "/{topicId}?slug={slug}&title={title}&target={target}",
             arguments = listOf(
                 navArgument("topicId") { type = NavType.LongType },
                 navArgument("slug") {
@@ -60,19 +61,34 @@ fun ArkDoNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                // 未读行跳楼目标楼层；普通打开不带该参数。
+                // 注意：NavType.IntType 不允许 nullable（构图时 require 直接抛），
+                // 可空参数必须走 StringType 再自己转 —— 这个错会让 App 启动即闪退。
+                navArgument("target") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) { backStackEntry ->
             val topicId = backStackEntry.arguments?.getLong("topicId") ?: 0L
             val slug = backStackEntry.arguments?.getString("slug")
             val title = backStackEntry.arguments?.getString("title")
+            val target = backStackEntry.arguments?.getString("target")?.toIntOrNull()
 
             TopicDetailScreen(
                 topicId = topicId,
                 slug = slug,
                 title = title,
+                targetPostNumber = target,
                 onNavigateBack = { navController.popBackStack() }
             )
+        }
+
+        // 调试日志页（排障用，Profile 页 FAB 进入）
+        composable(Routes.DEBUG_LOG) {
+            DebugLogScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         // TODO: 添加其他页面路由
@@ -97,6 +113,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val LOGIN = "login"
     const val CF_CHALLENGE = "cf_challenge"
+    const val DEBUG_LOG = "debug_log"
 
     // Settings 子页面
     const val SETTINGS_DOH = "settings_doh"
