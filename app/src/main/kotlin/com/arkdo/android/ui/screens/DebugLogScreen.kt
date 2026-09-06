@@ -3,28 +3,33 @@ package com.arkdo.android.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,9 +39,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.services.logging.DebugLogStore
@@ -49,9 +59,10 @@ import kotlinx.coroutines.launch
  *
  * 背景：测试手机没数据线，logcat 抓不到。闪退时进程直接没了，所以
  * DebugLogStore 在崩溃瞬间把缓冲落盘、下次启动回读 —— 进这个页面就能看到
- * 上一次闪退的堆栈。一键复制后粘给开发者即可。
+ * 上一次闪退的堆栈。一键复制/分享文件后粘给开发者即可。
  *
  * 刷新用 500ms 轮询：日志从任意线程写入，轮询比每次写入发信号更省也更稳。
+ * 配色对齐 logcat：崩溃红/错误红/警告琥珀/信息绿/调试灰，堆栈行继承所属级别。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +98,23 @@ fun DebugLogScreen(
         }
     }
 
+    fun shareLogFile() {
+        val file = DebugLogStore.dumpToFile(context)
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            android.content.Intent.createChooser(intent, "分享日志文件")
+        )
+    }
+
     fun copyAll() {
         val text = DebugLogStore.dumpText()
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -106,6 +134,9 @@ fun DebugLogScreen(
                 actions = {
                     IconButton(onClick = { copyAll() }) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "复制全部日志")
+                    }
+                    IconButton(onClick = { shareLogFile() }) {
+                        Icon(Icons.Default.Share, contentDescription = "分享日志文件")
                     }
                     IconButton(onClick = {
                         DebugLogStore.clear()
@@ -132,24 +163,37 @@ fun DebugLogScreen(
                 )
             }
         } else {
-            LazyColumn(
-                state = listState,
+            // SelectionContainer：日志文本可长按选择、逐行复制。
+            SelectionContainer(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                items(logs) { line ->
-                    Text(
-                        text = line,
-                        fontSize = 10.sp,
-                        lineHeight = 13.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 1.dp)
-                    )
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    itemsIndexed(logs) { _, line ->
+                        // 崩溃条目高亮：红字加粗 + 淡红底，一眼定位闪退段。
+                        val isCrash = line.startsWith("[C/") || line.contains("未捕获异常")
+                        Text(
+                            text = line,
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (isCrash) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isCrash) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isCrash) MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                                    else Color.Transparent
+                                )
+                        )
+                    }
                 }
             }
         }

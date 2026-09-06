@@ -1,23 +1,54 @@
 package com.arkdo.android.ui.topic
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.fadeIn
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,41 +56,43 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.TopicPost
+import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.site.CategoryIndex
-import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.ImageViewer
-import timber.log.Timber
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
+import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
-import com.arkdo.android.ui.components.UserAvatar
-import com.arkdo.android.ui.utils.RelativeTime
-import com.arkdo.android.ui.components.TopicMetadataBadges
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import timber.log.Timber
 
 /**
  * 话题详情页
  *
- * 显示话题的完整内容、回复列表和互动功能。
- *
- * 功能：
- * - 话题标题、内容渲染
- * - 回复列表（分页加载）
- * - 点赞、书签、表情回应
- * - 阅读进度追踪
- * - 回复、引用、编辑
+ * 结构（对齐鸿蒙 TopicDetailPage）：
+ * - 内容层：LazyColumn（hazeSource，滚动内容供顶栏模糊取样）
+ * - 顶栏层：渐进式模糊材质 + 双层标题（最后绘制，盖在内容之上）
+ * - 图片浏览器：viewerState 非空时全屏覆盖（共享元素转场）
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -74,7 +107,12 @@ fun TopicDetailScreen(
     viewModel: TopicDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 单次快照：整个组合只用这一份 TopicDetailUiState（不可变 data class）。
+    // 不这样做的话，VM 在桥回调线程写状态时，两次 uiState 读可能看到不同对象——
+    // 「when 判完 topic 非空、下一行 topic!! 就 NPE」的崩溃就是这个撕裂读。
+    val ui = uiState
     val listState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
     val uriHandler = LocalUriHandler.current
     // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
     var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
@@ -114,110 +152,111 @@ fun TopicDetailScreen(
         }
     }
 
+    // 模糊渐入进度：对齐鸿蒙 blurEffective 0..8vp 区间（滚动 8vp 内材质从透明到全模糊）。
+    val blurRampPx = with(LocalDensity.current) { 8.dp.toPx() }
+    val headerBlurProgress by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 1f
+            else (listState.firstVisibleItemScrollOffset / blurRampPx).coerceIn(0f, 1f)
+        }
+    }
+    val headerHeight = WindowInsets.statusBars
+        .add(WindowInsets(bottom = 56.dp))
+        .asPaddingValues()
+        .calculateTopPadding()
+
     LaunchedEffect(topicId, targetPostNumber) {
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
     }
 
-    SharedTransitionLayout {
-        AnimatedContent(
-            targetState = viewerState,
-            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(220)) },
-            label = "imageViewer"
-        ) { viewer ->
-            CompositionLocalProvider(
-                LocalSharedTransitionScope provides this@SharedTransitionLayout,
-                LocalAnimatedVisibilityScope provides this
-            ) {
-                if (viewer == null) {
     Box(modifier = Modifier.fillMaxSize()) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    // 对齐鸿蒙 TopicDetailHeader 双层标题：摘要在视口内时显示静态
-                    // 「帖子详情」，滑出后切换为帖子标题（避免与摘要卡标题重复）。
-                    Text(
-                        text = if (listState.firstVisibleItemIndex == 0) {
-                            "帖子详情"
-                        } else {
-                            uiState.topic?.title ?: title ?: "话题详情"
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
+        SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+            AnimatedContent(
+                targetState = viewerState,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(220)) },
+                label = "imageViewer"
+            ) { viewer ->
+                CompositionLocalProvider(
+                    LocalSharedTransitionScope provides this@SharedTransitionLayout,
+                    LocalAnimatedVisibilityScope provides this
+                ) {
+                    if (viewer == null) {
+                        when {
+                            ui.error != null && ui.topic == null -> {
+                                ErrorView(
+                                    message = ui.error,
+                                    onRetry = { viewModel.retry() }
+                                )
+                            }
+                            // topic 为空且无错误 = 加载中（含首帧 LaunchedEffect 尚未
+                            // 触发的空档，避免整屏空白只剩顶栏）。
+                            ui.topic == null -> {
+                                LoadingView()
+                            }
+                            else -> ui.topic?.let { topic ->
+                                TopicDetailContent(
+                                    hazeState = hazeState,
+                                    headerTopPadding = headerHeight,
+                                    listState = listState,
+                                    topic = topic,
+                                    onOpenImages = { images, start -> viewerState = images to start },
+                                    categories = ui.categories,
+                                    posts = ui.posts,
+                                    isLoadingMore = ui.isLoadingMore,
+                                    hasMore = ui.hasMore,
+                                    onLoadMore = { viewModel.loadMorePosts() },
+                                    targetPostNumber = targetPostNumber,
+                                    flashTargetPostId = ui.flashTargetPostId,
+                                    // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
+                                    scrollRequestPostNumber = ui.scrollRequestPostNumber,
+                                    onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
+                                    hasEarlier = ui.hasEarlier,
+                                    earlierCount = ui.earlierCount,
+                                    isLoadingEarlier = ui.isLoadingEarlier,
+                                    onLoadEarlier = { viewModel.loadEarlierPosts() },
+                                    onOpenLink = onOpenUri,
+                                    onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
+                                    onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
+                                    onCopyPostLink = { p -> viewModel.postLink(p) },
+                                    onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
+                                    onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) }
+                                )
+                            }
+                        }
+                    } else {
+                        ImageViewer(
+                            images = viewer.first,
+                            startIndex = viewer.second,
+                            onDismiss = { viewerState = null }
                         )
                     }
                 }
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            when {
-                uiState.isLoading && uiState.topic == null -> {
-                    LoadingView()
-                }
-                uiState.error != null -> {
-                    ErrorView(
-                        message = uiState.error!!,
-                        onRetry = { viewModel.retry() }
-                    )
-                }
-                uiState.topic != null -> {
-                    TopicDetailContent(
-                        listState = listState,
-                        topic = uiState.topic!!,
-                        onOpenImages = { images, start -> viewerState = images to start },
-                        categories = uiState.categories,
-                        posts = uiState.posts,
-                        isLoadingMore = uiState.isLoadingMore,
-                        hasMore = uiState.hasMore,
-                        onLoadMore = { viewModel.loadMorePosts() },
-                        targetPostNumber = targetPostNumber,
-                        flashTargetPostId = uiState.flashTargetPostId,
-                        // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
-                        scrollRequestPostNumber = uiState.scrollRequestPostNumber,
-                        onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
-                        hasEarlier = uiState.hasEarlier,
-                        earlierCount = uiState.earlierCount,
-                        isLoadingEarlier = uiState.isLoadingEarlier,
-                        onLoadEarlier = { viewModel.loadEarlierPosts() },
-                        onOpenLink = onOpenUri,
-                        onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
-                        onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
-                        onCopyPostLink = { p -> viewModel.postLink(p) },
-                        onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
-                        onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) }
-                    )
-                }
             }
         }
-    }
-}
 
-                } else {
-                    ImageViewer(
-                        images = viewer.first,
-                        startIndex = viewer.second,
-                        onDismiss = { viewerState = null }
-                    )
-                }
-            }
+        // 顶栏最后绘制：盖在共享元素覆盖层之上（zIndex 置顶），模糊材质统一罩住
+        // 文字/图片/代码块；图片浏览器打开时隐藏（浏览器自带 ✕/分享顶栏）。
+        if (viewerState == null) {
+            TopicDetailHeaderBar(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(2f),
+                summaryVisible = headerBlurProgress < 1f,
+                title = ui.topic?.title ?: title ?: "话题详情",
+                category = CategoryIndex.find(ui.categories, ui.topic?.categoryId),
+                tags = ui.topic?.tags.orEmpty(),
+                hazeState = hazeState,
+                onBack = onNavigateBack,
+                onTitleClick = { viewModel.jumpToPostNumber(1) }
+            )
         }
     }
 }
 
 @Composable
 private fun TopicDetailContent(
+    hazeState: HazeState,
+    headerTopPadding: Dp,
     listState: androidx.compose.foundation.lazy.LazyListState,
     topic: com.arkdo.android.data.models.TopicDetail,
     categories: List<TopicCategory>,
@@ -261,7 +300,10 @@ private fun TopicDetailContent(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize()
+        contentPadding = PaddingValues(top = headerTopPadding),
+        modifier = Modifier
+            .fillMaxSize()
+            .hazeSource(hazeState)
     ) {
         // 话题标题
         item {
@@ -323,6 +365,114 @@ private fun TopicDetailContent(
             item {
                 LaunchedEffect(Unit) {
                     onLoadMore()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 详情页顶栏：HDS 渐进式模糊材质 + 双层标题（对齐鸿蒙 TopicDetailHeader.ets）。
+ *
+ * 图层 A：摘要在视口内时的静态标题「帖子详情」；图层 B：滑出后的帖子标题 + 分类/标签行。
+ * 两层常驻，透明度 + 竖向位移（±8dp）随 summaryVisible 切换（250ms EaseInOut）。
+ * 图层 B 整行可点：回一楼（跳到第一楼，对齐鸿蒙 jumpToFirstPost）。
+ * 材质：backdrop blur 24 + 渐变蒙版（HazeProgressive，越靠下越弱），强度随滚动 0..8vp 渐入。
+ */
+@Composable
+private fun TopicDetailHeaderBar(
+    modifier: Modifier = Modifier,
+    summaryVisible: Boolean,
+    title: String,
+    category: TopicCategory?,
+    tags: List<TopicTag>,
+    hazeState: HazeState,
+    onBack: () -> Unit,
+    onTitleClick: () -> Unit
+) {
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val headerHeight = statusBarPadding + 56.dp
+    val layerAlphaA by animateFloatAsState(
+        targetValue = if (summaryVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 250, easing = EaseInOut),
+        label = "titleLayerA"
+    )
+    val layerAlphaB by animateFloatAsState(
+        targetValue = if (summaryVisible) 0f else 1f,
+        animationSpec = tween(durationMillis = 250, easing = EaseInOut),
+        label = "titleLayerB"
+    )
+    val density = LocalDensity.current
+    val translateA = with(density) { (if (summaryVisible) 0.dp else (-8).dp).toPx() }
+    val translateB = with(density) { (if (summaryVisible) 8.dp else 0.dp).toPx() }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(headerHeight)
+    ) {
+        // 材质层：backdrop 高斯模糊常驻（半径 24 均匀）。
+        // 说明：渐进蒙版需要 AGSL 着色器（API 33+），本机 Android 12 上 Haze 1.6.1
+        // 会降级/不渲染（多效果节点共享 HazeState 亦不可靠）——均匀模糊是 API 31
+        // 上 Haze 的能力上限，等目标平台升级或自写 AGSL 再上渐进。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .hazeEffect(state = hazeState) {
+                    blurRadius = 24.dp
+                    noiseFactor = 0f
+                }
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 12.dp)
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Box(modifier = Modifier.weight(1f).height(56.dp)) {
+                // 图层 A：静态「帖子详情」。
+                Text(
+                    text = "帖子详情",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .graphicsLayer { alpha = layerAlphaA; translationY = translateA }
+                )
+                // 图层 B：帖子标题 + 分类/标签行，整行可点回一楼。
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .graphicsLayer { alpha = layerAlphaB; translationY = translateB }
+                        .clickable(enabled = layerAlphaB > 0.5f, onClick = onTitleClick)
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (category != null || tags.isNotEmpty()) {
+                        TopicMetadataBadges(
+                            category = category,
+                            tags = tags,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
             }
         }

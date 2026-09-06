@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -45,7 +46,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -162,8 +162,20 @@ fun ImageViewer(
         imageOffsetY = 0f
     }
 
+    // 导航栏透明：enableEdgeToEdge 默认给浅色主题导航栏刷了 90% 白 scrim，
+    // 会把浏览器的黑底盖成白色 bar。挂载期间染回透明（黑底由内容自身绘制），卸载恢复。
+    val activityWindow = (LocalContext.current as? android.app.Activity)?.window
+    DisposableEffect(Unit) {
+        val saved = activityWindow?.navigationBarColor
+        activityWindow?.navigationBarColor = android.graphics.Color.TRANSPARENT
+        onDispose {
+            saved?.let { activityWindow?.navigationBarColor = it }
+        }
+    }
+
     // 黑底（拖动消隐时随位移渐透，最低留 25% 黑）。
     val backdropColor = Color.Black.copy(alpha = (1f - minOf(abs(dragOffsetY) / 300f, 0.75f)).coerceIn(0f, 1f))
+
 
     Box(
         modifier = Modifier
