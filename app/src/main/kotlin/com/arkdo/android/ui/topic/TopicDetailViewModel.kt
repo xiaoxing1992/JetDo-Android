@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.common.constants.AppConstants
+import com.arkdo.android.data.models.PostReaction
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.topic.PostDataSource
@@ -237,9 +238,77 @@ class TopicDetailViewModel @Inject constructor(
         val topicId = currentTopicId ?: return done(false)
         viewModelScope.launch {
             val result = topicService.toggleReaction(post.id, topicId, reaction)
+            if (result.success) {
+                // 对齐鸿蒙 ReactionMutation.applyToggle：请求成功后本地精准更新该楼回应态。
+                applyReactionToggle(post.id, reaction)
+            }
             done(result.success)
         }
     }
+
+    private fun loadPostReplies(post: TopicPost, done: (List<TopicPost>?) -> Unit) {
+        viewModelScope.launch {
+            val result = topicService.getPostReplies(post.id)
+            done(if (result.success) result.data else null)
+        }
+    }
+
+    /** 本地回应 toggle：同表情再点=取消；切换=旧减新增；人数只在新增回应者时 +1；按数量降序。 */
+    private fun applyReactionToggle(postId: Long, reaction: String) {
+        _uiState.update { state ->
+            val posts = state.posts.toMutableList()
+            val index = posts.indexOfFirst { it.id == postId }
+            if (index < 0) return@update state
+            val post = posts[index]
+            val reactions = (post.reactions ?: emptyList()).toMutableList()
+            val prev = post.currentUserReaction
+            var usersCount = post.reactionUsersCount ?: 0
+
+            if (prev == reaction) {
+                decrementReaction(reactions, reaction)
+                usersCount = maxOf(0, usersCount - 1)
+            } else {
+                if (prev != null) {
+                    decrementReaction(reactions, prev)
+                } else {
+                    usersCount += 1
+                }
+                incrementReaction(reactions, reaction)
+            }
+            reactions.sortByDescending { it.count }
+
+            val updated = post.copy(
+                reactions = reactions,
+                reactionUsersCount = usersCount,
+                currentUserReaction = if (prev == reaction) null else reaction
+            )
+            posts[index] = updated
+            state.copy(posts = posts)
+        }
+    }
+
+    private fun decrementReaction(reactions: MutableList<PostReaction>, id: String) {
+        val idx = reactions.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        val next = reactions[idx].count - 1
+        if (next <= 0) reactions.removeAt(idx) else reactions[idx] = reactions[idx].copy(count = next)
+    }
+
+    private fun incrementReaction(reactions: MutableList<PostReaction>, id: String) {
+        val idx = reactions.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            reactions[idx] = reactions[idx].copy(count = reactions[idx].count + 1)
+        } else {
+            reactions.add(PostReaction(id = id, count = 1))
+        }
+    }
+
+    /** 被回复列表加载（页脚「回复数+箭头」胶囊展开用）。 */
+    fun loadReplies(post: TopicPost, done: (List<TopicPost>?) -> Unit) {
+        loadPostReplies(post, done)
+    }
+
+    /** 屏幕消费一次性滚动请求后调用，避免重组时重复触发。 */
 
     /** 书签 toggle：加书签直接加；移除需要 bookmarkId（详情接口暂未下发，暂不支持移除）。 */
     fun toggleBookmark(post: TopicPost, done: (Boolean) -> Unit) {

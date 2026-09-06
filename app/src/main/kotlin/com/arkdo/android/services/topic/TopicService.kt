@@ -319,6 +319,37 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
+     * 某楼的被回复列表（/posts/{id}/replies?after=1，响应为帖子数组）。
+     */
+    suspend fun getPostReplies(postId: Long): NetworkResult<List<TopicPost>> {
+        val response = bridge.getJson("/posts/$postId/replies?after=1")
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data ?: return NetworkResults.unexpectedResponse(
+            response.statusCode,
+            response.challengeState,
+            "Linux.do 被回复列表响应为空。"
+        )
+        return try {
+            val payload = json.decodeFromString<List<DiscoursePost>>(data)
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = mapPosts(payload)
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][TopicService] getPostReplies parse failed length=${data.length}")
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "Linux.do 被回复列表响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /**
      * 加载更多楼层（按 postIds[] 窗口）
      */
     suspend fun loadMorePosts(topicId: Long, postIds: List<Long>): NetworkResult<List<TopicPost>> {
@@ -584,9 +615,9 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 likeCount = source.likes_count,
                 read = source.read,
                 userTitle = source.user_title?.takeIf { it.isNotEmpty() },
-                reactions = null,
-                reactionUsersCount = null,
-                currentUserReaction = null,
+                reactions = source.reactions,
+                reactionUsersCount = source.reaction_users_count,
+                currentUserReaction = source.current_user_reaction?.id?.takeIf { it.isNotEmpty() },
                 boosts = null,
                 canBoost = null,
                 polls = null,
@@ -746,6 +777,10 @@ data class DiscoursePost(
     val animated_avatar: String? = null,
     // 用户头衔（如「不二之选」），楼层作者栏第二行显示。
     val user_title: String? = null,
+    // 表情回应：短名→数量（id 即短名如 heart/smile）、回应人数、我的当前回应。
+    val reactions: List<PostReaction>? = null,
+    val reaction_users_count: Int? = null,
+    val current_user_reaction: DiscourseCurrentUserReaction? = null,
     // 作者 flair 四件套（详情页头像右下角角标），与列表 users[] 同构。
     val flair_url: String? = null,
     val flair_bg_color: String? = null,
@@ -763,6 +798,12 @@ data class DiscoursePost(
     val user_id: Long? = null,
     val likes_count: Int? = null,
     val read: Boolean? = null
+)
+
+/** current_user_reaction：我的当前回应短名。 */
+@Serializable
+data class DiscourseCurrentUserReaction(
+    val id: String? = null
 )
 
 /** 帖子内嵌用户（reply_to_user 等）：头像候选 + 展示字段。 */
