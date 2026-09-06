@@ -35,9 +35,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.User
+import com.arkdo.android.services.content.LinkRoute
+import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.ImageViewer
+import timber.log.Timber
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
 import com.arkdo.android.ui.components.TopicPostItem
@@ -73,32 +76,40 @@ fun TopicDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val uriHandler = LocalUriHandler.current
-    // 链接路由：linux.do 话题链接（/t/{slug}/{id}[/{楼号}]，引用卡是 /t/topic/{id}/{楼号}）
-    // 应用内开新详情页；其余链接（站外/非话题）走系统浏览器。
-    val topicLinkRegex = Regex("^https?://linux\\.do/t/(?:([^/?#]+)/)?(\\d+)(?:/(\\d+))?")
     // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
     var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
+    // 链接路由（LinkRouter，对齐鸿蒙四类）：TOPIC → 原生详情页（本帖内则直接定位）；
+    // DOWNLOAD / USER / WEB 的原生页面未迁移前暂交系统浏览器，日志留痕。
     val onOpenUri: (String) -> Unit = { url ->
-        val match = topicLinkRegex.find(url)
-        if (match == null) {
-            try {
-                uriHandler.openUri(url)
-            } catch (_: Exception) {
+        when (val route = resolveLinkRoute(url)) {
+            is LinkRoute.Topic -> {
+                if (route.topicId == topicId && route.targetPostNumber != null) {
+                    // 本帖内链接：不压栈，直接滚动/换窗定位。
+                    viewModel.jumpToPostNumber(route.targetPostNumber)
+                } else {
+                    onNavigateToTopic(route.topicId, null, route.targetPostNumber)
+                }
             }
-        } else {
-            // slug 为字面量 "topic"（引用卡回跳链接）时不传，让详情页按 id + 当前 slug 开窗。
-            val rawSlug = match.groupValues[1]
-            val slug = rawSlug.takeUnless { it.isEmpty() || it == "topic" }
-            val linkTopicId = match.groupValues[2].toLongOrNull() ?: 0L
-            val postNumber = match.groupValues[3].toIntOrNull()
-            when {
-                linkTopicId <= 0 -> try {
-                    uriHandler.openUri(url)
+            is LinkRoute.Download -> {
+                Timber.i("[ArkDO][LinkRouter] download url=%s", route.url)
+                try {
+                    uriHandler.openUri(route.url)
                 } catch (_: Exception) {
                 }
-                // 本帖内跳楼：不压栈，直接滚动/换窗。
-                linkTopicId == topicId -> postNumber?.let { viewModel.jumpToPostNumber(it) }
-                else -> onNavigateToTopic(linkTopicId, slug, postNumber)
+            }
+            is LinkRoute.User -> {
+                Timber.i("[ArkDO][LinkRouter] user=%s url=%s", route.username, route.url)
+                try {
+                    uriHandler.openUri(route.url)
+                } catch (_: Exception) {
+                }
+            }
+            is LinkRoute.Web -> {
+                Timber.i("[ArkDO][LinkRouter] web url=%s", route.url)
+                try {
+                    uriHandler.openUri(route.url)
+                } catch (_: Exception) {
+                }
             }
         }
     }
