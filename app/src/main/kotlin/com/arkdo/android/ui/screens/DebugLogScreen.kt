@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arkdo.android.BuildConfig
 import com.arkdo.android.services.logging.DebugLogStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -176,6 +177,18 @@ fun DebugLogScreen(
                         .padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    // 构建标识：一眼确认设备上跑的是哪次 APK（排查"改了没生效"类问题）。
+                    item(key = "build") {
+                        Text(
+                            text = "构建 ${BuildConfig.VERSION_NAME} (v${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_TIME}",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp)
+                        )
+                    }
                     itemsIndexed(logs) { _, line ->
                         // 崩溃条目高亮：红字加粗 + 淡红底，一眼定位闪退段。
                         val isCrash = line.startsWith("[C/") || line.contains("未捕获异常")

@@ -1,3 +1,5 @@
+import java.time.LocalDateTime
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -27,8 +29,10 @@ android {
         applicationId = "com.arkdo.android"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
+        // 构建时间注入 BuildConfig：日志页顶部展示，用于确认设备上安装的是哪次构建。
+        buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -7,8 +7,15 @@ import com.arkdo.android.services.network.JsonNetworkClient
 import com.arkdo.android.services.network.JsonRequestOptions
 import com.arkdo.android.services.network.NetworkResult
 import com.arkdo.android.services.network.NetworkResults
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import timber.log.Timber
 
 /** 标签联想每次最多回几条，对齐鸿蒙 TAG_SEARCH_LIMIT。 */
@@ -518,6 +525,60 @@ class TopicService(private val bridge: JsonNetworkClient) {
         )
     }
 
+    // ========== 发表内容 ==========
+
+    /**
+     * 发表评论/回复：POST /posts，body 为 JSON（对齐鸿蒙 createReply，即官方 composer 提交）。
+     * 关键字段：raw(正文)、topic_id、category、archetype；其余为 composer 默认/遥测字段。
+     * typingDurationMs / composerOpenDurationMs 由调用方按真实交互时长传入（缺省给合理值）。
+     */
+    suspend fun createReply(
+        topicId: Long,
+        categoryId: Long?,
+        raw: String,
+        typingDurationMs: Long = 0,
+        composerOpenDurationMs: Long = 0,
+        replyToPostNumber: Int? = null
+    ): NetworkResult<CreateReplyOutcome> {
+        val payload = buildCreateReplyPayload(
+            topicId = topicId,
+            categoryId = categoryId,
+            raw = raw,
+            typingDurationMs = typingDurationMs,
+            composerOpenDurationMs = composerOpenDurationMs,
+            replyToPostNumber = replyToPostNumber
+        )
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+
+        val response = bridge.postJson(
+            "/posts",
+            payload.toString(),
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure<CreateReplyOutcome>(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse<CreateReplyOutcome>(
+                response.statusCode,
+                response.challengeState,
+                "站点发表评论响应为空。"
+            )
+
+        val outcome = parseCreateReplyResponse(data, json, ::mapPosts)
+            ?: return NetworkResults.unexpectedResponse<CreateReplyOutcome>(
+                response.statusCode,
+                response.challengeState,
+                "站点发表评论响应缺少楼层数据。"
+            )
+        return NetworkResult(
+            success = true,
+            statusCode = response.statusCode,
+            challengeState = response.challengeState,
+            data = outcome
+        )
+    }
+
     // ========== 数据映射（精简版，完整实现需参考 TopicModels.kt） ==========
 
     private fun mapTopics(sourceTopics: List<DiscourseTopic>, sourceUsers: List<DiscourseUser>?): List<Topic> {
@@ -861,3 +922,87 @@ data class DiscourseTagResult(
     val description: String? = null,
     val pm_only: Boolean? = null
 )
+
+// ========== 发表回复（POST /posts） ==========
+
+/** createReply 结果：直接发布带新楼层；进审核队列只带待审快照（无即时楼层）。 */
+data class CreateReplyOutcome(
+    val post: TopicPost? = null,
+    val pending: Boolean = false,
+    val pendingPost: PendingPost? = null
+)
+
+/** POST /posts 响应包装。pending_post 字段结构与 PendingPost（id/raw/created_at）一致，直接复用。 */
+@Serializable
+data class DiscourseCreatePostResponse(
+    val action: String? = null,
+    val post: DiscoursePost? = null,
+    @SerialName("pending_post") val pendingPost: PendingPost? = null
+)
+
+/**
+ * 解析 POST /posts 响应（纯函数，便于单测）：
+ * - 直接发布：{ action:'create_post', post:{…} } → 新楼层走 mapPosts 映射；
+ * - 进审核队列：{ action:'enqueued', pending_post:{…} } → 提交成功但无即时楼层。
+ * 两类都不满足视为无效响应（返回 null，由调用方转为 unexpectedResponse）。
+ */
+internal fun parseCreateReplyResponse(
+    body: String,
+    json: Json,
+    mapPosts: (List<DiscoursePost>) -> List<TopicPost>
+): CreateReplyOutcome? {
+    val wrapper = try {
+        json.decodeFromString<DiscourseCreatePostResponse>(body)
+    } catch (_: SerializationException) {
+        return null
+    } catch (_: IllegalArgumentException) {
+        return null
+    }
+    val created = wrapper.post
+    if (created != null) {
+        val posts = mapPosts(listOf(created))
+        if (posts.isNotEmpty()) {
+            return CreateReplyOutcome(post = posts.first(), pending = false)
+        }
+    }
+    if (wrapper.action == "enqueued" || wrapper.pendingPost != null) {
+        return CreateReplyOutcome(pending = true, pendingPost = wrapper.pendingPost)
+    }
+    return null
+}
+
+/**
+ * createReply 的 POST body（纯函数，便于单测）。逐字段对齐鸿蒙 CreateReplyPayload：
+ * category / reply_to_post_number 仅在非空时下发（条件赋值）。
+ */
+internal fun buildCreateReplyPayload(
+    topicId: Long,
+    categoryId: Long?,
+    raw: String,
+    typingDurationMs: Long = 0,
+    composerOpenDurationMs: Long = 0,
+    replyToPostNumber: Int? = null
+): JsonObject = buildJsonObject {
+    put("raw", raw)
+    put("unlist_topic", false)
+    put("topic_id", topicId)
+    put("is_warning", false)
+    put("whisper", false)
+    put("archetype", "regular")
+    put("typing_duration_msecs", typingDurationMs.coerceAtLeast(0L))
+    put("composer_open_duration_msecs", composerOpenDurationMs.coerceAtLeast(0L))
+    put("composer_version", 1)
+    put("tags", buildJsonArray {})
+    put("featured_link", JsonNull)
+    put("shared_draft", false)
+    put("draft_key", "topic_$topicId")
+    put("locale", "")
+    put("image_sizes", buildJsonObject {})
+    put("nested_post", true)
+    if (categoryId != null) {
+        put("category", categoryId)
+    }
+    if (replyToPostNumber != null) {
+        put("reply_to_post_number", replyToPostNumber)
+    }
+}

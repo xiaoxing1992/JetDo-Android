@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.topic
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -18,11 +19,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,9 +59,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -67,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.arkdo.android.R
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicTag
@@ -74,6 +80,7 @@ import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.site.CategoryIndex
+import com.arkdo.android.ui.components.CommentInputOverlay
 import com.arkdo.android.ui.components.ImageViewer
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
@@ -81,6 +88,7 @@ import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
+import com.arkdo.android.ui.theme.ArkdoFixedColors
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -107,6 +115,7 @@ fun TopicDetailScreen(
     viewModel: TopicDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     // 单次快照：整个组合只用这一份 TopicDetailUiState（不可变 data class）。
     // 不这样做的话，VM 在桥回调线程写状态时，两次 uiState 读可能看到不同对象——
     // 「when 判完 topic 非空、下一行 topic!! 就 NPE」的崩溃就是这个撕裂读。
@@ -152,18 +161,27 @@ fun TopicDetailScreen(
         }
     }
 
-    // 模糊渐入进度：对齐鸿蒙 blurEffective 0..8vp 区间（滚动 8vp 内材质从透明到全模糊）。
-    val blurRampPx = with(LocalDensity.current) { 8.dp.toPx() }
-    val headerBlurProgress by remember {
-        derivedStateOf {
-            if (listState.firstVisibleItemIndex > 0) 1f
-            else (listState.firstVisibleItemScrollOffset / blurRampPx).coerceIn(0f, 1f)
-        }
+    // 双层标题切换：摘要项（列表第 0 项）仍在视口首屏时显示「帖子详情」，滑出后切
+    // 帖子标题与分类/标签行（对齐鸿蒙 summaryVisible = start === 0 的判定语义）。
+    val summaryVisible by remember {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
     }
-    val headerHeight = WindowInsets.statusBars
-        .add(WindowInsets(bottom = 56.dp))
-        .asPaddingValues()
-        .calculateTopPadding()
+    // 顶栏总高 = 状态栏高度 + 56dp 栏体，内容顶距再 +12dp。注意不能用
+    // WindowInsets.statusBars.add(WindowInsets(bottom=56)) 再取 top——add 是按边
+    // 分量相加，56dp 落在 bottom 分量上会被 calculateTopPadding 丢掉，导致内容
+    // 顶距只剩状态栏高度、首屏文字整段被顶栏盖住。
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val headerHeight = statusBarHeight + 56.dp
+    // 栏底间隙：初版 12dp 用户实测偏大，收敛到 4dp。
+    val contentTopGap = 4.dp
+    // 几何自检：如果设备上仍看到"文字被顶栏盖住"，进日志页核对这三个值——
+    // contentTop 必须大于 barBottom，默认位置的内容才可能落在栏下方。
+    remember(headerHeight) {
+        Timber.i(
+            "[ArkDO][DetailHeader] statusBar=%s barBottom=%s contentTop=%s",
+            statusBarHeight, headerHeight, headerHeight + contentTopGap
+        )
+    }
 
     LaunchedEffect(topicId, targetPostNumber) {
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
@@ -196,7 +214,8 @@ fun TopicDetailScreen(
                             else -> ui.topic?.let { topic ->
                                 TopicDetailContent(
                                     hazeState = hazeState,
-                                    headerTopPadding = headerHeight,
+                                    // 默认滚动位置：顶栏（状态栏+56dp）之下再让出 contentTopGap。
+                                    headerTopPadding = headerHeight + contentTopGap,
                                     listState = listState,
                                     topic = topic,
                                     onOpenImages = { images, start -> viewerState = images to start },
@@ -219,7 +238,8 @@ fun TopicDetailScreen(
                                     onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
                                     onCopyPostLink = { p -> viewModel.postLink(p) },
                                     onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
-                                    onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) }
+                                    onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
+                                    onReply = viewModel::openComposerForPost
                                 )
                             }
                         }
@@ -241,14 +261,65 @@ fun TopicDetailScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .zIndex(2f),
-                summaryVisible = headerBlurProgress < 1f,
+                summaryVisible = summaryVisible,
                 title = ui.topic?.title ?: title ?: "话题详情",
                 category = CategoryIndex.find(ui.categories, ui.topic?.categoryId),
+                parentCategory = CategoryIndex.findParent(ui.categories, ui.topic?.categoryId),
                 tags = ui.topic?.tags.orEmpty(),
+                solved = !ui.topic?.acceptedAnswers.isNullOrEmpty(),
+                bookmarked = ui.topic?.bookmarked == true,
                 hazeState = hazeState,
                 onBack = onNavigateBack,
                 onTitleClick = { viewModel.jumpToPostNumber(1) }
             )
+        }
+
+        // 回复输入浮层（切片 7）：盖在内容与顶栏之上；FAB 打开时隐藏由 VM 状态保证。
+        CommentInputOverlay(
+            visible = ui.composerVisible,
+            placeholder = ui.composerPlaceholder,
+            initialText = ui.pendingReplyText,
+            isSubmitting = ui.isSubmittingReply,
+            onTextChange = viewModel::updateReplyDraft,
+            onSubmit = { text, typingMs, composerMs, done ->
+                viewModel.createReply(text, typingMs, composerMs, done)
+            },
+            onClose = viewModel::closeComposer,
+            modifier = Modifier.zIndex(3f)
+        )
+
+        // 一次性提示（发表成功/失败等）：Toast 展示后立即消费。
+        LaunchedEffect(ui.actionMessage) {
+            ui.actionMessage?.let { message ->
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                viewModel.consumeActionMessage()
+            }
+        }
+
+        // 右下角悬浮回复按钮：仅在内容就绪且浮层未展开时显示（对齐鸿蒙 smartReachReplyFab）。
+        if (ui.topic != null && !ui.composerVisible) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(end = 16.dp, bottom = 16.dp)
+                    .zIndex(2f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .background(ArkdoFixedColors.BrandBlue, CircleShape)
+                        .clickable(onClick = viewModel::openComposerForTopic),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_fa_reply),
+                        contentDescription = "回复话题",
+                        tint = ArkdoFixedColors.OnDarkFg,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -278,7 +349,8 @@ private fun TopicDetailContent(
     onToggleBookmark: (TopicPost, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     onCopyPostLink: (TopicPost) -> String? = { null },
     onJumpToPost: (Int) -> Unit = {},
-    onRepliesLoad: (TopicPost, (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) }
+    onRepliesLoad: (TopicPost, (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) },
+    onReply: (TopicPost) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
@@ -300,7 +372,8 @@ private fun TopicDetailContent(
 
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(top = headerTopPadding),
+        // 底部 72dp：让最后一楼的操作区完全越过 52dp 悬浮回复按钮（对齐鸿蒙底部余量）。
+        contentPadding = PaddingValues(top = headerTopPadding, bottom = 72.dp),
         modifier = Modifier
             .fillMaxSize()
             .hazeSource(hazeState)
@@ -340,7 +413,7 @@ private fun TopicDetailContent(
                 flashTargetPostId = flashTargetPostId,
                 onOpenLink = onOpenLink,
                 onOpenImages = onOpenImages,
-                onReply = { /* 定向回复输入框：后续切片 */ },
+                onReply = onReply,
                 onJumpToPost = onJumpToPost,
                 onToggleReaction = onToggleReaction,
                 onToggleBookmark = onToggleBookmark,
@@ -385,7 +458,10 @@ private fun TopicDetailHeaderBar(
     summaryVisible: Boolean,
     title: String,
     category: TopicCategory?,
+    parentCategory: TopicCategory?,
     tags: List<TopicTag>,
+    solved: Boolean,
+    bookmarked: Boolean,
     hazeState: HazeState,
     onBack: () -> Unit,
     onTitleClick: () -> Unit
@@ -418,6 +494,9 @@ private fun TopicDetailHeaderBar(
         Box(
             modifier = Modifier
                 .matchParentSize()
+                // 裁剪到栏体边界：防止模糊层绘制溢出到栏底之下，视觉上盖住
+                // 栏下方的内容（Haze 的 RenderEffect 模糊输出可能超出节点边界）。
+                .clipToBounds()
                 .hazeEffect(state = hazeState) {
                     blurRadius = 24.dp
                     noiseFactor = 0f
@@ -451,24 +530,47 @@ private fun TopicDetailHeaderBar(
                         .align(Alignment.CenterStart)
                         .graphicsLayer { alpha = layerAlphaA; translationY = translateA }
                 )
-                // 图层 B：帖子标题 + 分类/标签行，整行可点回一楼。
+                // 图层 B：帖子标题 + 分类/标签行，整行可点回一楼。标题行首按「书签 → 已解决勾」
+                // 顺序内联 15dp 图标（间距 5，垂直居中），颜色烘死在矢量资源里（对齐鸿蒙 ImageSpan）。
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .graphicsLayer { alpha = layerAlphaB; translationY = translateB }
                         .clickable(enabled = layerAlphaB > 0.5f, onClick = onTitleClick)
                 ) {
-                    Text(
-                        text = title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (bookmarked) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_fa_bookmark_gray),
+                                contentDescription = "已收藏",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                        }
+                        if (solved) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_fa_far_square_check_green),
+                                contentDescription = "已解决",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                        }
+                        Text(
+                            text = title,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                     if (category != null || tags.isNotEmpty()) {
                         TopicMetadataBadges(
                             category = category,
+                            parentCategory = parentCategory,
                             tags = tags,
                             modifier = Modifier.padding(top = 2.dp)
                         )
