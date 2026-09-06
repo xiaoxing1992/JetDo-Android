@@ -43,11 +43,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.CookedHtmlParser
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import com.arkdo.android.services.topic.clicksForHref
 import com.arkdo.android.services.content.RichBlock
 import com.arkdo.android.services.content.RichBlockType
@@ -357,17 +356,25 @@ private fun ImageBlock(
     val src = block.src.orEmpty()
     val url = block.href?.takeIf { it.isNotEmpty() } ?: src
     val index = viewerImages.indexOfFirst { it.url == url && it.fallbackUrl == src }
+    // 缩略图挂共享元素（与浏览器当前页大图同 key）：开/关时框架做飞入飞出。
+    val sts = LocalSharedTransitionScope.current
+    val avs = LocalAnimatedVisibilityScope.current
+    val imageModifier = if (sts != null && avs != null) {
+        with(sts) {
+            Modifier.sharedElement(
+                rememberSharedContentState(key = viewerImageKey(src)),
+                animatedVisibilityScope = avs
+            )
+        }
+    } else {
+        Modifier
+    }
     AsyncImage(
         model = src,
         contentDescription = block.alt,
         contentScale = ContentScale.FillWidth,
-        modifier = Modifier
+        modifier = imageModifier
             .fillMaxWidth()
-            // 缩略图窗口坐标持续登记：浏览器打开/关闭时按 url 现查 hero 源矩形。
-            .onGloballyPositioned { coords ->
-                // 根坐标：浮层与页面同根，系统栏显隐引发的重排不会错位。
-                ImageViewerRectRegistry.rects[src] = coords.boundsInRoot()
-            }
             .clickable { onOpenImages(viewerImages, index.coerceAtLeast(0)) }
     )
 }
