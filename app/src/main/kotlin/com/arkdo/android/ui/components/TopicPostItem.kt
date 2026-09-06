@@ -2,13 +2,18 @@ package com.arkdo.android.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,57 +34,56 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
-import com.arkdo.android.ui.utils.RelativeTime
 import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.ui.utils.RelativeTime
 
 // ==========================================================================
 // 楼层卡片，1:1 对齐鸿蒙 views/components/TopicPostItem.ets 的结构与几何。
 //
-// 本切片覆盖：整体骨架（外层 padding top 12 / 正文区左右 10 / 底部 1dp 分隔 /
-// 落地高亮背景）、作者头部（头像 40 + 昵称 16 Medium + 金色徽章 + 状态表情；
-// 第二行 用户名 13 tertiary + 头衔 13；「回复别人」指示器；右侧时间 13 +
-// 未读蓝点 8dp #66CCFF 随已读渐隐）、正文（margin top 12）、TOPIC OWNER 标记、
-// 页脚（回应汇总 + 点赞/回复/更多→拷贝链接+书签 38dp 透明按钮）、「上次访问」红线。
+// 已覆盖：整体骨架（top 12 / 正文区左右 10 / 底部分隔 / 落地高亮）、作者头部
+// （头像 40 + 昵称 16 Medium + 金色徽章 + 状态表情；用户名/头衔 13 tertiary；
+// 回复指示器；时间 13 + 未读蓝点 8dp #66CCFF 渐隐）、正文（top 12）、
+// TOPIC OWNER 标记、页脚（回应汇总 emoji 图标最多 3 个 + 人数 16 / 被回复数
+// 胶囊+箭头 / 点赞 38dp 三态（heart 实心红 / 其它表情 PNG / far-heart 空心灰）
+// + 长按 10 表情面板 + 更多→拷贝链接+书签（bookmark 实心蓝 / far-bookmark 灰）
+// / 回复）、被回复展开区（连接竖线 + 收起 + 跳到帖子）、「上次访问」红线。
 //
-// 待后续切片（源文件对应部分）：boost 行与火箭、被回复列表展开区、表情长按
-// 选择面板（短按 heart 已接）、shared issue「俺也一样」、采纳答案面板、
-// 拷贝画勾动画（先以 Snackbar 代替）。回调参数位已按源预留，接一个亮一个。
+// 待后续切片：boost 行与火箭、shared issue「俺也一样」、采纳答案面板、
+// 拷贝画勾动画（暂 Toast）、全息称号（暂普通文字）、回应人数弹层。
 // ==========================================================================
 
-/** 昵称后徽章图标（FontAwesome 单色）统一染金色，明暗底皆成立。 */
+/** 昵称后徽章图标统一染金色（源 BADGE_GOLD）。 */
 private const val BADGE_GOLD = "#E5A50A"
 
 /** 未读蓝点：语义强调色，明暗底都成立（源注释：勿映射主题色，白天会变深蓝）。 */
 private const val UNREAD_DOT_BLUE = "#66CCFF"
 
-/** 点赞红 / 成功绿（Palette.LIKE_RED / SUCCESS_GREEN）。 */
+/** 点赞红（Palette.LIKE_RED）。 */
 private const val LIKE_RED = "#EF4444"
 
 /** 「上次访问」红线色值（对齐官网 last visit #e45735 系）。 */
 private const val LAST_VISIT_RED = "#E45735"
 
-/** 楼主标记色（对齐官网 .cooked::after 的 #00AEFF）。 */
-private const val TOPIC_OWNER_BLUE = "#00AEFF"
+/** 被回复胶囊：折叠 #E6E8EB / 展开 #D9DDE2，文字色 #575D66（对比度修正值，源注释）。 */
+private val REPLY_PILL_BG = Color(0xFFE6E8EB)
+private val REPLY_PILL_BG_ACTIVE = Color(0xFFD9DDE2)
+private val REPLY_PILL_FG = Color(0xFF575D66)
 
-/**
- * 楼层卡片。
- *
- * [topicCreatedById]：楼主用户 id，本楼作者等于它时渲染「TOPIC OWNER」标记；
- * [showLastVisitedLine]：本楼是进入时快照的最后一条已读楼，底边渲染红线；
- * [flashTargetPostId]：跳楼目标楼 id，等于本楼 id 时背景短暂高亮再渐隐；
- * [onToggleReaction]/[onToggleBookmark]：请求先行由页面发网络，成功后再改本地显示。
- */
 @Composable
 fun TopicPostItem(
     post: TopicPost,
@@ -88,17 +92,20 @@ fun TopicPostItem(
     showLastVisitedLine: Boolean = false,
     flashTargetPostId: Long? = null,
     onOpenLink: (String) -> Unit = {},
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onOpenUser: (User) -> Unit = {},
     onReply: (TopicPost) -> Unit = {},
+    onJumpToPost: (Int) -> Unit = {},
     onToggleReaction: (TopicPost, String, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onToggleBookmark: (TopicPost, onDone: (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
-    onCopyPostLink: (TopicPost) -> String? = { null }
+    onCopyPostLink: (TopicPost) -> String? = { null },
+    onRepliesLoad: (TopicPost, onDone: (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) }
 ) {
     val colors = arkdoColors
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
-    // 落地高亮：目标楼背景淡蓝 600ms 渐隐回透明（深色底用深蓝防刺眼，同源逻辑）。
+    // 跳楼落地高亮：命中本楼时背景淡色 600ms 渐隐（同色系零透明度过渡，避免过路灰）。
     var flashActive by remember(post.id) { mutableStateOf(false) }
     LaunchedEffect(flashTargetPostId) {
         if (flashTargetPostId != null && flashTargetPostId == post.id) {
@@ -107,26 +114,28 @@ fun TopicPostItem(
             flashActive = false
         }
     }
-    val flashBg by animateFloatAsState(
+    val flashAlpha by animateFloatAsState(
         targetValue = if (flashActive) 1f else 0f,
         animationSpec = tween(durationMillis = 600),
         label = "flash"
     )
-    val flashColor = MaterialFlashColor(flashBg)
+    val flashColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f * flashAlpha)
 
-    // 点赞请求进行中：按钮转圈防重复点击（请求先行，不做乐观更新）。
     var reactionLoading by remember(post.id) { mutableStateOf(false) }
     var bookmarkLoading by remember(post.id) { mutableStateOf(false) }
     var moreExpanded by remember(post.id) { mutableStateOf(false) }
-    // 书签本地显示态：点击乐观翻转，再用页面回传态校正。
     var bookmarkedLocal by remember(post.id) { mutableStateOf(post.bookmarked == true) }
+    var showReactionPicker by remember(post.id) { mutableStateOf(false) }
+    // 被回复展开区状态（源：repliesExpanded/repliesLoading/replies，组件自身持有）。
+    var repliesExpanded by remember(post.id) { mutableStateOf(false) }
+    var repliesLoading by remember(post.id) { mutableStateOf(false) }
+    var replies by remember(post.id) { mutableStateOf<List<TopicPost>>(emptyList()) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(flashColor)
             .padding(top = 12.dp)
-            .let { if (!showLastVisitedLine) it else it }
     ) {
         // 正文区：左右留白只加在这层，红线才能通栏铺满。
         Column(modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp)) {
@@ -135,6 +144,7 @@ fun TopicPostItem(
             PostRichContent(
                 html = post.cookedHtml,
                 linkClicks = post.linkClicks,
+                onOpenImages = onOpenImages,
                 onLinkClick = onOpenLink,
                 modifier = Modifier.padding(top = 12.dp)
             )
@@ -148,10 +158,10 @@ fun TopicPostItem(
                     fontStyle = FontStyle.Italic,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF00AEFF),
+                    textAlign = TextAlign.End,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End
+                        .padding(top = 10.dp)
                 )
             }
 
@@ -161,13 +171,18 @@ fun TopicPostItem(
                 bookmarkLoading = bookmarkLoading,
                 bookmarkedLocal = bookmarkedLocal,
                 moreExpanded = moreExpanded,
-                onLikeToggle = {
+                repliesExpanded = repliesExpanded,
+                repliesLoading = repliesLoading,
+                showReactionPicker = showReactionPicker,
+                onLikeToggle = { reaction ->
                     if (reactionLoading) return@PostFooter
                     reactionLoading = true
-                    onToggleReaction(post, "heart") { success ->
+                    onToggleReaction(post, reaction) {
                         reactionLoading = false
                     }
                 },
+                onShowReactionPicker = { showReactionPicker = true },
+                onDismissReactionPicker = { showReactionPicker = false },
                 onReply = { onReply(post) },
                 onMoreExpand = { moreExpanded = true },
                 onCopyLink = {
@@ -182,17 +197,43 @@ fun TopicPostItem(
                 onBookmarkToggle = {
                     if (bookmarkLoading) return@PostFooter
                     bookmarkLoading = true
-                    // 乐观翻转，页面回传最终态校正。
                     bookmarkedLocal = !bookmarkedLocal
                     onToggleBookmark(post) { finalBookmarked ->
                         bookmarkLoading = false
                         bookmarkedLocal = finalBookmarked
                     }
+                },
+                onRepliesToggle = {
+                    when {
+                        repliesExpanded -> repliesExpanded = false
+                        replies.isNotEmpty() -> repliesExpanded = true
+                        else -> {
+                            repliesLoading = true
+                            onRepliesLoad(post) { list ->
+                                repliesLoading = false
+                                if (list != null) {
+                                    replies = list
+                                    repliesExpanded = true
+                                }
+                            }
+                        }
+                    }
                 }
             )
+
+            if (repliesExpanded) {
+                RepliesSection(
+                    replies = replies,
+                    repliesLoading = repliesLoading,
+                    onOpenUser = onOpenUser,
+                    onOpenLink = onOpenLink,
+                    onOpenImages = onOpenImages,
+                    onCollapse = { repliesExpanded = false },
+                    onJumpToPost = onJumpToPost
+                )
+            }
         }
 
-        // 上次访问红线：通栏，画在本楼底边（最后一条已读楼）。
         if (showLastVisitedLine) {
             LastVisitedDivider()
         } else {
@@ -201,15 +242,12 @@ fun TopicPostItem(
     }
 }
 
-/** 落地高亮背景色：alpha 由 1→0 渐隐（同色系零透明度，避免过路半透明灰）。 */
-@Composable
-private fun MaterialFlashColor(alpha: Float): Color =
-    androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.10f * alpha)
+// ==========================================================================
+// 作者头部
+// ==========================================================================
 
-/** 作者头部：头像(40) + 昵称行(昵称 16 Medium + 状态表情 + 金色徽章) / 用户名行(13 tertiary)。 */
 @Composable
 private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
-    val colors = arkdoColors
     val author = User(
         id = post.userId ?: 0,
         username = post.username ?: "",
@@ -247,19 +285,10 @@ private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
                         .clickable { onOpenUser(author) }
                 )
                 post.statusEmoji?.let { emoji ->
-                    Text(
-                        text = emoji,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(start = 6.dp)
-                    )
+                    Text(emoji, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
                 }
                 post.badgeIcons.orEmpty().forEach { iconId ->
-                    FaIcon(
-                        iconId = iconId,
-                        color = parseHexColor(BADGE_GOLD),
-                        size = 15.dp,
-                        modifier = Modifier.padding(start = 5.dp)
-                    )
+                    FaIcon(iconId, parseHexColor(BADGE_GOLD), 15.dp, Modifier.padding(start = 5.dp))
                 }
             }
 
@@ -291,14 +320,14 @@ private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .padding(start = 8.dp)
-                    .clickable { /* onJumpToPost：页面接线后接通 */ }
+                    .clickable { /* onJumpToPost 接线后定位 */ }
             ) {
                 FaIcon("share", MaterialTheme.colorScheme.onSurfaceVariant, 16.dp)
                 UserAvatar(user = post.replyToUser, avatarSize = 20.dp, showFlair = false)
             }
         }
 
-        // 右上角：时间 + 未读小蓝点（读后渐隐；蓝点常驻占位，时间不位移）。
+        // 右上角：时间 + 未读小蓝点（蓝点常驻占位，读后渐隐，时间不位移）。
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
             Text(
                 text = RelativeTime.fromNow(post.createdAt),
@@ -323,7 +352,10 @@ private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
     }
 }
 
-/** 楼层页脚：左 = 回应汇总（人数 16）；右 = 点赞 / 更多(拷贝链接+书签) / 回复（38dp 透明按钮）。 */
+// ==========================================================================
+// 页脚：左 = 回应汇总（emoji 最多 3 个 + 人数）+ 被回复胶囊；右 = 点赞 / 更多 / 回复
+// ==========================================================================
+
 @Composable
 private fun PostFooter(
     post: TopicPost,
@@ -331,37 +363,49 @@ private fun PostFooter(
     bookmarkLoading: Boolean,
     bookmarkedLocal: Boolean,
     moreExpanded: Boolean,
-    onLikeToggle: () -> Unit,
+    repliesExpanded: Boolean,
+    repliesLoading: Boolean,
+    showReactionPicker: Boolean,
+    onLikeToggle: (String) -> Unit,
+    onShowReactionPicker: () -> Unit,
+    onDismissReactionPicker: () -> Unit,
     onReply: () -> Unit,
     onMoreExpand: () -> Unit,
     onCopyLink: () -> Unit,
-    onBookmarkToggle: () -> Unit
+    onBookmarkToggle: () -> Unit,
+    onRepliesToggle: () -> Unit
 ) {
     val colors = arkdoColors
-    // icon_muted（浅色 #BDBDBD，源 Palette 注释值）：arkdoColors 尚未收录该 token。
-    val iconMuted = parseHexColor("#BDBDBD")
+    // icon_muted（浅 #BDBDBD / 深 #5C626B，源 Palette 值）。
+    val iconMuted = if (isSystemInDarkTheme()) Color(0xFF5C626B) else Color(0xFFBDBDBD)
+
     Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左组：表情回应汇总（无回应不渲染，避免占位空隙）。
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            // 左组：回应汇总（无回应不渲染，避免占位空隙） + 被回复胶囊。
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 val reactions = post.reactions.orEmpty().filter { it.count > 0 }
-                if (reactions.isNotEmpty()) {
+                if ((post.reactionUsersCount ?: 0) > 0 && reactions.isNotEmpty()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
                     ) {
-                        reactions.forEach { reaction ->
-                            // EmojiRegistry 迁移前先以短名文字占位（heart/smile 等回应名）。
-                            Text(
-                                text = reaction.id,
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(end = 2.dp)
-                            )
+                        // 汇总胶囊最多展示前 3 种表情，总人数仍用 reactionUsersCount。
+                        reactions.take(3).forEach { reaction ->
+                            val asset = reactionEmojiAsset(reaction.id)
+                            if (asset != null) {
+                                AsyncImage(
+                                    model = "file:///android_asset/$asset",
+                                    contentDescription = reaction.id,
+                                    modifier = Modifier.padding(end = 2.dp).size(16.dp)
+                                )
+                            }
                         }
                         Text(
                             text = "${post.reactionUsersCount ?: 0}",
@@ -372,16 +416,81 @@ private fun PostFooter(
                         )
                     }
                 }
+
+                // 被回复数量 + 箭头胶囊（replyCount > 0 时显示）。
+                if ((post.replyCount ?: 0) > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (repliesExpanded) REPLY_PILL_BG_ACTIVE else REPLY_PILL_BG)
+                            .clickable { onRepliesToggle() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(text = "${post.replyCount}", fontSize = 16.sp, color = REPLY_PILL_FG)
+                        when {
+                            repliesLoading -> LoadingDot()
+                            repliesExpanded -> FaIcon("chevron-up", REPLY_PILL_FG, 14.dp)
+                            else -> FaIcon("chevron-down", REPLY_PILL_FG, 14.dp)
+                        }
+                    }
+                }
             }
 
-            // 右组：点赞(自己的楼换占位空) + 更多 + 回复。
+            // 右组：点赞 / 更多(拷贝+书签) / 回复。
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 待 TopicPost.yours/canEdit 字段迁移后补编辑分支；当前统一渲染点赞。
-                ActionButton(enabled = !reactionLoading, onClick = onLikeToggle) {
-                    if (reactionLoading) {
-                        LoadingDot()
-                    } else {
-                        FaIcon("heart", parseHexColor(LIKE_RED), 16.dp)
+                Box {
+                    ActionButton(
+                        enabled = !reactionLoading,
+                        onClick = { onLikeToggle("heart") },
+                        onLongClick = onShowReactionPicker
+                    ) {
+                        when {
+                            // 请求中转圈；heart → 实心红；其它已选表情 → PNG；未回应 → 空心灰。
+                            reactionLoading -> LoadingDot()
+                            post.currentUserReaction == "heart" ->
+                                FaIcon("heart", parseHexColor(LIKE_RED), 16.dp)
+                            reactionEmojiAsset(post.currentUserReaction) != null ->
+                                AsyncImage(
+                                    model = "file:///android_asset/${reactionEmojiAsset(post.currentUserReaction)}",
+                                    contentDescription = post.currentUserReaction,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            else ->
+                                FaIcon("far-heart", iconMuted, 16.dp)
+                        }
+                    }
+                    if (showReactionPicker) {
+                        // 长按弹出的 10 表情面板（2 行 x 5），点某个即以该表情回应。
+                        Popup(
+                            alignment = Alignment.BottomEnd,
+                            onDismissRequest = onDismissReactionPicker
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                                    .padding(6.dp)
+                            ) {
+                                listOf(0, 1).forEach { row ->
+                                    Row {
+                                        REACTION_ORDER.drop(row * 5).take(5).forEach { name ->
+                                            val asset = reactionEmojiAsset(name) ?: return@forEach
+                                            AsyncImage(
+                                                model = "file:///android_asset/$asset",
+                                                contentDescription = name,
+                                                modifier = Modifier
+                                                    .padding(6.dp)
+                                                    .size(28.dp)
+                                                    .clickable {
+                                                        onDismissReactionPicker()
+                                                        onLikeToggle(name)
+                                                    }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 if (moreExpanded) {
@@ -389,12 +498,11 @@ private fun PostFooter(
                         FaIcon("link", iconMuted, 16.dp)
                     }
                     ActionButton(enabled = !bookmarkLoading, onClick = onBookmarkToggle) {
-                        if (bookmarkLoading) {
-                            LoadingDot()
-                        } else if (bookmarkedLocal) {
-                            FaIcon("bookmark", parseHexColor(BADGE_GOLD), 16.dp)
-                        } else {
-                            FaIcon("bookmark", iconMuted, 16.dp)
+                        when {
+                            bookmarkLoading -> LoadingDot()
+                            // 已收藏实心（ld_accent 蓝）/ 未收藏空心灰（bookmark / far-bookmark）。
+                            bookmarkedLocal -> FaIcon("bookmark", colors.brand, 16.dp)
+                            else -> FaIcon("far-bookmark", iconMuted, 16.dp)
                         }
                     }
                 } else {
@@ -410,25 +518,155 @@ private fun PostFooter(
     }
 }
 
-/** 38x38 透明底圆角(10)操作按钮，图标 16 居中（对齐鸿蒙按钮几何）。 */
+/** 38x38 透明底圆角(10)操作按钮；点赞按钮支持长按（弹表情面板）。 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionButton(
     enabled: Boolean = true,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
+    val base = Modifier
+        .size(38.dp)
+        .clip(RoundedCornerShape(10.dp))
     Box(
-        modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled) { onClick() },
+        modifier = if (onLongClick != null) {
+            base.combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
+        } else {
+            base.clickable(enabled = enabled) { onClick() }
+        },
         contentAlignment = Alignment.Center
     ) {
         content()
     }
 }
 
-/** 请求进行中的小转圈占位（LoadingProgress 的过渡实现）。 */
+// ==========================================================================
+// 被回复列表展开区：竖线 + 逐条精简项（头像 40 + 昵称/用户名 + 正文），
+// 底部收起按钮（仅最后一条，白底描边方块盖住线尾）+「跳到帖子」。
+// ==========================================================================
+
+@Composable
+private fun RepliesSection(
+    replies: List<TopicPost>,
+    repliesLoading: Boolean,
+    onOpenUser: (User) -> Unit,
+    onOpenLink: (String) -> Unit,
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
+    onCollapse: () -> Unit,
+    onJumpToPost: (Int) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
+        // 楼层连接竖线：1dp #E9E9E9，x 落在头像水平中心（40 头像 → 中心 20，线左移 19.5）。
+        // 线随内容高度通高；头像/按钮不透明盖在线上，只在竖直空隙露出线段。
+        Box(
+            modifier = Modifier
+                .padding(start = 19.5.dp)
+                .width(1.dp)
+                .fillMaxHeight()
+                .background(Color(0xFFE9E9E9))
+        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+        if (repliesLoading) {
+            Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                LoadingDot()
+            }
+        }
+        replies.forEachIndexed { index, reply ->
+            val replyAuthor = User(
+                id = reply.userId ?: 0,
+                username = reply.username ?: "",
+                name = reply.name,
+                avatarTemplate = reply.avatarTemplate,
+                animatedAvatar = reply.animatedAvatar
+            )
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    UserAvatar(
+                        user = replyAuthor,
+                        avatarSize = 40.dp,
+                        showFlair = true,
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .clickable { onOpenUser(replyAuthor) }
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // 对齐 replyAuthorName/replyUsername：displayName 空时用户名顶到名字位，
+                            // 此时用户名位不再重复显示。
+                            val displayName = replyAuthor.displayName
+                            val username = reply.username ?: ""
+                            Text(
+                                text = displayName.ifEmpty { username },
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (username.isNotEmpty() && displayName.isNotEmpty()) {
+                                Text(
+                                    text = username,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        PostRichContent(
+                            html = reply.cookedHtml,
+                            onOpenImages = onOpenImages,
+                            onLinkClick = onOpenLink,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                        .padding(start = if (index == replies.lastIndex) 0.dp else 52.dp)
+                ) {
+                    if (index == replies.lastIndex) {
+                        // 收起按钮：32 宽（左移 4 使中心落在竖线上），白底描边圆角方块。
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 4.dp, end = 16.dp)
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable { onCollapse() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            FaIcon("chevron-up", MaterialTheme.colorScheme.onSurfaceVariant, 14.dp)
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.clickable { onJumpToPost(reply.postNumber) }
+                    ) {
+                        FaIcon("arrow-down", MaterialTheme.colorScheme.onSurfaceVariant, 12.dp)
+                        Text(
+                            text = "跳到帖子",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+}
 @Composable
 private fun LoadingDot() {
     Box(

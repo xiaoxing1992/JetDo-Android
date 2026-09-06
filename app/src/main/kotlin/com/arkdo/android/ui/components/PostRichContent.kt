@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.CookedHtmlParser
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.arkdo.android.services.topic.clicksForHref
 import com.arkdo.android.services.content.RichBlock
 import com.arkdo.android.services.content.RichBlockType
@@ -84,9 +86,12 @@ fun PostRichContent(
     html: String,
     modifier: Modifier = Modifier,
     linkClicks: Map<String, Int>? = null,
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit = {}
 ) {
     val blocks = remember(html) { CookedHtmlParser.parse(html) }
+    // 本楼全部图片（原图 url + 优化图兜底），供图片浏览器整组翻页。
+    val viewerImages = remember(blocks) { collectViewerImages(blocks) }
     // 链接点击数（随 post JSON 变动的动态数据，不参与块缓存）。
     // 交互状态（剧透已揭示/折叠已展开）按块 key 记录，内容变化时随 remember 重建。
     val expandedKeys = remember(html) { mutableStateListOf<String>() }
@@ -98,6 +103,8 @@ fun PostRichContent(
                 key = "$index",
                 expandedKeys = expandedKeys,
                 linkClicks = linkClicks,
+                viewerImages = viewerImages,
+                onOpenImages = onOpenImages,
                 onLinkClick = onLinkClick
             )
         }
@@ -110,6 +117,8 @@ private fun BlockView(
     key: String,
     expandedKeys: MutableList<String>,
     linkClicks: Map<String, Int>? = null,
+    viewerImages: List<ViewerImage> = emptyList(),
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit
 ) {
     when (block.type) {
@@ -129,23 +138,23 @@ private fun BlockView(
             onLinkClick = onLinkClick
         )
 
-        RichBlockType.QUOTE -> QuoteBlock(block, key, expandedKeys, linkClicks, onLinkClick)
+        RichBlockType.QUOTE -> QuoteBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
 
         RichBlockType.TOPIC_QUOTE -> TopicQuoteBlock(block, key, onLinkClick)
 
-        RichBlockType.CALLOUT -> CalloutBlock(block, key, expandedKeys, linkClicks, onLinkClick)
+        RichBlockType.CALLOUT -> CalloutBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
 
         RichBlockType.CODE -> CodeBlock(block)
 
-        RichBlockType.IMAGE -> ImageBlock(block, onLinkClick)
+        RichBlockType.IMAGE -> ImageBlock(block, viewerImages, onOpenImages)
 
-        RichBlockType.LIST -> ListBlock(block, key, expandedKeys, linkClicks, onLinkClick)
+        RichBlockType.LIST -> ListBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
 
         RichBlockType.TABLE -> TableBlock(block)
 
-        RichBlockType.SPOILER -> SpoilerBlock(block, key, expandedKeys, linkClicks, onLinkClick)
+        RichBlockType.SPOILER -> SpoilerBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
 
-        RichBlockType.DISCLOSURE -> DisclosureBlock(block, key, expandedKeys, linkClicks, onLinkClick)
+        RichBlockType.DISCLOSURE -> DisclosureBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
 
         RichBlockType.DIVIDER -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -198,6 +207,8 @@ private fun QuoteBlock(
     key: String,
     expandedKeys: MutableList<String>,
     linkClicks: Map<String, Int>? = null,
+    viewerImages: List<ViewerImage> = emptyList(),
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit
 ) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
@@ -209,7 +220,7 @@ private fun QuoteBlock(
                 .padding(10.dp)
         ) {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
-                BlockView(inner, "$key-q$index", expandedKeys, linkClicks, onLinkClick)
+                BlockView(inner, "$key-q$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
             }
         }
     }
@@ -259,7 +270,7 @@ private fun TopicQuoteBlock(
             if (!block.text.isNullOrEmpty()) {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     CookedHtmlParser.parse(block.text).forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-p$index", mutableStateListOf(), null, onLinkClick)
+                        BlockView(inner, "$key-p$index", mutableStateListOf(), null, emptyList(), { _, _ -> }, onLinkClick)
                     }
                 }
             }
@@ -274,6 +285,8 @@ private fun CalloutBlock(
     key: String,
     expandedKeys: MutableList<String>,
     linkClicks: Map<String, Int>? = null,
+    viewerImages: List<ViewerImage> = emptyList(),
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit
 ) {
     val expanded = if (!block.collapsible) true else if (key in expandedKeys) !block.defaultExpanded else block.defaultExpanded
@@ -306,7 +319,7 @@ private fun CalloutBlock(
             if (expanded) {
                 Column(modifier = Modifier.padding(top = 6.dp)) {
                     block.blocks.orEmpty().forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-c$index", expandedKeys, linkClicks, onLinkClick)
+                        BlockView(inner, "$key-c$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
                     }
                 }
             }
@@ -336,14 +349,26 @@ private fun CodeBlock(block: RichBlock) {
 }
 
 @Composable
-private fun ImageBlock(block: RichBlock, onLinkClick: (String) -> Unit) {
+private fun ImageBlock(
+    block: RichBlock,
+    viewerImages: List<ViewerImage>,
+    onOpenImages: (List<ViewerImage>, Int) -> Unit
+) {
+    val src = block.src.orEmpty()
+    val url = block.href?.takeIf { it.isNotEmpty() } ?: src
+    val index = viewerImages.indexOfFirst { it.url == url && it.fallbackUrl == src }
     AsyncImage(
-        model = block.src,
+        model = src,
         contentDescription = block.alt,
         contentScale = ContentScale.FillWidth,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onLinkClick(block.href ?: block.src.orEmpty()) }
+            // 缩略图窗口坐标持续登记：浏览器打开/关闭时按 url 现查 hero 源矩形。
+            .onGloballyPositioned { coords ->
+                // 根坐标：浮层与页面同根，系统栏显隐引发的重排不会错位。
+                ImageViewerRectRegistry.rects[src] = coords.boundsInRoot()
+            }
+            .clickable { onOpenImages(viewerImages, index.coerceAtLeast(0)) }
     )
 }
 
@@ -353,6 +378,8 @@ private fun ListBlock(
     key: String,
     expandedKeys: MutableList<String>,
     linkClicks: Map<String, Int>? = null,
+    viewerImages: List<ViewerImage> = emptyList(),
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit
 ) {
     Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
@@ -369,7 +396,7 @@ private fun ListBlock(
                         // 列表项含块级图：文字成段落、图片各自成块级 IMAGE。
                         InlineText(item.inlines, onLinkClick = onLinkClick)
                         item.blocks.forEachIndexed { bi, inner ->
-                            BlockView(inner, "$key-l$index-$bi", expandedKeys, linkClicks, onLinkClick)
+                            BlockView(inner, "$key-l$index-$bi", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
                         }
                     } else {
                         InlineText(item.inlines, onLinkClick = onLinkClick)
@@ -425,13 +452,15 @@ private fun SpoilerBlock(
     key: String,
     expandedKeys: MutableList<String>,
     linkClicks: Map<String, Int>? = null,
+    viewerImages: List<ViewerImage> = emptyList(),
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit
 ) {
     val revealed = key in expandedKeys
     if (revealed) {
         Column {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
-                BlockView(inner, "$key-s$index", expandedKeys, linkClicks, onLinkClick)
+                BlockView(inner, "$key-s$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
             }
         }
     } else {
@@ -454,6 +483,8 @@ private fun DisclosureBlock(
     key: String,
     expandedKeys: MutableList<String>,
     linkClicks: Map<String, Int>? = null,
+    viewerImages: List<ViewerImage> = emptyList(),
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit
 ) {
     val expanded = toggleState(expandedKeys, key)
@@ -480,7 +511,7 @@ private fun DisclosureBlock(
         if (expanded) {
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) {
                 block.blocks.orEmpty().forEachIndexed { index, inner ->
-                    BlockView(inner, "$key-d$index", expandedKeys, linkClicks, onLinkClick)
+                    BlockView(inner, "$key-d$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
                 }
             }
         }
@@ -701,4 +732,26 @@ private fun InlineText(
         inlineContent = imageContents,
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+/** 递归收集本楼全部块级图片（IMAGE 块），供图片浏览器整组翻页。 */
+private fun collectViewerImages(blocks: List<RichBlock>): List<ViewerImage> {
+    val out = mutableListOf<ViewerImage>()
+    fun walk(list: List<RichBlock>) {
+        for (block in list) {
+            val src = block.src
+            if (block.type == RichBlockType.IMAGE && !src.isNullOrEmpty()) {
+                out.add(
+                    ViewerImage(
+                        url = block.href?.takeIf { it.isNotEmpty() } ?: src,
+                        fallbackUrl = src
+                    )
+                )
+            }
+            block.blocks?.let(::walk)
+            block.items?.forEach { item -> item.blocks?.let(::walk) }
+        }
+    }
+    walk(blocks)
+    return out
 }

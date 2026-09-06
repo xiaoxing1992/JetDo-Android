@@ -12,6 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,7 +29,9 @@ import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.components.ImageViewer
 import com.arkdo.android.ui.components.TopicPostItem
+import com.arkdo.android.ui.components.ViewerImage
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.utils.RelativeTime
 import com.arkdo.android.ui.components.TopicMetadataBadges
@@ -61,6 +66,8 @@ fun TopicDetailScreen(
     // 链接路由：linux.do 话题链接（/t/{slug}/{id}[/{楼号}]，引用卡是 /t/topic/{id}/{楼号}）
     // 应用内开新详情页；其余链接（站外/非话题）走系统浏览器。
     val topicLinkRegex = Regex("^https?://linux\\.do/t/(?:([^/?#]+)/)?(\\d+)(?:/(\\d+))?")
+    // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
+    var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
     val onOpenUri: (String) -> Unit = { url ->
         val match = topicLinkRegex.find(url)
         if (match == null) {
@@ -90,6 +97,7 @@ fun TopicDetailScreen(
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -136,6 +144,7 @@ fun TopicDetailScreen(
                     TopicDetailContent(
                         listState = listState,
                         topic = uiState.topic!!,
+                        onOpenImages = { images, start -> viewerState = images to start },
                         categories = uiState.categories,
                         posts = uiState.posts,
                         isLoadingMore = uiState.isLoadingMore,
@@ -153,13 +162,20 @@ fun TopicDetailScreen(
                         onOpenLink = onOpenUri,
                         onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
                         onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
-                        onCopyPostLink = { p -> viewModel.postLink(p) }
+                        onCopyPostLink = { p -> viewModel.postLink(p) },
+                        onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
+                        onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) }
                     )
                 }
             }
         }
     }
 }
+
+    viewerState?.let { (images, start) ->
+        ImageViewer(images = images, startIndex = start, onDismiss = { viewerState = null })
+    }
+    }
 
 @Composable
 private fun TopicDetailContent(
@@ -179,9 +195,12 @@ private fun TopicDetailContent(
     isLoadingEarlier: Boolean = false,
     onLoadEarlier: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
+    onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onToggleReaction: (TopicPost, String, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onToggleBookmark: (TopicPost, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
-    onCopyPostLink: (TopicPost) -> String? = { null }
+    onCopyPostLink: (TopicPost) -> String? = { null },
+    onJumpToPost: (Int) -> Unit = {},
+    onRepliesLoad: (TopicPost, (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) }
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
@@ -239,10 +258,13 @@ private fun TopicDetailContent(
                 post = post,
                 flashTargetPostId = flashTargetPostId,
                 onOpenLink = onOpenLink,
+                onOpenImages = onOpenImages,
                 onReply = { /* 定向回复输入框：后续切片 */ },
+                onJumpToPost = onJumpToPost,
                 onToggleReaction = onToggleReaction,
                 onToggleBookmark = onToggleBookmark,
-                onCopyPostLink = onCopyPostLink
+                onCopyPostLink = onCopyPostLink,
+                onRepliesLoad = onRepliesLoad
             )
         }
 
