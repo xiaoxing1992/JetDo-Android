@@ -1,5 +1,12 @@
 package com.arkdo.android.ui.topic
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +38,8 @@ import com.arkdo.android.data.models.User
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.ImageViewer
+import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
+import com.arkdo.android.ui.components.LocalSharedTransitionScope
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
 import com.arkdo.android.ui.components.UserAvatar
@@ -48,7 +58,7 @@ import com.arkdo.android.ui.components.TopicMetadataBadges
  * - 阅读进度追踪
  * - 回复、引用、编辑
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun TopicDetailScreen(
     topicId: Long,
@@ -97,6 +107,17 @@ fun TopicDetailScreen(
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
     }
 
+    SharedTransitionLayout {
+        AnimatedContent(
+            targetState = viewerState,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(220)) },
+            label = "imageViewer"
+        ) { viewer ->
+            CompositionLocalProvider(
+                LocalSharedTransitionScope provides this@SharedTransitionLayout,
+                LocalAnimatedVisibilityScope provides this
+            ) {
+                if (viewer == null) {
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
@@ -172,10 +193,17 @@ fun TopicDetailScreen(
     }
 }
 
-    viewerState?.let { (images, start) ->
-        ImageViewer(images = images, startIndex = start, onDismiss = { viewerState = null })
+                } else {
+                    ImageViewer(
+                        images = viewer.first,
+                        startIndex = viewer.second,
+                        onDismiss = { viewerState = null }
+                    )
+                }
+            }
+        }
     }
-    }
+}
 
 @Composable
 private fun TopicDetailContent(
