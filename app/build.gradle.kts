@@ -122,6 +122,8 @@ dependencies {
     // OkHttp
     // cooked HTML 解析（PostRichContent 的块/行内节点树来源）
     implementation(libs.jsoup)
+    // 标题栏渐进式模糊（对齐鸿蒙 HDS 渐进模糊材质）
+    implementation(libs.haze)
     implementation(libs.okhttp)
     implementation(libs.okhttp.dnsoverhttps)
 
