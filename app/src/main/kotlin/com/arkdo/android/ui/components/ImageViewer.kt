@@ -302,20 +302,32 @@ fun ImageViewer(
     // 隐藏/恢复系统栏时机）：隐藏发生在「黑底已铺满」之后、恢复发生在「黑底还满着」的
     // 关闭开始时刻——系统栏显隐引发的底层重排都被不透明黑底盖住，不会当着用户的面跳。
     val activityWindow = (LocalContext.current as? android.app.Activity)?.window
+    // 原色记忆：只在第一次染黑前记录一次，恢复时用它（不能写成黑色，否则
+    // 浏览器关掉后首页/详情页的系统栏会永久变成黑色）。
+    var savedStatusBarColor by remember { mutableStateOf<Int?>(null) }
+    var savedNavBarColor by remember { mutableStateOf<Int?>(null) }
     DisposableEffect(systemBarsHidden) {
         val controller = activityWindow?.let { WindowInsetsControllerCompat(it, view) }
         if (systemBarsHidden) {
+            if (savedStatusBarColor == null) {
+                savedStatusBarColor = activityWindow?.statusBarColor
+            }
+            if (savedNavBarColor == null) {
+                savedNavBarColor = activityWindow?.navigationBarColor
+            }
             controller?.hide(WindowInsetsCompat.Type.systemBars())
             controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        } else {
-            controller?.show(WindowInsetsCompat.Type.systemBars())
-        }
-        activityWindow?.statusBarColor = android.graphics.Color.BLACK
-        activityWindow?.navigationBarColor = android.graphics.Color.BLACK
-        onDispose {
-            controller?.show(WindowInsetsCompat.Type.systemBars())
             activityWindow?.statusBarColor = android.graphics.Color.BLACK
             activityWindow?.navigationBarColor = android.graphics.Color.BLACK
+        } else {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+            savedStatusBarColor?.let { activityWindow?.statusBarColor = it }
+            savedNavBarColor?.let { activityWindow?.navigationBarColor = it }
+        }
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+            savedStatusBarColor?.let { activityWindow?.statusBarColor = it }
+            savedNavBarColor?.let { activityWindow?.navigationBarColor = it }
         }
     }
 
