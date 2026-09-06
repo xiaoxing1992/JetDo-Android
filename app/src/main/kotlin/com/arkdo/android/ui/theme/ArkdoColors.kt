@@ -34,6 +34,10 @@ data class ArkdoColorTokens(
     val floatingActionHighlight: Color,
     val fabComposeBg: Color,
     val fabTopFg: Color,
+    // 沉浸式输入条（详情页底部回复浮层）：对应鸿蒙 immersive_input_* 三色。
+    val immersiveInputBarBg: Color,
+    val immersiveInputFieldBg: Color,
+    val immersiveInputBarHighlight: Color,
     /** 增量插入时新行的高亮底色；淡出目标是同色全透明，避免过渡中途跳色。 */
     val incomingHighlight: Color
 ) {
@@ -63,6 +67,9 @@ val ArkdoLightColors = ArkdoColorTokens(
     floatingActionHighlight = Color(0x59FFFFFF),
     fabComposeBg = Color(0xFF0088CC),
     fabTopFg = Color(0xFF5A6169),
+    immersiveInputBarBg = Color(0xB3F2F3F5),
+    immersiveInputFieldBg = Color(0x80FFFFFF),
+    immersiveInputBarHighlight = Color(0x66FFFFFF),
     incomingHighlight = Color(0xFFE8F1FE)
 )
 
@@ -88,6 +95,9 @@ val ArkdoDarkColors = ArkdoColorTokens(
     floatingActionHighlight = Color(0x59FFFFFF),
     fabComposeBg = Color(0xFF3AA3DC),
     fabTopFg = Color(0xFFC5CAD1),
+    immersiveInputBarBg = Color(0xB32A2E33),
+    immersiveInputFieldBg = Color(0x80505760),
+    immersiveInputBarHighlight = Color(0x66FFFFFF),
     incomingHighlight = Color(0xFF13202D)
 )
 
@@ -100,6 +110,9 @@ object ArkdoFixedColors {
 
     /** 新话题提示条的文字与 loading 色。 */
     val BrandBlue = Color(0xFF0088CC)
+
+    /** 盖在深色/彩色表面上的前景（回复按钮图标/提交 loading），对齐鸿蒙 ON_DARK_FG。 */
+    val OnDarkFg = Color(0xFFFFFFFF)
 
     /** 通知铃铛。 */
     val Amber = Color(0xFFF5A623)

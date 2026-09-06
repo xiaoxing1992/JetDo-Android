@@ -321,10 +321,108 @@ class TopicDetailViewModel @Inject constructor(
                     return@launch
                 }
                 val result = topicService.removeBookmark(bookmarkId, topicId)
+                if (result.success && post.postNumber == 1) syncTopicBookmarked(false)
                 done(result.success)
             } else {
                 val result = topicService.addBookmark(post.id, topicId)
+                if (result.success && post.postNumber == 1) syncTopicBookmarked(true)
                 done(result.success)
+            }
+        }
+    }
+
+    /** 一楼收藏即主题收藏：标题栏图层 B 书签图标以此为真源，toggle 后即时联动（对齐鸿蒙）。 */
+    private fun syncTopicBookmarked(value: Boolean) {
+        _uiState.update { it.copy(topic = it.topic?.copy(bookmarked = value)) }
+    }
+
+    // ========== 回复输入栏（切片 7，对齐鸿蒙 openComposer* / submitReply） ==========
+
+    /** 打开回复话题输入浮层（右下角悬浮按钮），占位「回复当前话题」。 */
+    fun openComposerForTopic() {
+        _uiState.update {
+            it.copy(
+                composerVisible = true,
+                composerPlaceholder = "回复当前话题",
+                composerReplyToPostNumber = null
+            )
+        }
+    }
+
+    /** 打开定向回复某楼的输入浮层，占位「回复<作者昵称>」（回退链对齐鸿蒙 resolveAuthorName）。 */
+    fun openComposerForPost(post: TopicPost) {
+        val authorName = post.name?.takeIf { it.isNotBlank() }
+            ?: post.username?.takeIf { it.isNotBlank() }
+            ?: "该用户"
+        _uiState.update {
+            it.copy(
+                composerVisible = true,
+                composerPlaceholder = "回复$authorName",
+                composerReplyToPostNumber = post.postNumber
+            )
+        }
+    }
+
+    fun closeComposer() {
+        _uiState.update { it.copy(composerVisible = false) }
+    }
+
+    /** 输入内容暂存：关掉浮层再点开内容还在（鸿蒙 pendingReplyText 的内存等价物，磁盘草稿后续切片接）。 */
+    fun updateReplyDraft(text: String) {
+        _uiState.update { it.copy(pendingReplyText = text) }
+    }
+
+    /**
+     * 提交回复：POST /posts。直接发布 → 新楼追加到列表底部 + 清草稿 + 关浮层；进审核队列 →
+     * 只提示不打楼层；失败 → 保留浮层与内容供重试（done(false) 输入条不关）。
+     */
+    fun createReply(text: String, typingMs: Long, composerMs: Long, done: (Boolean) -> Unit) {
+        val state = _uiState.value
+        val topic = state.topic ?: return done(false)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSubmittingReply = true) }
+            val result = topicService.createReply(
+                topicId = topic.id,
+                categoryId = topic.categoryId,
+                raw = text,
+                typingDurationMs = typingMs,
+                composerOpenDurationMs = composerMs,
+                replyToPostNumber = state.composerReplyToPostNumber
+            )
+            if (result.success && result.data != null) {
+                val outcome = result.data
+                if (outcome.pending) {
+                    _uiState.update {
+                        it.copy(
+                            isSubmittingReply = false,
+                            composerVisible = false,
+                            pendingReplyText = "",
+                            composerReplyToPostNumber = null,
+                            actionMessage = "评论已提交，等待审核"
+                        )
+                    }
+                } else if (outcome.post != null) {
+                    dataSource.appendPosts(listOf(outcome.post))
+                    _uiState.update {
+                        it.copy(
+                            isSubmittingReply = false,
+                            composerVisible = false,
+                            pendingReplyText = "",
+                            composerReplyToPostNumber = null,
+                            posts = dataSource.posts,
+                            actionMessage = "评论已发表"
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(isSubmittingReply = false, actionMessage = "发表失败，请稍后重试。") }
+                    done(false)
+                    return@launch
+                }
+                done(true)
+            } else {
+                val reason = result.error?.message ?: "发表失败，请稍后重试。"
+                _uiState.update { it.copy(isSubmittingReply = false, actionMessage = reason) }
+                done(false)
             }
         }
     }
@@ -403,5 +501,11 @@ data class TopicDetailUiState(
     val loadMoreMessage: String = "",
     val scrollRequestPostNumber: Int? = null,
     val flashTargetPostId: Long? = null,
-    val categories: List<TopicCategory> = emptyList()
+    val categories: List<TopicCategory> = emptyList(),
+    // 回复输入浮层（切片 7）：可见性/占位文字/定向回复目标/未发出草稿/提交中。
+    val composerVisible: Boolean = false,
+    val composerPlaceholder: String = "回复当前话题",
+    val composerReplyToPostNumber: Int? = null,
+    val pendingReplyText: String = "",
+    val isSubmittingReply: Boolean = false
 )
