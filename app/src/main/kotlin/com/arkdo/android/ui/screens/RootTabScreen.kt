@@ -20,8 +20,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.arkdo.android.navigation.Routes
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.arkdo.android.navigation.Routes
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeScreen
 import com.arkdo.android.ui.home.HomeViewModel
@@ -47,6 +48,14 @@ fun RootTabScreen(
     // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和 HomeScreen 共用同一个实例。
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
     val homeViewModel: HomeViewModel = hiltViewModel()
+
+    // 启动会话检查（对齐鸿蒙 RootTabPage aboutToAppear 的 checkCurrentUser 触发点）：
+    // 写 LoginGate 登录态/信任等级镜像，详情页回复等写操作的闸门据此放行或拦截。
+    val sessionViewModel: SessionViewModel = hiltViewModel()
+    LaunchedEffect(Unit) {
+        sessionViewModel.checkCurrentUser()
+    }
+
 
     // 抽屉包在最外层，才能盖住底部标签栏和上下系统栏。
     HomeDrawerHost(viewModel = homeViewModel) {

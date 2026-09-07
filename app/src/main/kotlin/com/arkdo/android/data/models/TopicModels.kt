@@ -102,7 +102,11 @@ data class User(
     @SerialName("unread_notifications") val unreadNotifications: Int? = null,
     @SerialName("unread_high_priority_notifications") val unreadHighPriorityNotifications: Int? = null,
     @SerialName("draft_count") val draftCount: Int? = null,
-    @SerialName("badge_ids") val badgeIds: List<Long>? = null
+    @SerialName("badge_ids") val badgeIds: List<Long>? = null,
+    // 会话检查随 current_user 下发的身份字段：LoginGate 附件权限判定用（编辑器切片接）。
+    @SerialName("trust_level") val trustLevel: Int? = null,
+    @SerialName("admin") val admin: Boolean? = null,
+    @SerialName("moderator") val moderator: Boolean? = null
 ) {
     val displayName: String
         get() = name ?: username

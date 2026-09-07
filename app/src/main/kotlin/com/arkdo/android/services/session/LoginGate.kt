@@ -15,12 +15,19 @@ import timber.log.Timber
 const val LOGIN_GATE_LOG_TAG = "[ArkDO][LoginGate]"
 const val STORAGE_KEY_LOGGED_IN = "arkdoIsLoggedIn"
 
+/** 信任等级「还没查到」。区别于 TL0(已确认是新用户),两者要走不同分支。 */
+const val TRUST_LEVEL_UNKNOWN = -1
+
 typealias RequireLoginListener = () -> Unit
 typealias LoginStateListener = () -> Unit
 
 object LoginGate {
     private val requireLoginListeners = mutableMapOf<Long, RequireLoginListener>()
     private var nextListenerId = 0L
+
+    // 只驻内存,不落盘 —— 信任等级是按站点的,持久化会让切站后的首个会话检查回来前用错等级。
+    private var trustLevelValue: Int = TRUST_LEVEL_UNKNOWN
+    private var staffValue: Boolean = false
 
     private val loginStateListeners = mutableMapOf<Long, LoginStateListener>()
     private var nextLoginStateListenerId = 0L
@@ -44,6 +51,23 @@ object LoginGate {
 
     fun isLoggedIn(context: Context): Boolean =
         prefs(context).getBoolean(STORAGE_KEY_LOGGED_IN, false)
+
+    /** 同步当前用户的信任等级与管理身份。与 setLoggedIn 同一处调用（会话检查成功后）。 */
+    fun setUserPrivileges(trustLevel: Int, staff: Boolean) {
+        trustLevelValue = trustLevel
+        staffValue = staff
+    }
+
+    /** 登出/切站时复位成「未知」。 */
+    fun clearUserPrivileges() {
+        trustLevelValue = TRUST_LEVEL_UNKNOWN
+        staffValue = false
+    }
+
+    /** 当前信任等级；-1 表示还没查到。 */
+    fun trustLevel(): Int = trustLevelValue
+
+    fun isStaff(): Boolean = staffValue
 
     /** 写操作前置闸门：已登录返回 true 放行；未登录返回 false 并请求弹登录页。 */
     fun ensureLoggedIn(context: Context): Boolean {

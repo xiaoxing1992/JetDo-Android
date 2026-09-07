@@ -32,7 +32,10 @@ private data class DiscourseCurrentUser(
     @SerialName("unread_high_priority_notifications") val unreadHighPriorityNotifications: Int? = null,
     // 总未读(含私信等高优先级)，对应铃铛角标真值(user.rb all_unread_notifications_count:816)。
     @SerialName("all_unread_notifications_count") val allUnreadNotificationsCount: Int? = null,
-    @SerialName("draft_count") val draftCount: Int? = null
+    @SerialName("draft_count") val draftCount: Int? = null,
+    @SerialName("trust_level") val trustLevel: Int? = null,
+    @SerialName("admin") val admin: Boolean? = null,
+    @SerialName("moderator") val moderator: Boolean? = null
 )
 
 class AuthService(private val bridge: JsonNetworkClient) {
@@ -73,7 +76,10 @@ class AuthService(private val bridge: JsonNetworkClient) {
                     unreadNotifications = sourceUser.allUnreadNotificationsCount
                         ?: sourceUser.unreadNotifications ?: 0,
                     unreadHighPriorityNotifications = sourceUser.unreadHighPriorityNotifications ?: 0,
-                    draftCount = sourceUser.draftCount ?: 0
+                    draftCount = sourceUser.draftCount ?: 0,
+                    trustLevel = sourceUser.trustLevel,
+                    admin = sourceUser.admin,
+                    moderator = sourceUser.moderator
                 )
             )
         } catch (e: Exception) {
