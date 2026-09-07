@@ -2,15 +2,19 @@ package com.arkdo.android.ui.topic
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +62,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -81,6 +86,7 @@ import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.CommentInputOverlay
+import com.arkdo.android.ui.components.FaIcon
 import com.arkdo.android.ui.components.ImageViewer
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
@@ -89,6 +95,7 @@ import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
 import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.arkdoColors
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -296,29 +303,30 @@ fun TopicDetailScreen(
             }
         }
 
-        // 右下角悬浮回复按钮：仅在内容就绪且浮层未展开时显示（对齐鸿蒙 smartReachReplyFab）。
-        if (ui.topic != null && !ui.composerVisible) {
+        // 右下角悬浮回复按钮（对齐鸿蒙 smartReachReplyFab / replyFabButton）：
+        // 52dp 圆形、默认透明底 + 0.5vp 半透明白光边（hds_floating_action_highlight）+
+        // 品牌蓝图标 22dp（品牌蓝只用于图标，对齐 REPLY_BLUE 注释「品牌蓝仅用于图标」）。
+        // 玻璃磨砂是设置项且默认关（FabGlassPrefs），关闭态就是透明+光边；设置页迁移后接。
+        // 出现淡入 150ms；消失立即移除（打开浮层时被遮罩盖住，无退场动画，对齐 asymmetric）。
+        AnimatedVisibility(
+            visible = ui.topic != null && !ui.composerVisible && viewerState == null,
+            enter = fadeIn(tween(150, easing = EaseOut)),
+            exit = ExitTransition.None,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(end = 16.dp, bottom = 16.dp)
+                .zIndex(2f)
+        ) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(end = 16.dp, bottom = 16.dp)
-                    .zIndex(2f)
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .border(0.5.dp, arkdoColors.floatingActionHighlight, CircleShape)
+                    .clickable(onClick = viewModel::openComposerForTopic),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(ArkdoFixedColors.BrandBlue, CircleShape)
-                        .clickable(onClick = viewModel::openComposerForTopic),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_fa_reply),
-                        contentDescription = "回复话题",
-                        tint = ArkdoFixedColors.OnDarkFg,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                FaIcon("reply", ArkdoFixedColors.BrandBlue, 22.dp)
             }
         }
     }

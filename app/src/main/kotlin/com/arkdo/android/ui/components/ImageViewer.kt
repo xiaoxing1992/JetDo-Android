@@ -1,13 +1,26 @@
-@file:OptIn(ExperimentalSharedTransitionApi::class)
+@file:OptIn(ExperimentalSharedTransitionApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package com.arkdo.android.ui.components
 
+import android.content.ContentValues
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -17,9 +30,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -40,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,27 +65,36 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
+import androidx.core.content.FileProvider
 import coil3.compose.AsyncImage
+import coil3.imageLoader
 import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
 import coil3.request.crossfade
+import coil3.toBitmap
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.abs
 
 // ==========================================================================
 // 全屏图片浏览器，1:1 对齐鸿蒙 ImageViewer.ets 的行为与细节。
 //
-// 共享元素转场：采用 Compose 官方 SharedTransitionLayout + sharedElement（key 配对），
-// 由外层 AnimatedContent 驱动开/关的飞入飞出——比手搓 hero 层的逐帧衔接可靠。
+// 共享元素转场：Compose 官方 SharedTransitionLayout + sharedElement（key 配对）。
 //
-// 竖直拖动关闭：未放大（scaleGuess <= 1.05）时上/下拖均可，位移超 120 关闭、
-// 否则回弹；放大后让位给图片平移。
+// 手势（对齐鸿蒙 parallelGesture 组合的语义）：
+// - 双指捏合：实时缩放 1..4（MIN/MAX 对齐源常量），两指平移同步跟手；
+// - 双击：1 ↔ 2.5（DOUBLE_TAP_SCALE），带 220ms 动画；鸿蒙由 @rv/image-preview 承载，
+//   Android 侧用 Animatable 直接实现同款数值与节奏；
+// - 放大后（scale > 1.05 = ZOOM_EPSILON）：单指竖直拖动变为图片平移（水平方向仍让给
+//   翻页，与鸿蒙 Horizontal direction 的取舍一致）；未放大时竖直拖动关闭，阈值 120；
+// - 长按：菜单（保存/分享/拷贝链接）——鸿蒙浏览器没有长按菜单，这是 Android 侧按
+//   用户要求的增补；分享与鸿蒙 ImageShareService 同语义：先下到沙箱再交系统面板。
 //
-// 渐进加载：底层优化图（与正文内联同源、多已缓存、秒显垫底），顶层高清原图
-// 加载完成后覆盖；高清失败回退优化图。翻页后重置缩放。
-//
-// 系统返回键：非首图翻回上一张（带动画），首图才关闭预览。
-// 保存/分享（源为下载到沙箱再交系统面板）为后续切片；分享按钮先分享链接文本。
+// 渐进加载：底层优化图秒显垫底，顶层高清原图完成后覆盖；失败回退优化图。
+// 系统返回键：非首图翻回上一张，首图才关闭预览。
 // ==========================================================================
 
 private const val MIN_SCALE = 1f
@@ -78,7 +104,7 @@ private const val DOUBLE_TAP_SCALE = 2.5f
 /** 拖动关闭：竖直位移绝对值超过该阈值即关闭，否则回弹（上/下拖同等）。 */
 private const val DISMISS_THRESHOLD = 120f
 
-/** 缩放估计值高于该值即视为「已放大」，此时禁用拖动关闭（让位给图片平移）。 */
+/** 缩放高于该值视为「已放大」，竖直拖动从关闭让位给图片平移。 */
 private const val ZOOM_EPSILON = 1.05f
 
 /** 共享元素作用域（详情页根部提供，缩略图与全屏图按 key 配对）。 */
@@ -107,9 +133,10 @@ fun ImageViewer(
 
     var currentIndex by remember { mutableIntStateOf(startIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0))) }
     var closing by remember { mutableStateOf(false) }
-    // 缩放估计值：仅用于判断「是否已放大」；真实变换直接驱动当前页图片。
-    var scaleGuess by remember { mutableStateOf(1f) }
-    var imageScale by remember { mutableFloatStateOf(1f) }
+    // 真实缩放值：双击走动画（Animatable），捏合走 snapTo；不再需要鸿蒙的 scaleGuess
+    // 旁路估计——Compose 侧变换由我们自己驱动，真值即状态。
+    val scale = remember { Animatable(1f) }
+    // 放大后的平移量（图片左上角相对中心的偏移，按视口一半 x (scale-1) 夹界）。
     var imageOffsetX by remember { mutableFloatStateOf(0f) }
     var imageOffsetY by remember { mutableFloatStateOf(0f) }
     // 竖直拖动关闭的实时位移（>0 向下、<0 向上）。
@@ -117,6 +144,9 @@ fun ImageViewer(
     // 高清原图已加载 / 已失败的页下标（渐进加载）。
     var loadedPages by remember { mutableStateOf(setOf<Int>()) }
     var failedPages by remember { mutableStateOf(setOf<Int>()) }
+    // 长按菜单与导出进行中标志。
+    var showMenu by remember { mutableStateOf(false) }
+    var exporting by remember { mutableStateOf(false) }
 
     val pagerState = rememberPagerState(initialPage = currentIndex) { images.size }
 
@@ -136,6 +166,15 @@ fun ImageViewer(
         return item.fallbackUrl.ifEmpty { item.url }
     }
 
+    /** 按当前缩放把平移量夹回可视范围内（图片永远至少铺住视口）。视口由调用方传入。 */
+    fun clampOffsets(viewportW: Float, viewportH: Float) {
+        val s = scale.value
+        val maxX = (s - 1f) * viewportW / 2f
+        val maxY = (s - 1f) * viewportH / 2f
+        imageOffsetX = imageOffsetX.coerceIn(-maxX, maxX)
+        imageOffsetY = imageOffsetY.coerceIn(-maxY, maxY)
+    }
+
     /** 统一的关闭入口（✕ / 单击 / 首图返回键 / 拖动过阈值都走这里）。转场由 AnimatedContent 接管。 */
     fun requestClose() {
         if (closing) {
@@ -147,19 +186,21 @@ fun ImageViewer(
 
     // 系统返回键：非首图翻回上一张（动画翻页），首图关闭预览。
     BackHandler {
-        if (pagerState.currentPage > 0) {
+        if (showMenu) {
+            showMenu = false
+        } else if (pagerState.currentPage > 0) {
             scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
         } else {
             requestClose()
         }
     }
 
-    // 翻页后重置缩放，让新页可下滑关闭。
+    // 翻页后重置缩放与平移，让新页可下滑关闭；菜单一并收起。
     LaunchedEffect(pagerState.currentPage) {
-        scaleGuess = 1f
-        imageScale = 1f
+        scale.snapTo(1f)
         imageOffsetX = 0f
         imageOffsetY = 0f
+        showMenu = false
     }
 
     // 导航栏透明：enableEdgeToEdge 默认给浅色主题导航栏刷了 90% 白 scrim，
@@ -176,23 +217,106 @@ fun ImageViewer(
     // 黑底（拖动消隐时随位移渐透，最低留 25% 黑）。
     val backdropColor = Color.Black.copy(alpha = (1f - minOf(abs(dragOffsetY) / 300f, 0.75f)).coerceIn(0f, 1f))
 
+    /** 当前页高清图（未回退前）落成 Bitmap：保存/分享共用；失败返回 null。 */
+    suspend fun currentBitmap(): Bitmap? = withContext(Dispatchers.IO) {
+        val url = images.getOrNull(currentIndex)?.url ?: return@withContext null
+        val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
+        val image = (context.imageLoader.execute(request) as? SuccessResult)?.image
+            ?: return@withContext null
+        image.toBitmap()
+    }
+
+    /** 保存到系统相册 Pictures/ArkDO（MediaStore），成功回 true。 */
+    fun saveToGallery(bitmap: Bitmap, onDone: (Boolean) -> Unit) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, "arkdo-${System.currentTimeMillis()}.jpg")
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                        if (Build.VERSION.SDK_INT >= 29) {
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ArkDO")
+                        }
+                    }
+                    val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        ?: return@runCatching false
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    } ?: return@runCatching false
+                    true
+                }.getOrDefault(false)
+            }
+            onDone(ok)
+        }
+    }
+
+    /** 分享：下载到 cache/shared_images 再经 FileProvider 交系统面板（对齐鸿蒙 ImageShareService）。 */
+    fun shareImage(bitmap: Bitmap, onDone: (Uri?) -> Unit) {
+        scope.launch {
+            val uri = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = File(context.cacheDir, "shared_images").apply { mkdirs() }
+                    val file = File(dir, "arkdo-${System.currentTimeMillis()}.jpg")
+                    file.outputStream().use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    }
+                    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                }.getOrNull()
+            }
+            onDone(uri)
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(backdropColor)
             .pointerInput(Unit) {
-                // 竖直 Pan：未放大时上/下拖均可关闭；已放大让位给图片平移。
+                // 双指捏合 + 两指平移：Main pass 里父节点先于 Pager 收到事件，两指时全部
+                // 消费，翻页与拖动关闭自然让位（对齐鸿蒙 PinchGesture 并行手势语义）。
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.size >= 2) {
+                            val zoom = event.calculateZoom()
+                            if (zoom != 1f) {
+                                // awaitEachGesture 是受限挂起作用域，snapTo 须经常规协程调度。
+                                scope.launch { scale.snapTo((scale.value * zoom).coerceIn(MIN_SCALE, MAX_SCALE)) }
+                            }
+                            if (scale.value > MIN_SCALE) {
+                                val pan = event.calculatePan()
+                                imageOffsetX += pan.x
+                                imageOffsetY += pan.y
+                                clampOffsets(size.width.toFloat(), size.height.toFloat())
+                            }
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                    // 缩回 1 时平移归零，恢复可拖动关闭状态。
+                    if (scale.value <= ZOOM_EPSILON) {
+                        imageOffsetX = 0f
+                        imageOffsetY = 0f
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                // 竖直 Pan：未放大时上/下拖关闭；放大后竖直位移归图片平移（水平仍给翻页）。
                 detectVerticalDragGestures(
                     onVerticalDrag = { change, dragAmount ->
                         change.consume()
-                        if (scaleGuess > ZOOM_EPSILON) {
-                            // 放大后竖直位移归图片平移，这里不驱动关闭。
+                        if (scale.value > ZOOM_EPSILON) {
+                            imageOffsetY += dragAmount
+                            clampOffsets(size.width.toFloat(), size.height.toFloat())
                         } else {
                             dragOffsetY += dragAmount
                         }
                     },
                     onDragEnd = {
+                        if (scale.value > ZOOM_EPSILON) {
+                            return@detectVerticalDragGestures
+                        }
                         if (abs(dragOffsetY) > DISMISS_THRESHOLD) {
                             requestClose()
                         } else {
@@ -206,17 +330,23 @@ fun ImageViewer(
                 detectTapGestures(
                     onTap = { requestClose() },
                     onDoubleTap = {
-                        scaleGuess = if (scaleGuess > ZOOM_EPSILON) MIN_SCALE else DOUBLE_TAP_SCALE
-                        imageScale = scaleGuess
-                        if (scaleGuess == MIN_SCALE) {
+                        val target = if (scale.value > ZOOM_EPSILON) MIN_SCALE else DOUBLE_TAP_SCALE
+                        scope.launch {
+                            scale.animateTo(target, tween(220, easing = FastOutSlowInEasing))
+                        }
+                        if (target == MIN_SCALE) {
                             imageOffsetX = 0f
                             imageOffsetY = 0f
                         }
+                    },
+                    onLongPress = {
+                        // 长按菜单：保存 / 分享 / 拷贝链接（Android 侧增补，鸿蒙无此交互）。
+                        showMenu = true
                     }
                 )
             }
     ) {
-        // 内容层：拖动关闭时整页随手指上/下移。
+        // 内容层：拖动关闭时整页随手指上/下移；缩放/平移只作用于当前页图片。
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -240,8 +370,8 @@ fun ImageViewer(
                             .fillMaxSize()
                             .graphicsLayer {
                                 if (page == currentIndex) {
-                                    scaleX = imageScale
-                                    scaleY = imageScale
+                                    scaleX = scale.value
+                                    scaleY = scale.value
                                     translationX = imageOffsetX
                                     translationY = imageOffsetY
                                 }
@@ -272,8 +402,8 @@ fun ImageViewer(
                             .fillMaxSize()
                             .graphicsLayer {
                                 if (page == currentIndex) {
-                                    scaleX = imageScale
-                                    scaleY = imageScale
+                                    scaleX = scale.value
+                                    scaleY = scale.value
                                     translationX = imageOffsetX
                                     translationY = imageOffsetY
                                 }
@@ -326,29 +456,143 @@ fun ImageViewer(
                 Text(text = "✕", fontSize = 18.sp, color = Color.White)
             }
             Spacer(modifier = Modifier.weight(1f))
-            TopCircleButton(onClick = {
-                // 待切片：下载到沙箱后交系统分享二进制（源 ImageShareService）。
-                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(android.content.Intent.EXTRA_TEXT, resolveUrl(currentIndex))
+            TopCircleButton(enabled = !exporting, onClick = {
+                // 与鸿蒙 ImageShareService 同语义：先下到沙箱再交系统面板（面板认 uri 不认链接）。
+                scope.launch {
+                    exporting = true
+                    val bitmap = currentBitmap()
+                    if (bitmap == null) {
+                        Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                        exporting = false
+                        return@launch
+                    }
+                    shareImage(bitmap) { uri ->
+                        exporting = false
+                        if (uri == null) {
+                            Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                            return@shareImage
+                        }
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "image/jpeg"
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "分享图片"))
+                    }
                 }
-                context.startActivity(android.content.Intent.createChooser(intent, "分享图片"))
             }) {
                 FaIcon("share-nodes", Color.White, 18.dp)
+            }
+        }
+
+        // 长按菜单：底部弹出面板，保存/分享/拷贝链接。
+        if (showMenu) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000))
+                    .clickable(onClick = { showMenu = false })
+            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color(0xF21C1E21), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .navigationBarsPadding()
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+                ViewerMenuAction(iconId = "download", label = "保存图片", enabled = !exporting) {
+                    scope.launch {
+                        exporting = true
+                        val bitmap = currentBitmap()
+                        if (bitmap == null) {
+                            Toast.makeText(context, "保存失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                            exporting = false
+                            return@launch
+                        }
+                        saveToGallery(bitmap) { ok ->
+                            exporting = false
+                            Toast.makeText(
+                                context,
+                                if (ok) "已保存到相册" else "保存失败,请稍后重试",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+                ViewerMenuAction(iconId = "share-nodes", label = "分享图片", enabled = !exporting) {
+                    scope.launch {
+                        exporting = true
+                        val bitmap = currentBitmap()
+                        if (bitmap == null) {
+                            Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                            exporting = false
+                            return@launch
+                        }
+                        shareImage(bitmap) { uri ->
+                            exporting = false
+                            showMenu = false
+                            if (uri == null) {
+                                Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                                return@shareImage
+                            }
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "image/jpeg"
+                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(android.content.Intent.createChooser(intent, "分享图片"))
+                        }
+                    }
+                }
+                ViewerMenuAction(iconId = "link", label = "拷贝链接", enabled = true) {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText("arkdo-image", resolveUrl(currentIndex))
+                    )
+                    Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+                    showMenu = false
+                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }
 }
 
+/** 长按菜单条目：图标 + 文案，整行可点；导出进行中降透明度并拒绝点击。 */
+@Composable
+private fun ViewerMenuAction(
+    iconId: String,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp)
+    ) {
+        FaIcon(iconId, Color.White, 20.dp)
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(text = label, fontSize = 16.sp, color = Color.White)
+    }
+}
+
 /** 顶栏圆形按钮：40dp、#00000066 底、内容居中（对齐源 TOP_BUTTON_SIZE 规格）。 */
 @Composable
-private fun TopCircleButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun TopCircleButton(enabled: Boolean = true, onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
             .background(Color(0x66000000))
-            .clickable { onClick() },
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         content()

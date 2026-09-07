@@ -9,6 +9,7 @@ import coil3.svg.SvgDecoder
 import coil3.util.DebugLogger
 import com.arkdo.android.BuildConfig
 import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.auth.AuthService
 import com.arkdo.android.services.topic.TopicService
 import dagger.Module
 import dagger.Provides
@@ -78,5 +79,11 @@ object AppModule {
     @Singleton
     fun provideTopicService(): TopicService {
         return TopicService(ArkWebNetworkBridge)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAuthService(): AuthService {
+        return AuthService(ArkWebNetworkBridge)
     }
 }

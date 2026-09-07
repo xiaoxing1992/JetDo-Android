@@ -1,14 +1,23 @@
 package com.arkdo.android.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.screens.DebugLogScreen
+import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.topic.TopicDetailScreen
 
@@ -34,6 +43,21 @@ fun ArkDoNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Routes.ROOT
 ) {
+    // 登录弹层（对齐鸿蒙 RootTabPage 的 bindSheet 登录 sheet：isSheetVisible + RootSheet.LOGIN）。
+    // 深层页面/楼层动作未登录点写操作 → LoginGate.requestLogin → 根层弹满高半弹窗。
+    // 鸿蒙根容器常驻，Android 对应常驻层是 NavHost——订阅必须挂这里，放 RootTabScreen
+    // 会在进详情页后失联。弹层开着时不重复置位（对齐 openLoginPage 的 isSheetVisible 守卫）。
+    var showLoginSheet by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(navController) {
+        val unsubscribe = LoginGate.subscribe {
+            if (!showLoginSheet) {
+                showLoginSheet = true
+            }
+        }
+        onDispose { unsubscribe() }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -98,9 +122,18 @@ fun ArkDoNavHost(
             DebugLogScreen(onNavigateBack = { navController.popBackStack() })
         }
 
+
         // TODO: 添加其他页面路由
         // composable(Routes.SETTINGS) { ... }
-        // composable(Routes.LOGIN) { ... }
+        }
+
+        // 登录半弹窗盖在导航内容之上（bindSheet 同层语义：sheet 画在根容器顶）。
+        if (showLoginSheet) {
+            LoginScreen(
+                onNavigateBack = { showLoginSheet = false },
+                modifier = Modifier.zIndex(4f)
+            )
+        }
     }
 }
 

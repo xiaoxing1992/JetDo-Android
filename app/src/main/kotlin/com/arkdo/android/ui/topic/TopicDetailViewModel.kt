@@ -2,17 +2,20 @@ package com.arkdo.android.ui.topic
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.PostReaction
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicPost
+import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.PostStreamPager
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.TopicService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,7 +43,8 @@ private const val TARGET_FLASH_MS = 3000L
  */
 @HiltViewModel
 class TopicDetailViewModel @Inject constructor(
-    private val topicService: TopicService
+    private val topicService: TopicService,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val dataSource = PostDataSource()
@@ -336,31 +340,48 @@ class TopicDetailViewModel @Inject constructor(
         _uiState.update { it.copy(topic = it.topic?.copy(bookmarked = value)) }
     }
 
-    // ========== 回复输入栏（切片 7，对齐鸿蒙 openComposer* / submitReply） ==========
+    // ========== 回复输入栏（切片 7，逐行对齐鸿蒙 openComposerForTopic / openComposerForPost） ==========
 
-    /** 打开回复话题输入浮层（右下角悬浮按钮），占位「回复当前话题」。 */
+    /**
+     * 点击右下角悬浮回复按钮。与鸿蒙同序：未登录先拦（ensureLoggedIn 会广播请求登录，
+     * 登录页弹出属登录切片）→ 复位 composer 各模式 → 定占位文字 → 再展开浮层。
+     */
     fun openComposerForTopic() {
+        if (!LoginGate.ensureLoggedIn(appContext)) {
+            return
+        }
+        resetComposerModes()
+        // 抽奖帖占位分支依赖 LotteryTopicRule（未迁移，见切片4），非抽奖恒「回复当前话题」。
         _uiState.update {
             it.copy(
-                composerVisible = true,
                 composerPlaceholder = "回复当前话题",
-                composerReplyToPostNumber = null
+                composerReplyToPostNumber = null,
+                composerVisible = true
             )
         }
     }
 
-    /** 打开定向回复某楼的输入浮层，占位「回复<作者昵称>」（回退链对齐鸿蒙 resolveAuthorName）。 */
+    /** 点某楼回复按钮：定向回复该楼，占位文字「回复<作者昵称>」（回退链对齐 resolveAuthorName）。 */
     fun openComposerForPost(post: TopicPost) {
+        if (!LoginGate.ensureLoggedIn(appContext)) {
+            return
+        }
+        resetComposerModes()
         val authorName = post.name?.takeIf { it.isNotBlank() }
             ?: post.username?.takeIf { it.isNotBlank() }
             ?: "该用户"
         _uiState.update {
             it.copy(
-                composerVisible = true,
                 composerPlaceholder = "回复$authorName",
-                composerReplyToPostNumber = post.postNumber
+                composerReplyToPostNumber = post.postNumber,
+                composerVisible = true
             )
         }
+    }
+
+    /** 对齐鸿蒙 resetComposerModes：回复/boost/编辑三态复位。boost 与编辑未迁移，仅复位回复目标。 */
+    private fun resetComposerModes() {
+        _uiState.update { it.copy(composerReplyToPostNumber = null) }
     }
 
     fun closeComposer() {
