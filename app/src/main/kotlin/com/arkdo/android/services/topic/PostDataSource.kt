@@ -105,4 +105,20 @@ class PostDataSource {
         }
         return fresh
     }
+
+    /** 按楼 id 找已加载的楼；找不到返回 null（对齐鸿蒙 PostStreamPager.findById）。 */
+    fun findById(postId: Long): TopicPost? =
+        mutablePosts.firstOrNull { it.id == postId }
+
+    /**
+     * 就地改一栋楼：boost 追加/移除后要触发列表刷新。TopicPost 是 data class，
+     * 不能原地改字段，这里把整栋替换成新对象（copy 由调用方做）。
+     */
+    fun replacePost(updated: TopicPost) {
+        val index = mutablePosts.indexOfFirst { it.id == updated.id }
+        if (index >= 0) {
+            mutablePosts[index] = updated
+        }
+    }
 }
+

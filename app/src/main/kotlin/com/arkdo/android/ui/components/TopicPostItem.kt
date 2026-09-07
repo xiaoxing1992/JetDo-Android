@@ -407,7 +407,9 @@ private fun PostFooter(
     onCopyLink: () -> Unit,
     onBookmarkToggle: () -> Unit,
     onRepliesToggle: () -> Unit,
-    // 「俺也一样」（shared issue）。
+    // 火箭入口（本楼无 boost 时显示，位于回复左边）。
+    canAddBoost: Boolean = false,
+    // 「俺也一样」(shared issue)。
     sharedIssueVisible: Boolean = false,
     sharedIssueCreated: Boolean = false,
     sharedIssueCount: Int = 0,
@@ -593,6 +595,13 @@ private fun PostFooter(
                 } else {
                     ActionButton(onClick = onMoreExpand) {
                         FaIcon("ellipsis", iconMuted, 16.dp)
+                    }
+                }
+                // 火箭入口（对齐鸿蒙）：无 boost 时跟在操作区、位于回复按钮左边。
+                // 一旦本楼已有 boost，火箭改到 boost 行末尾（见 BoostRow），此处不再显示。
+                if (canAddBoost && post.boosts.isNullOrEmpty()) {
+                    ActionButton(onClick = { onAddBoost(post) }) {
+                        FaIcon("rocket", iconMuted, 16.dp)
                     }
                 }
                 ActionButton(onClick = onReply) {

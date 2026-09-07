@@ -7,6 +7,7 @@ import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.PostReaction
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.session.LoginGate
@@ -380,9 +381,54 @@ class TopicDetailViewModel @Inject constructor(
         }
     }
 
-    /** 对齐鸿蒙 resetComposerModes：回复/boost/编辑三态复位。boost 与编辑未迁移，仅复位回复目标。 */
+    /** 对齐鸿蒙 resetComposerModes：回复/boost/编辑三态复位。 */
     private fun resetComposerModes() {
-        _uiState.update { it.copy(composerReplyToPostNumber = null) }
+        _uiState.update { it.copy(composerReplyToPostNumber = null, boostTargetPostId = 0L) }
+    }
+
+    /** 点火箭：打开 boost 输入浮层（占位「发一个 boost...」），对齐鸿蒙 openComposerForBoost。 */
+    fun openComposerForBoost(post: TopicPost) {
+        if (!LoginGate.ensureLoggedIn(appContext)) {
+            return
+        }
+        resetComposerModes()
+        _uiState.update {
+            it.copy(
+                composerPlaceholder = "发一个 boost...",
+                boostTargetPostId = post.id,
+                composerVisible = true
+            )
+        }
+    }
+
+    /** boost 提交：走 createBoost；成功回填楼层（气泡追加 + canBoost 置 false）。 */
+    fun submitBoost(text: String, done: (Boolean) -> Unit) {
+        val boostPostId = _uiState.value.boostTargetPostId
+        val topic = _uiState.value.topic ?: return done(false)
+        if (boostPostId <= 0) return done(false)
+        val target = dataSource.findById(boostPostId) ?: return done(false)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSubmittingReply = true) }
+            val result = topicService.createBoost(boostPostId, topic.id, text)
+            if (result.success && result.data != null) {
+                val next = (target.boosts ?: emptyList()) + result.data!!
+                dataSource.replacePost(target.copy(boosts = next, canBoost = false))
+                _uiState.update {
+                    it.copy(
+                        isSubmittingReply = false,
+                        composerVisible = false,
+                        boostTargetPostId = 0L,
+                        pendingReplyText = "",
+                        posts = dataSource.posts,
+                        actionMessage = "Boost 已发送"
+                    )
+                }
+                done(true)
+            } else {
+                _uiState.update { it.copy(isSubmittingReply = false, actionMessage = "Boost 发送失败，请稍后重试") }
+                done(false)
+            }
+        }
     }
 
     fun closeComposer() {
@@ -465,6 +511,70 @@ class TopicDetailViewModel @Inject constructor(
         viewModelScope.launch {
             val result = topicService.toggleSharedIssue(topicId)
             done(if (result.success) result.data else null)
+        }
+    }
+
+    /**
+     * 点 boost 文字区：同一楼内点另一条即改指向它，再点自己则收起（对齐鸿蒙 toggleBoostDelete）。
+     */
+    fun toggleBoostDelete(boostId: Long) {
+        _uiState.update {
+            it.copy(boostDeleteTargetId = if (it.boostDeleteTargetId == boostId) 0L else boostId)
+        }
+    }
+
+    /**
+     * 发 boost：成功把新气泡追加到该楼 boosts、并把 canBoost 置 false（一人一楼的本地约束，
+     * 对齐鸿蒙 submitBoost 的 ObjectLink 数组替换）。
+     */
+    fun createBoost(post: TopicPost, raw: String, done: (Boolean) -> Unit) {
+        val topicId = currentTopicId ?: return done(false)
+        viewModelScope.launch {
+            val result = topicService.createBoost(post.id, topicId, raw)
+            if (result.success && result.data != null) {
+                dataSource.findById(post.id)?.let { target ->
+                    val next = (target.boosts ?: emptyList()) + result.data!!
+                    dataSource.replacePost(target.copy(boosts = next, canBoost = false))
+                    _uiState.update {
+                        it.copy(
+                            posts = dataSource.posts,
+                            boostDeleteTargetId = 0L,
+                            actionMessage = "Boost 已发送"
+                        )
+                    }
+                }
+                done(true)
+            } else {
+                _uiState.update { it.copy(actionMessage = "Boost 发送失败，请稍后重试") }
+                done(false)
+            }
+        }
+    }
+
+    /**
+     * 删 boost：成功把该气泡从所在楼摘掉、canBoost 复原（对齐鸿蒙 deleteBoost）。
+     */
+    fun deleteBoost(post: TopicPost, boost: PostBoost, done: (Boolean) -> Unit) {
+        val topicId = currentTopicId ?: return done(false)
+        viewModelScope.launch {
+            val result = topicService.deleteBoost(boost.id, topicId)
+            if (result.success) {
+                dataSource.findById(post.id)?.let { target ->
+                    val next = (target.boosts ?: emptyList()).filterNot { it.id == boost.id }
+                    dataSource.replacePost(target.copy(boosts = next, canBoost = true))
+                    _uiState.update {
+                        it.copy(
+                            posts = dataSource.posts,
+                            boostDeleteTargetId = 0L,
+                            actionMessage = "Boost 已删除"
+                        )
+                    }
+                }
+                done(true)
+            } else {
+                _uiState.update { it.copy(actionMessage = "Boost 删除失败，请稍后重试") }
+                done(false)
+            }
         }
     }
 
@@ -551,5 +661,9 @@ data class TopicDetailUiState(
     val sharedIssueVisible: Boolean = false,
     val sharedIssueCreated: Boolean = false,
     val sharedIssueCount: Int = 0,
-    val sharedIssueCanCreate: Boolean = false
+    val sharedIssueCanCreate: Boolean = false,
+    // boost：当前展开删除图标的 boost id（0=没有，同一时刻只展开一条，对齐鸿蒙 deleteTargetBoostId）。
+    val boostDeleteTargetId: Long = 0L,
+    // boost 目标楼 id：>0 时回复输入浮层处于 boost 模式（对齐鸿蒙 boostTargetPostId）。
+    val boostTargetPostId: Long = 0L
 )
