@@ -569,6 +569,75 @@ class TopicService(private val bridge: JsonNetworkClient) {
     // ========== 发表内容 ==========
 
     /**
+     * discourse-boosts：发一条 boost。POST /discourse-boosts/posts/{postId}/boosts，
+     * form body raw（对齐鸿蒙 createBoost）。
+     */
+    suspend fun createBoost(postId: Long, topicId: Long, raw: String): NetworkResult<PostBoost> {
+        val path = "/discourse-boosts/posts/$postId/boosts"
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.postForm(
+            path,
+            "raw=${java.net.URLEncoder.encode(raw, "UTF-8")}",
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse<PostBoost>(
+                response.statusCode,
+                response.challengeState,
+                "站点发送 boost 响应为空。"
+            )
+        return try {
+            val created = json.decodeFromString<DiscourseBoost>(data)
+            val boosts = mapBoosts(listOf(created))
+            if (boosts.isNotEmpty()) {
+                NetworkResult(
+                    success = true,
+                    statusCode = response.statusCode,
+                    challengeState = response.challengeState,
+                    data = boosts.first()
+                )
+            } else {
+                NetworkResults.unexpectedResponse(
+                    response.statusCode,
+                    response.challengeState,
+                    "站点发送 boost 响应缺少 boost 数据。"
+                )
+            }
+        } catch (_: Exception) {
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点发送 boost 响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /**
+     * discourse-boosts：删除自己发的一条 boost。DELETE /discourse-boosts/boosts/{boostId}，
+     * 成功返回 204 无 body（对齐鸿蒙 deleteBoost，只看 success）。
+     */
+    suspend fun deleteBoost(boostId: Long, topicId: Long): NetworkResult<Boolean> {
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.deleteForm(
+            "/discourse-boosts/boosts/$boostId",
+            "",
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        return NetworkResult(
+            success = true,
+            statusCode = response.statusCode,
+            challengeState = response.challengeState,
+            data = true
+        )
+    }
+
+    /**
      * 发表评论/回复：POST /posts，body 为 JSON（对齐鸿蒙 createReply，即官方 composer 提交）。
      * 关键字段：raw(正文)、topic_id、category、archetype；其余为 composer 默认/遥测字段。
      * typingDurationMs / composerOpenDurationMs 由调用方按真实交互时长传入（缺省给合理值）。

@@ -254,7 +254,10 @@ fun TopicDetailScreen(
                                     sharedIssueCreated = ui.sharedIssueCreated,
                                     sharedIssueCount = ui.sharedIssueCount,
                                     sharedIssueCanCreate = ui.sharedIssueCanCreate,
-                                    onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) }
+                                    onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) },
+                                    boostDeleteTargetId = ui.boostDeleteTargetId,
+                                    onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
+                                    onAddBoost = viewModel::openComposerForBoost
                                 )
                             }
                         }
@@ -296,8 +299,14 @@ fun TopicDetailScreen(
             initialText = ui.pendingReplyText,
             isSubmitting = ui.isSubmittingReply,
             onTextChange = viewModel::updateReplyDraft,
+            minChars = if (ui.boostTargetPostId > 0) 1 else 16,
+            maxChars = if (ui.boostTargetPostId > 0) 16 else 0,
             onSubmit = { text, typingMs, composerMs, done ->
-                viewModel.createReply(text, typingMs, composerMs, done)
+                if (ui.boostTargetPostId > 0) {
+                    viewModel.submitBoost(text, done)
+                } else {
+                    viewModel.createReply(text, typingMs, composerMs, done)
+                }
             },
             onClose = viewModel::closeComposer,
             modifier = Modifier.zIndex(3f)
@@ -380,7 +389,11 @@ private fun TopicDetailContent(
     sharedIssueCreated: Boolean = false,
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
-    onToggleSharedIssue: ((SharedIssueResult?) -> Unit) -> Unit = {}
+    onToggleSharedIssue: ((SharedIssueResult?) -> Unit) -> Unit = {},
+    // discourse-boosts：按楼删除目标 + 删除/新增回调。
+    boostDeleteTargetId: Long = 0L,
+    onToggleBoostDelete: (Long) -> Unit = {},
+    onAddBoost: (TopicPost) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
@@ -452,6 +465,9 @@ private fun TopicDetailContent(
                 sharedIssueCount = sharedIssueCount,
                 sharedIssueCanCreate = sharedIssueCanCreate,
                 onToggleSharedIssue = onToggleSharedIssue,
+                boostDeleteTargetId = boostDeleteTargetId,
+                onToggleBoostDelete = onToggleBoostDelete,
+                onAddBoost = onAddBoost,
                 onToggleReaction = onToggleReaction,
                 onToggleBookmark = onToggleBookmark,
                 onCopyPostLink = onCopyPostLink,
