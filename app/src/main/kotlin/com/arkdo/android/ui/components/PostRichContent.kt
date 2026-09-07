@@ -599,12 +599,13 @@ private fun parseCalloutColor(color: String?): Color {
 }
 
 // ==========================================================================
-// 行内渲染：TEXT/LINK/CODE/MATH 进 AnnotatedString；行内图片（emoji 等）
+// 行内渲染:TEXT/LINK/CODE/MATH 进 AnnotatedString;行内图片(emoji 等)
 // 走 inlineContent 占位以 ImageSpan 等价物内联。
+// 非 private:boost 气泡等短文混排(文字 + emoji 图片)复用同一渲染。
 // ==========================================================================
 
 @Composable
-private fun InlineText(
+internal fun InlineText(
     inlines: List<RichInlineNode>,
     fontSize: androidx.compose.ui.unit.TextUnit = BODY_FONT_SIZE,
     lineHeight: androidx.compose.ui.unit.TextUnit = BODY_LINE_HEIGHT,
@@ -612,7 +613,10 @@ private fun InlineText(
     forcePrimary: Boolean = false,
     fallbackText: String? = null,
     linkClicks: Map<String, Int>? = null,
-    onLinkClick: (String) -> Unit = {}
+    onLinkClick: (String) -> Unit = {},
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: androidx.compose.ui.text.style.TextOverflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+    textModifier: Modifier = Modifier.fillMaxWidth()
 ) {
     val colors = arkdoColors
     val uriHandler = LocalUriHandler.current
@@ -737,7 +741,9 @@ private fun InlineText(
         fontSize = fontSize,
         lineHeight = lineHeight,
         inlineContent = imageContents,
-        modifier = Modifier.fillMaxWidth()
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = textModifier
     )
 }
 

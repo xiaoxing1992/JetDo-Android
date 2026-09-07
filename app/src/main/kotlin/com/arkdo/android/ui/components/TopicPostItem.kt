@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -48,9 +50,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import coil3.compose.AsyncImage
+import com.arkdo.android.data.models.PostBoost
+import com.arkdo.android.services.content.parseInlines
+import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
-import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.ui.utils.RelativeTime
 
@@ -108,7 +112,11 @@ fun TopicPostItem(
     sharedIssueCreated: Boolean = false,
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
-    onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {}
+    onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {},
+    // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除回调。
+    boostDeleteTargetId: Long = 0,
+    onToggleBoostDelete: (boostId: Long) -> Unit = {},
+    onAddBoost: (TopicPost) -> Unit = {}
 ) {
     val colors = arkdoColors
     val context = LocalContext.current
@@ -231,6 +239,20 @@ fun TopicPostItem(
                     }
                 }
             )
+
+            // 本楼已有 boost：头像+短文本气泡排（每楼下方，对齐鸿蒙 BoostRow）。
+            // 末尾接火箭入口；气泡内点自己发的 boost 展开删除图标。
+            val boosts = post.boosts.orEmpty()
+            if (boosts.isNotEmpty()) {
+                BoostRow(
+                    boosts = boosts,
+                    canAddBoost = post.canBoost == true,
+                    deleteTargetBoostId = boostDeleteTargetId,
+                    onToggleBoostDelete = { onToggleBoostDelete(it) },
+                    onAddBoost = { onAddBoost(post) },
+                    onOpenUser = onOpenUser
+                )
+            }
 
             if (repliesExpanded) {
                 RepliesSection(
@@ -390,7 +412,11 @@ private fun PostFooter(
     sharedIssueCreated: Boolean = false,
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
-    onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {}
+    onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {},
+    // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除回调。
+    boostDeleteTargetId: Long = 0,
+    onToggleBoostDelete: (boostId: Long) -> Unit = {},
+    onAddBoost: (TopicPost) -> Unit = {}
 ) {
     val colors = arkdoColors
     // icon_muted（浅 #BDBDBD / 深 #5C626B，源 Palette 值）。
@@ -761,3 +787,87 @@ private fun LastVisitedDivider() {
 
 private fun parseHexColor(hex: String): Color =
     Color(android.graphics.Color.parseColor(hex))
+
+// ==========================================================================
+// boost 行:头像 + 短文本气泡排,末尾接火箭入口(对齐鸿蒙 BoostRow)。
+// 点气泡内文字展开/收起删除图标;点头像进该用户主页。
+// ==========================================================================
+@Composable
+private fun BoostRow(
+    boosts: List<PostBoost>,
+    canAddBoost: Boolean,
+    deleteTargetBoostId: Long,
+    onToggleBoostDelete: (Long) -> Unit,
+    onAddBoost: () -> Unit,
+    onOpenUser: (User) -> Unit
+) {
+    val colors = arkdoColors
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 0.dp)) {
+        // FlexWrap 等价:FlowRow 逐行排列,超出换行。
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            boosts.forEach { boost ->
+                val expanded = deleteTargetBoostId == boost.id
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .background(colors.boostBubbleBg, RoundedCornerShape(16.dp))
+                        .padding(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
+                ) {
+                    UserAvatar(
+                        user = boost.user,
+                        avatarSize = 20.dp,
+                        showFlair = false,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { onOpenUser(boost.user) }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    // 点文字区展开/收起删除图标(头像各自独立)。
+                    val inlines = remember(boost.cookedHtml) { parseInlines(boost.cookedHtml) }
+                    InlineText(
+                        inlines = inlines,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        textModifier = Modifier
+                            .widthIn(max = 240.dp)
+                            .clickable { onToggleBoostDelete(boost.id) }
+                    )
+                    if (expanded) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(21.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x14000000))
+                                .clickable { onToggleBoostDelete(boost.id) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            FaIcon("trash-can", Color(0xFFE45735), 14.dp)
+                        }
+                    }
+                }
+            }
+            if (canAddBoost) {
+                // 火箭跟在气泡后:与气泡等高(28)。
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .padding(top = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onAddBoost),
+                    contentAlignment = Alignment.Center
+                ) {
+                    FaIcon("rocket", Color(0xFFBDBDBD), 16.dp)
+                }
+            }
+        }
+    }
+}
