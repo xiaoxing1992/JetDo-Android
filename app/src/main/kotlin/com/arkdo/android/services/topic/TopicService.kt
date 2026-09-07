@@ -727,8 +727,8 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 reactions = source.reactions,
                 reactionUsersCount = source.reaction_users_count,
                 currentUserReaction = source.current_user_reaction?.id?.takeIf { it.isNotEmpty() },
-                boosts = null,
-                canBoost = null,
+                boosts = mapBoosts(source.boosts),
+                canBoost = source.can_boost,
                 polls = null,
                 bookmarked = null,
                 bookmarkId = null,
@@ -762,6 +762,29 @@ class TopicService(private val bridge: JsonNetworkClient) {
      * DiscourseUser -> User。空串一律归一成 null，
      * 下游只需判 null，不用再各自 isNotEmpty 一遍。
      */
+    private fun mapBoosts(sourceBoosts: List<DiscourseBoost>?): List<PostBoost> {
+        val boosts = mutableListOf<PostBoost>()
+        sourceBoosts?.forEach { item ->
+            if (item.id == null) return@forEach
+            val boostUser = item.user
+            if (boostUser == null) return@forEach
+            boosts.add(
+                PostBoost(
+                    id = item.id,
+                    cookedHtml = item.cooked ?: "",
+                    user = User(
+                        id = boostUser.id ?: 0,
+                        username = boostUser.username ?: "",
+                        name = boostUser.name,
+                        avatarTemplate = boostUser.avatar_template,
+                        animatedAvatar = boostUser.animated_avatar?.takeIf { it.isNotEmpty() }
+                    )
+                )
+            )
+        }
+        return boosts
+    }
+
     private fun mapUser(source: DiscourseUser): User {
         return User(
             id = source.id ?: 0,
@@ -919,10 +942,30 @@ data class DiscoursePost(
     val reply_to_post_number: Int? = null,
     val user_id: Long? = null,
     val likes_count: Int? = null,
-    val read: Boolean? = null
+    val read: Boolean? = null,
+    // discourse-boosts：楼下别人发的 boost（随 posts.json 返回）+ 能否发（can_boost，火箭入口依据）。
+    val boosts: List<DiscourseBoost>? = null,
+    val can_boost: Boolean? = null
 )
 
-/** current_user_reaction：我的当前回应短名。 */
+/** discourse-boosts：一条 boost（id + cooked 短文本 + 用户），对齐鸿蒙 DiscourseBoost。 */
+@Serializable
+data class DiscourseBoost(
+    val id: Long? = null,
+    val cooked: String? = null,
+    val user: DiscourseBoostUser? = null
+)
+
+@Serializable
+data class DiscourseBoostUser(
+    val id: Long? = null,
+    val username: String? = null,
+    val name: String? = null,
+    val avatar_template: String? = null,
+    val animated_avatar: String? = null
+)
+
+/** current_user_reaction:我的当前回应短名。 */
 @Serializable
 data class DiscourseCurrentUserReaction(
     val id: String? = null
