@@ -167,7 +167,7 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLoadingMore = false,
-                        posts = dataSource.posts,
+                        posts = dataSource.snapshotPosts,
                         hasMore = PostStreamPager.countLater(stream, dataSource.posts) > 0,
                         loadMoreMessage = if (
                             PostStreamPager.countLater(stream, dataSource.posts) > 0
@@ -208,7 +208,7 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLoadingEarlier = false,
-                        posts = dataSource.posts,
+                        posts = dataSource.snapshotPosts,
                         hasEarlier = PostStreamPager.countEarlier(stream, dataSource.posts) > 0,
                         earlierCount = PostStreamPager.countEarlier(stream, dataSource.posts)
                     )
@@ -419,7 +419,7 @@ class TopicDetailViewModel @Inject constructor(
                         composerVisible = false,
                         boostTargetPostId = 0L,
                         pendingReplyText = "",
-                        posts = dataSource.posts,
+                        posts = dataSource.snapshotPosts,
                         actionMessage = "Boost 已发送"
                     )
                 }
@@ -477,7 +477,7 @@ class TopicDetailViewModel @Inject constructor(
                             composerVisible = false,
                             pendingReplyText = "",
                             composerReplyToPostNumber = null,
-                            posts = dataSource.posts,
+                            posts = dataSource.snapshotPosts,
                             actionMessage = "评论已发表"
                         )
                     }
@@ -537,7 +537,7 @@ class TopicDetailViewModel @Inject constructor(
                     dataSource.replacePost(target.copy(boosts = next, canBoost = false))
                     _uiState.update {
                         it.copy(
-                            posts = dataSource.posts,
+                            posts = dataSource.snapshotPosts,
                             boostDeleteTargetId = 0L,
                             actionMessage = "Boost 已发送"
                         )
@@ -564,7 +564,7 @@ class TopicDetailViewModel @Inject constructor(
                     dataSource.replacePost(target.copy(boosts = next, canBoost = true))
                     _uiState.update {
                         it.copy(
-                            posts = dataSource.posts,
+                            posts = dataSource.snapshotPosts,
                             boostDeleteTargetId = 0L,
                             actionMessage = "Boost 已删除"
                         )
@@ -597,7 +597,7 @@ class TopicDetailViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 topic = detail,
-                posts = dataSource.posts,
+                posts = dataSource.snapshotPosts,
                 hasMore = laterCount > 0,
                 hasEarlier = earlierCount > 0,
                 earlierCount = earlierCount,

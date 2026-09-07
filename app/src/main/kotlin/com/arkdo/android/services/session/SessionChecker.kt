@@ -29,7 +29,7 @@ class SessionChecker @Inject constructor(
             return
         }
         val user = result.data
-        LoginGate.setLoggedIn(context, user != null)
+        LoginGate.setLoggedIn(context, user != null, user?.id)
         if (user != null) {
             LoginGate.setUserPrivileges(
                 user.trustLevel ?: 0,

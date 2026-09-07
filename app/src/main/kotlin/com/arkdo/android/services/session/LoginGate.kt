@@ -14,6 +14,7 @@ import timber.log.Timber
 
 const val LOGIN_GATE_LOG_TAG = "[ArkDO][LoginGate]"
 const val STORAGE_KEY_LOGGED_IN = "arkdoIsLoggedIn"
+const val STORAGE_KEY_CURRENT_USER_ID = "arkdoCurrentUserId"
 
 /** 信任等级「还没查到」。区别于 TL0(已确认是新用户),两者要走不同分支。 */
 const val TRUST_LEVEL_UNKNOWN = -1
@@ -41,13 +42,22 @@ object LoginGate {
     }
 
     /** 由 RootTabPage 在 /session/current.json「成功」后同步写入。从非登录翻成登录时广播一次。 */
-    fun setLoggedIn(context: Context, loggedIn: Boolean) {
+    fun setLoggedIn(context: Context, loggedIn: Boolean, userId: Long? = null) {
         val wasLoggedIn = isLoggedIn(context)
-        prefs(context).edit().putBoolean(STORAGE_KEY_LOGGED_IN, loggedIn).apply()
+        prefs(context).edit()
+            .putBoolean(STORAGE_KEY_LOGGED_IN, loggedIn)
+            .apply {
+                if (userId != null) putLong(STORAGE_KEY_CURRENT_USER_ID, userId)
+            }
+            .apply()
         if (loggedIn && !wasLoggedIn) {
             notifyBecameLoggedIn()
         }
     }
+
+    /** 当前登录用户 id；未登录为 0（对齐鸿蒙 RootTabPage 下发的 currentUserId 语义）。 */
+    fun currentUserId(context: Context): Long =
+        prefs(context).getLong(STORAGE_KEY_CURRENT_USER_ID, 0L)
 
     fun isLoggedIn(context: Context): Boolean =
         prefs(context).getBoolean(STORAGE_KEY_LOGGED_IN, false)

@@ -247,6 +247,7 @@ fun TopicPostItem(
                 BoostRow(
                     boosts = boosts,
                     canAddBoost = post.canBoost == true,
+                    currentUserId = com.arkdo.android.services.session.LoginGate.currentUserId(context),
                     deleteTargetBoostId = boostDeleteTargetId,
                     onToggleBoostDelete = { onToggleBoostDelete(it) },
                     onAddBoost = { onAddBoost(post) },
@@ -805,6 +806,7 @@ private fun parseHexColor(hex: String): Color =
 private fun BoostRow(
     boosts: List<PostBoost>,
     canAddBoost: Boolean,
+    currentUserId: Long,
     deleteTargetBoostId: Long,
     onToggleBoostDelete: (Long) -> Unit,
     onAddBoost: () -> Unit,
@@ -847,7 +849,7 @@ private fun BoostRow(
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         textModifier = Modifier
                             .widthIn(max = 240.dp)
-                            .clickable { onToggleBoostDelete(boost.id) }
+                            .clickable(enabled = currentUserId > 0 && boost.user.id == currentUserId) { onToggleBoostDelete(boost.id) }
                     )
                     if (expanded) {
                         Spacer(modifier = Modifier.width(4.dp))
