@@ -91,4 +91,21 @@ class PostDataSourceTest {
         assertEquals(0, ds.appendPosts(listOf(post(1, 0))))
         assertEquals(1, ds.totalCount)
     }
+
+    // 回归:boost 发出后 UI 不刷新(退出重进才出现)的根因是 UiState.posts 引用了同一个
+    // mutable 列表 —— replacePost 后列表内容变了但引用没变,Compose 只按状态对象比对新旧,
+    // 内容级变化不被感知。现在每次变更都重建快照,replacePost 前后 snapshotPosts 必须是
+    // 不同引用且内容含新楼。
+    @Test
+    fun `replacePost 后快照引用刷新`() {
+        val ds = PostDataSource()
+        ds.reset(listOf(post(1L, 1), post(2L, 2)))
+        val before = ds.snapshotPosts
+        val target = ds.findById(2L)!!
+        ds.replacePost(target.copy(boosts = emptyList()))
+        val after = ds.snapshotPosts
+        org.junit.Assert.assertNotSame(before, after)
+        assertEquals(2, after.size)
+        assertEquals(2L, after[1].id)
+    }
 }

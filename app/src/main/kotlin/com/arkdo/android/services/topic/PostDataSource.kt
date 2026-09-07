@@ -21,12 +21,30 @@ class PostDataSource {
     /** 只读视图：供 ReadController / PostStreamPager 线性扫描，不得直接增删。 */
     val posts: List<TopicPost> get() = mutablePosts
 
+    // 楼层整体换代用。把 mutablePosts 换新引用:Compose 侧按 UiState.posts 的
+    // 引用/内容变化触发重组,boost 发出后要退出重进才出现的根因是——data class
+    // copy 出的楼层在 UiState.posts 里被换掉后,原地 list 内容已变但读侧只按楼层
+    // 数组整体观察。这里在每次变更后重发一个「快照副本」,保证任何消费方都看到新对象。
+    private var publishCount = 0
+
+    private fun republish() {
+        publishCount++
+        // 快照副本:消费方每次拿到的都是新 List(避免引用相等跳过重组)。
+        _snapshot = mutablePosts.toList()
+    }
+
+    private var _snapshot: List<TopicPost> = emptyList()
+
+    /** 对外只读快照:变更后立即重建,保证引用每次都变、Compose 必然重组。 */
+    val snapshotPosts: List<TopicPost> get() = _snapshot
+
     val totalCount: Int get() = mutablePosts.size
 
     /** 整体替换（首屏加载/按楼号重开窗口）。 */
     fun reset(posts: List<TopicPost>) {
         mutablePosts.clear()
         mutablePosts.addAll(posts)
+        republish()
     }
 
     /**
@@ -63,6 +81,7 @@ class PostDataSource {
             added += runEnd - runStart
             runStart = runEnd
         }
+        republish()
         return added
     }
 
@@ -84,6 +103,7 @@ class PostDataSource {
         }
         fresh.sortBy { it.postNumber }
         mutablePosts.addAll(0, fresh)
+        republish()
         return fresh.size
     }
 
@@ -118,6 +138,7 @@ class PostDataSource {
         val index = mutablePosts.indexOfFirst { it.id == updated.id }
         if (index >= 0) {
             mutablePosts[index] = updated
+            republish()
         }
     }
 }
