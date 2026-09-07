@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +80,7 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.R
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.data.models.User
@@ -194,7 +196,7 @@ fun TopicDetailScreen(
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(arkdoColors.topicDetailPageBg)) {
         SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = viewerState,
@@ -246,7 +248,13 @@ fun TopicDetailScreen(
                                     onCopyPostLink = { p -> viewModel.postLink(p) },
                                     onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
                                     onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
-                                    onReply = viewModel::openComposerForPost
+                                    onReply = viewModel::openComposerForPost,
+                                    topicCreatedById = topic.createdById ?: -1L,
+                                    sharedIssueVisible = ui.sharedIssueVisible,
+                                    sharedIssueCreated = ui.sharedIssueCreated,
+                                    sharedIssueCount = ui.sharedIssueCount,
+                                    sharedIssueCanCreate = ui.sharedIssueCanCreate,
+                                    onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) }
                                 )
                             }
                         }
@@ -322,11 +330,19 @@ fun TopicDetailScreen(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(CircleShape)
-                    .border(0.5.dp, arkdoColors.floatingActionHighlight, CircleShape)
+                    // 鸿蒙用 backgroundEffect(blur=28, color=#33F2F3F5, saturation=1.2) 把背后
+                    // 页面模糊成"亮白圆"——Android 无背后模糊，按"模糊均色后"的视觉等价给一个高亮
+                    // 浅白底（#F8F9FB，比 topicDetailPageBg 亮一档），再叠 0.6dp 描边和 6dp 软阴影
+                    // 在浅灰底上"托起"。比首页沿用 floatingActionBg 时明显得多。
+                    .background(arkdoColors.topicDetailReplyFabBg)
+                    .border(0.6.dp, arkdoColors.topicDetailReplyFabBorder, CircleShape)
+                    .shadow(elevation = 6.dp, shape = CircleShape, ambientColor = ArkdoFixedColors.ShadowSoft, spotColor = ArkdoFixedColors.ShadowSoft)
                     .clickable(onClick = viewModel::openComposerForTopic),
                 contentAlignment = Alignment.Center
             ) {
-                FaIcon("reply", ArkdoFixedColors.BrandBlue, 22.dp)
+                // 鸿蒙用 sys.symbol.message_fill（22dp、品牌蓝），Android 走 FA 库用 comment.svg
+                // （同样的实心消息气泡形态，对齐 symbol message_fill 视觉）。
+                FaIcon("comment", ArkdoFixedColors.BrandBlue, 22.dp)
             }
         }
     }
@@ -358,7 +374,13 @@ private fun TopicDetailContent(
     onCopyPostLink: (TopicPost) -> String? = { null },
     onJumpToPost: (Int) -> Unit = {},
     onRepliesLoad: (TopicPost, (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) },
-    onReply: (TopicPost) -> Unit = {}
+    onReply: (TopicPost) -> Unit = {},
+    topicCreatedById: Long = -1,
+    sharedIssueVisible: Boolean = false,
+    sharedIssueCreated: Boolean = false,
+    sharedIssueCount: Int = 0,
+    sharedIssueCanCreate: Boolean = false,
+    onToggleSharedIssue: ((SharedIssueResult?) -> Unit) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
@@ -418,11 +440,18 @@ private fun TopicDetailContent(
         ) { post ->
             TopicPostItem(
                 post = post,
+                topicCreatedById = topicCreatedById,
                 flashTargetPostId = flashTargetPostId,
                 onOpenLink = onOpenLink,
                 onOpenImages = onOpenImages,
                 onReply = onReply,
                 onJumpToPost = onJumpToPost,
+                // 「俺也一样」：话题级功能，仅一楼渲染（页面只对一楼下发，对齐鸿蒙）。
+                sharedIssueVisible = post.postNumber == 1 && sharedIssueVisible,
+                sharedIssueCreated = sharedIssueCreated,
+                sharedIssueCount = sharedIssueCount,
+                sharedIssueCanCreate = sharedIssueCanCreate,
+                onToggleSharedIssue = onToggleSharedIssue,
                 onToggleReaction = onToggleReaction,
                 onToggleBookmark = onToggleBookmark,
                 onCopyPostLink = onCopyPostLink,

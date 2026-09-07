@@ -501,6 +501,47 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
+     * linux.do shared issue（"俺也一样"）toggle：POST /solution/shared_issue，form body topic_id。
+     * 纯翻转端点——点/撤同一地址；响应 { count, user_created_shared_issue } 即翻转后的权威新态。
+     * notifyChallenge:true——与书签/评论一致：撞 CF 时触发静默恢复，下一次点击就能过。
+     * （对齐鸿蒙 toggleSharedIssue。）
+     */
+    suspend fun toggleSharedIssue(topicId: Long): NetworkResult<SharedIssueResult> {
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.postForm(
+            "/solution/shared_issue",
+            "topic_id=$topicId",
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse<SharedIssueResult>(
+                response.statusCode,
+                response.challengeState,
+                "站点\"俺也一样\"响应为空。"
+            )
+        return try {
+            // SharedIssueResult 的 @SerialName 已对齐响应字段（user_created_shared_issue / count），
+            // 直接反序列化即得权威新态（created 语义 = user_created_shared_issue）。
+            val result = json.decodeFromString<SharedIssueResult>(data)
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = result
+            )
+        } catch (_: Exception) {
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点\"俺也一样\"响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /**
      * 阅读上报（后台 POST，不触发 Challenge 弹窗）
      */
     suspend fun reportTimings(
@@ -656,7 +697,14 @@ class TopicService(private val bridge: JsonNetworkClient) {
             likeCount = payload.like_count,
             viewCount = payload.views,
             createdAt = payload.created_at,
-            postStream = PostStream(posts = posts, stream = stream)
+            postStream = PostStream(posts = posts, stream = stream),
+            userId = payload.user_id,
+            details = payload.details?.let { d ->
+                TopicDetails(
+                    createdBy = d.createdBy?.id?.let { id -> CreatedBy(id = id, username = "") },
+                    notificationLevel = null
+                )
+            }
         )
     }
 
@@ -818,7 +866,20 @@ data class DiscourseTopicDetail(
     // linux.do 详情接口的 tags 是对象数组（{id,name,slug}），不是字符串数组 ——
     // 按 List<String> 解析会在 $.tags[0] 直接抛 "Expected beginning of the string"。
     val tags: List<DiscourseTag>? = null,
-    val fancy_title: String? = null
+    val fancy_title: String? = null,
+    // 主题作者：details.created_by.id 优先，回退顶层 user_id（对齐鸿蒙 mapCreatedById）。
+    val user_id: Long? = null,
+    val details: DiscourseTopicDetails? = null
+)
+
+@Serializable
+data class DiscourseTopicDetails(
+    @SerialName("created_by") val createdBy: DiscourseCreatedBy? = null
+)
+
+@Serializable
+data class DiscourseCreatedBy(
+    val id: Long? = null
 )
 
 @Serializable
@@ -1006,3 +1067,10 @@ internal fun buildCreateReplyPayload(
         put("reply_to_post_number", replyToPostNumber)
     }
 }
+
+/** POST /solution/shared_issue 响应包装（对齐鸿蒙 DiscourseSharedIssueResponse）。 */
+@Serializable
+data class DiscourseSharedIssueResponse(
+    val count: Int? = null,
+    @SerialName("user_created_shared_issue") val userCreatedSharedIssue: Boolean? = null
+)

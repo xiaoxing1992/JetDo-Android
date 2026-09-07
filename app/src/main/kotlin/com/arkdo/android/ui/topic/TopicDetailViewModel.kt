@@ -7,6 +7,7 @@ import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.PostReaction
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.topic.PostDataSource
@@ -455,6 +456,18 @@ class TopicDetailViewModel @Inject constructor(
         return "${AppConstants.BASE_URL}/t/$slug/${topic.id}/${post.postNumber}"
     }
 
+    /**
+     * 「俺也一样」toggle（对齐鸿蒙 toggleMeToo）：不做乐观更新——点击即转圈（由 UI 层
+     * meTooRequesting 承担），发网络等结果；成功用服务端权威新态覆盖，失败回 null 由 UI 保持原态。
+     */
+    fun toggleSharedIssue(done: (SharedIssueResult?) -> Unit) {
+        val topicId = currentTopicId ?: return done(null)
+        viewModelScope.launch {
+            val result = topicService.toggleSharedIssue(topicId)
+            done(if (result.success) result.data else null)
+        }
+    }
+
     /** 屏幕消费一次性滚动请求后调用，避免重组时重复触发。 */
     fun consumeScrollRequest() {
         _uiState.update { it.copy(scrollRequestPostNumber = null) }
@@ -478,6 +491,11 @@ class TopicDetailViewModel @Inject constructor(
                 hasMore = laterCount > 0,
                 hasEarlier = earlierCount > 0,
                 earlierCount = earlierCount,
+                // 「俺也一样」话题级态随详情下发（对齐鸿蒙 mapTopicDetail 的字段透传）。
+                sharedIssueVisible = detail.sharedIssueVisible == true,
+                sharedIssueCreated = detail.userCreatedSharedIssue == true,
+                sharedIssueCount = detail.sharedIssueCount ?: 0,
+                sharedIssueCanCreate = detail.canCreateSharedIssue == true,
                 loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了"
             )
         }
@@ -528,5 +546,10 @@ data class TopicDetailUiState(
     val composerPlaceholder: String = "回复当前话题",
     val composerReplyToPostNumber: Int? = null,
     val pendingReplyText: String = "",
-    val isSubmittingReply: Boolean = false
+    val isSubmittingReply: Boolean = false,
+    // 「俺也一样」（shared issue，话题级）：可见性/已点/计数/当前用户能否点。
+    val sharedIssueVisible: Boolean = false,
+    val sharedIssueCreated: Boolean = false,
+    val sharedIssueCount: Int = 0,
+    val sharedIssueCanCreate: Boolean = false
 )

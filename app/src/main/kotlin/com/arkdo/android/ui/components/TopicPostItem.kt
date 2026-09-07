@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -49,6 +50,7 @@ import androidx.compose.ui.window.Popup
 import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
+import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.ui.utils.RelativeTime
 
@@ -99,7 +101,14 @@ fun TopicPostItem(
     onToggleReaction: (TopicPost, String, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onToggleBookmark: (TopicPost, onDone: (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     onCopyPostLink: (TopicPost) -> String? = { null },
-    onRepliesLoad: (TopicPost, onDone: (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) }
+    onRepliesLoad: (TopicPost, onDone: (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) },
+    // 「俺也一样」（shared issue，话题级，仅一楼渲染）：可见性/已点/计数/能否点 由页面下发；
+    // toggle 上抛页面发网络，回传服务端权威新态（null=失败回滚）。对齐鸿蒙同名 @Prop。
+    sharedIssueVisible: Boolean = false,
+    sharedIssueCreated: Boolean = false,
+    sharedIssueCount: Int = 0,
+    sharedIssueCanCreate: Boolean = false,
+    onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {}
 ) {
     val colors = arkdoColors
     val context = LocalContext.current
@@ -130,6 +139,8 @@ fun TopicPostItem(
     var repliesExpanded by remember(post.id) { mutableStateOf(false) }
     var repliesLoading by remember(post.id) { mutableStateOf(false) }
     var replies by remember(post.id) { mutableStateOf<List<TopicPost>>(emptyList()) }
+
+    // 「俺也一样」（shared issue）本地显示态由 PostFooter 自持（显示状态，随楼层 key 重建）。
 
     Column(
         modifier = modifier
@@ -373,13 +384,61 @@ private fun PostFooter(
     onMoreExpand: () -> Unit,
     onCopyLink: () -> Unit,
     onBookmarkToggle: () -> Unit,
-    onRepliesToggle: () -> Unit
+    onRepliesToggle: () -> Unit,
+    // 「俺也一样」（shared issue）。
+    sharedIssueVisible: Boolean = false,
+    sharedIssueCreated: Boolean = false,
+    sharedIssueCount: Int = 0,
+    sharedIssueCanCreate: Boolean = false,
+    onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {}
 ) {
     val colors = arkdoColors
     // icon_muted（浅 #BDBDBD / 深 #5C626B，源 Palette 值）。
     val iconMuted = if (isSystemInDarkTheme()) Color(0xFF5C626B) else Color(0xFFBDBDBD)
+    val context = LocalContext.current
+
+    // 「俺也一样」本地显示态：初始取 props（话题级值），toggle 后用服务端权威新态覆盖。
+    var sharedIssueCreatedLocal by remember { mutableStateOf(sharedIssueCreated) }
+    var sharedIssueCountLocal by remember { mutableStateOf(sharedIssueCount) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) {
+        // 「俺也一样」（shared issue）：悬在操作栏上方（对齐鸿蒙 MeTooButton 位置）。
+        // 已登录但无权（canCreate=false，如楼主）置灰禁用；未登录不禁用——点击须能触发登录拦截。
+        if (sharedIssueVisible) {
+            var meTooRequesting by remember { mutableStateOf(false) }
+            val meTooDisabled = com.arkdo.android.services.session.LoginGate.isLoggedIn(context) && !sharedIssueCanCreate
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .alpha(if (meTooDisabled) 0.45f else 1f)
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
+                    .border(1.dp, colors.meTooBorder, RoundedCornerShape(4.dp))
+                    .clickable(enabled = !meTooDisabled && !meTooRequesting) {
+                        meTooRequesting = true
+                        onToggleSharedIssue { result ->
+                            meTooRequesting = false
+                            if (result != null) {
+                                sharedIssueCreatedLocal = result.created
+                                sharedIssueCountLocal = result.count
+                            }
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                when {
+                    meTooRequesting -> LoadingDot()
+                    sharedIssueCreatedLocal -> FaIcon("hand", colors.brand, 16.dp)
+                    else -> FaIcon("hand", colors.meTooFg, 16.dp)
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (sharedIssueCreatedLocal) "俺也一样($sharedIssueCountLocal)" else "俺也一样",
+                    fontSize = 15.sp,
+                    color = colors.meTooFg
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
