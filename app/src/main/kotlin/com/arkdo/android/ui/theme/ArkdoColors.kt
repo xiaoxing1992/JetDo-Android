@@ -34,12 +34,23 @@ data class ArkdoColorTokens(
     val floatingActionHighlight: Color,
     val fabComposeBg: Color,
     val fabTopFg: Color,
+    // 详情页专用浅灰底（对齐鸿蒙 topic_detail_page_bg：亮 #F2F3F5 / 暗同 pageBg）。
+    // 首页用 pageBg（白），详情页用这个——源码在详情页外层 Column 上显式设过该色，是「鸿蒙详情页更灰」的根因。
+    val topicDetailPageBg: Color,
+    // 详情页回复 FAB 玻璃态：鸿蒙靠 backgroundEffect 模糊背后页面得到亮白圆。
+    // Android 无背后模糊时给一个高亮色值 + 阴影，让按钮在浅灰底上"托起"——按 brightness 反插到底色之上。
+    val topicDetailReplyFabBg: Color,
+    val topicDetailReplyFabBorder: Color,
     // 沉浸式输入条（详情页底部回复浮层）：对应鸿蒙 immersive_input_* 三色。
     val immersiveInputBarBg: Color,
     val immersiveInputFieldBg: Color,
     val immersiveInputBarHighlight: Color,
     /** 增量插入时新行的高亮底色；淡出目标是同色全透明，避免过渡中途跳色。 */
-    val incomingHighlight: Color
+    val incomingHighlight: Color,
+    // 「俺也一样」按钮（对齐鸿蒙 me_too_fg / me_too_border）与 boost 气泡底（boost_bubble_bg）。
+    val meTooFg: Color,
+    val meTooBorder: Color,
+    val boostBubbleBg: Color
 ) {
     /** 高亮淡出终点：同色 alpha=0，鸿蒙用 #00E8F1FE / #0013202D 表达的就是这个。 */
     val incomingHighlightFaded: Color get() = incomingHighlight.copy(alpha = 0f)
@@ -67,6 +78,16 @@ val ArkdoLightColors = ArkdoColorTokens(
     floatingActionHighlight = Color(0x59FFFFFF),
     fabComposeBg = Color(0xFF0088CC),
     fabTopFg = Color(0xFF5A6169),
+    // 详情页回复 FAB 底色：模拟鸿蒙 backgroundEffect(blur=28) 后的"亮白圆"观感。
+    // 鸿蒙源 20% 灰 + 强磨砂，模糊均色后接近 #E8EAEC 这种亮白。Android 侧无背后模糊时直接给
+    // 一个对应亮度的色，让按钮在 topicDetailPageBg(#F2F3F5) 上有清晰的"托起"感。
+    // 暗色主题维持深色——浅灰背景下也按 20% 主题底色（暗 #2A2E33）线性插值到 ~#3A3D42 区间。
+    topicDetailPageBg = Color(0xFFF2F3F5),
+    topicDetailReplyFabBg = Color(0xFFF8F9FB),
+    topicDetailReplyFabBorder = Color(0xFFB0B5BC),
+    meTooFg = Color(0xFF434343),
+    meTooBorder = Color(0xFFD3D3D3),
+    boostBubbleBg = Color(0xFFE6E8EB),
     immersiveInputBarBg = Color(0xB3F2F3F5),
     immersiveInputFieldBg = Color(0x80FFFFFF),
     immersiveInputBarHighlight = Color(0x66FFFFFF),
@@ -95,6 +116,12 @@ val ArkdoDarkColors = ArkdoColorTokens(
     floatingActionHighlight = Color(0x59FFFFFF),
     fabComposeBg = Color(0xFF3AA3DC),
     fabTopFg = Color(0xFFC5CAD1),
+    topicDetailPageBg = Color(0xFF17191D),
+    topicDetailReplyFabBg = Color(0xFF26292E),
+    topicDetailReplyFabBorder = Color(0xFF3A3D42),
+    meTooFg = Color(0xFFC8CCD2),
+    meTooBorder = Color(0xFF3A3D42),
+    boostBubbleBg = Color(0xFF26292E),
     immersiveInputBarBg = Color(0xB32A2E33),
     immersiveInputFieldBg = Color(0x80505760),
     immersiveInputBarHighlight = Color(0x66FFFFFF),
@@ -128,6 +155,9 @@ object ArkdoFixedColors {
 
     /** flair 徽章缺省底色。 */
     val FlairFallbackBg = Color(0xFFBE123C)
+
+    /** 悬浮按钮/胶囊软阴影（对齐鸿蒙 SHADOW_SOFT，亮/暗统一 13% 黑，不随主题变）。 */
+    val ShadowSoft = Color(0x22000000)
 }
 
 val LocalArkdoColors = staticCompositionLocalOf { ArkdoLightColors }

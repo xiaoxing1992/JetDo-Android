@@ -27,6 +27,7 @@ class TopicDetailParsingTest {
                 "avatar_template": "/user_avatar/linux.do/sayqz/{size}/1_2.png",
                 "animated_avatar": "//linuxdo-uploads.s3.ldstatic.com/original/4X/a/b/c.gif",
                 "cooked": "<p>hi</p>",
+                "user_id": 101010,
                 "post_id": 1
               }
             ],
@@ -40,9 +41,29 @@ class TopicDetailParsingTest {
           ],
           "id": 2860794,
           "title": "一个真实形态的话题",
-          "posts_count": 3
+          "posts_count": 3,
+          "user_id": 98765,
+          "details": {
+            "created_by": {
+              "id": 101010,
+              "username": "sayqz"
+            }
+          }
         }
     """.trimIndent()
+
+    // TOPIC OWNER 数据链：楼主 id = details.created_by.id 优先、回退顶层 user_id（对齐鸿蒙
+    // mapCreatedById）；楼层 user_id 与其相等才标。此前屏幕层传的是 topic.userId，且楼层
+    // user_id 未进断言，标记从未渲染。
+    @Test
+    fun `楼主id解析与楼层userId匹配`() {
+        val detail = json.decodeFromString<DiscourseTopicDetail>(payload)
+        val createdById = detail.details?.createdBy?.id ?: detail.user_id
+        org.junit.Assert.assertEquals(101010L, createdById)
+        val post = detail.post_stream?.posts?.first()
+        org.junit.Assert.assertEquals(101010L, post?.user_id)
+        org.junit.Assert.assertEquals(createdById, post?.user_id)
+    }
 
     @Test
     fun `对象数组形态的 tags 正常解析`() {
