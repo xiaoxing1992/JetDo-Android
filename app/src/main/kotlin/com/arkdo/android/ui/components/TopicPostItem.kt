@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import coil3.compose.AsyncImage
+import com.arkdo.android.data.models.AcceptedAnswer
 import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.services.content.parseInlines
 import com.arkdo.android.data.models.SharedIssueResult
@@ -100,6 +101,8 @@ fun TopicPostItem(
     onOpenLink: (String) -> Unit = {},
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onOpenUser: (User) -> Unit = {},
+    // 采纳答案面板:仅一楼下发非空数组(对齐鸿蒙:postNumber===1 才传 detail.acceptedAnswers)。
+    acceptedAnswers: List<AcceptedAnswer> = emptyList(),
     onReply: (TopicPost) -> Unit = {},
     onJumpToPost: (Int) -> Unit = {},
     onToggleReaction: (TopicPost, String, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
@@ -113,9 +116,11 @@ fun TopicPostItem(
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
     onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {},
-    // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除回调。
+    // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除/新增回调。
     boostDeleteTargetId: Long = 0,
+    boostDeleteLoadingId: Long = 0L,
     onToggleBoostDelete: (boostId: Long) -> Unit = {},
+    onDeleteBoost: (TopicPost, PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onAddBoost: (TopicPost) -> Unit = {}
 ) {
     val colors = arkdoColors
@@ -167,6 +172,16 @@ fun TopicPostItem(
                 onLinkClick = onOpenLink,
                 modifier = Modifier.padding(top = 12.dp)
             )
+
+            // 采纳答案面板:仅一楼渲染(对齐鸿蒙 AcceptedAnswerPanel 位置:正文后、楼主标记前)。
+            if (acceptedAnswers.isNotEmpty()) {
+                AcceptedAnswerPanel(
+                    answers = acceptedAnswers,
+                    onJumpToPost = onJumpToPost,
+                    onOpenImages = onOpenImages,
+                    onOpenLink = onOpenLink
+                )
+            }
 
             // 楼主标记：本楼作者 = 主题作者时，正文末尾右下角「TOPIC OWNER」
             // （对齐官网 .cooked::after：小号、斜体、加粗、#00AEFF、右浮动）。
@@ -249,7 +264,10 @@ fun TopicPostItem(
                     canAddBoost = post.canBoost == true,
                     currentUserId = com.arkdo.android.services.session.LoginGate.currentUserId(context),
                     deleteTargetBoostId = boostDeleteTargetId,
+                    boostDeleteLoadingId = boostDeleteLoadingId,
+                    showLastVisitedLine = showLastVisitedLine,
                     onToggleBoostDelete = { onToggleBoostDelete(it) },
+                    onDeleteBoost = { b, done -> onDeleteBoost(post, b, done) },
                     onAddBoost = { onAddBoost(post) },
                     onOpenUser = onOpenUser
                 )
@@ -416,9 +434,11 @@ private fun PostFooter(
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
     onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {},
-    // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除回调。
+    // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除/新增回调。
     boostDeleteTargetId: Long = 0,
+    boostDeleteLoadingId: Long = 0L,
     onToggleBoostDelete: (boostId: Long) -> Unit = {},
+    onDeleteBoost: (TopicPost, PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onAddBoost: (TopicPost) -> Unit = {}
 ) {
     val colors = arkdoColors
@@ -433,8 +453,7 @@ private fun PostFooter(
     Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) {
         // 「俺也一样」（shared issue）：悬在操作栏上方（对齐鸿蒙 MeTooButton 位置）。
         // 已登录但无权（canCreate=false，如楼主）置灰禁用；未登录不禁用——点击须能触发登录拦截。
-        if (sharedIssueVisible) {
-            var meTooRequesting by remember { mutableStateOf(false) }
+        if (sharedIssueVisible) {            var meTooRequesting by remember { mutableStateOf(false) }
             val meTooDisabled = com.arkdo.android.services.session.LoginGate.isLoggedIn(context) && !sharedIssueCanCreate
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -808,13 +827,22 @@ private fun BoostRow(
     canAddBoost: Boolean,
     currentUserId: Long,
     deleteTargetBoostId: Long,
+    boostDeleteLoadingId: Long = 0L,
+    showLastVisitedLine: Boolean = false,
     onToggleBoostDelete: (Long) -> Unit,
+    onDeleteBoost: (PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     onAddBoost: () -> Unit,
     onOpenUser: (User) -> Unit
 ) {
     val colors = arkdoColors
 
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 0.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // 对齐鸿蒙 BoostRow 外边距：上 2、下留出与底分隔线的间距。普通 1dp 灰线
+            // 鸿蒙不加下间距（margin bottom 0）；「上次访问」红线文字上侵入时留 8。
+            .padding(top = 2.dp, bottom = if (showLastVisitedLine) 8.dp else 0.dp)
+    ) {
         // FlexWrap 等价:FlowRow 逐行排列,超出换行。
         androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
@@ -853,15 +881,28 @@ private fun BoostRow(
                     )
                     if (expanded) {
                         Spacer(modifier = Modifier.width(4.dp))
+                        val deleting = boostDeleteLoadingId == boost.id
                         Box(
                             modifier = Modifier
                                 .size(21.dp)
                                 .clip(CircleShape)
                                 .background(Color(0x14000000))
-                                .clickable { onToggleBoostDelete(boost.id) },
+                                .clickable(enabled = !deleting) {
+                                    if (deleting) return@clickable
+                                    onDeleteBoost(boost) { ok ->
+                                        if (ok) {
+                                            // 删除成功：VM 已把该条从楼层摘掉并把展开态复位，
+                                            // 这里只确保图标不再残留展开态。
+                                        }
+                                    }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            FaIcon("trash-can", Color(0xFFE45735), 14.dp)
+                            if (deleting) {
+                                LoadingDot()
+                            } else {
+                                FaIcon("trash-can", Color(0xFFE45735), 14.dp)
+                            }
                         }
                     }
                 }

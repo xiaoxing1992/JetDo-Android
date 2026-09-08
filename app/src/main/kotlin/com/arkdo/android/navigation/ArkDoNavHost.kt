@@ -19,6 +19,7 @@ import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.RootTabScreen
+import com.arkdo.android.ui.user.UserProfileScreen
 import com.arkdo.android.ui.topic.TopicDetailScreen
 
 /**
@@ -113,6 +114,22 @@ fun ArkDoNavHost(
                     navTarget?.let { parts.add("target=$it") }
                     val query = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
                     navController.navigate("${Routes.TOPIC_DETAIL}/$navTopicId$query")
+                },
+                onNavigateToUser = { user ->
+                    // 点作者/评论楼层/boost 头像 → 他人主页（对齐鸿蒙 openUserProfile）。
+                    val name = user.name?.takeIf { it.isNotEmpty() }
+                    val avatar = user.avatarTemplate
+                    val username = user.username
+                    if (username.isNotEmpty()) {
+                        val q = buildString {
+                            name?.let { append("?displayName=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                            avatar?.takeIf { a -> a.isNotEmpty() }?.let {
+                                if (isNotEmpty()) append("&") else append("?")
+                                append("avatar=${java.net.URLEncoder.encode(it, "UTF-8")}")
+                            }
+                        }
+                        navController.navigate("${Routes.USER_PROFILE}/$username$q")
+                    }
                 }
             )
         }
@@ -120,6 +137,30 @@ fun ArkDoNavHost(
         // 调试日志页（排障用，Profile 页 FAB 进入）
         composable(Routes.DEBUG_LOG) {
             DebugLogScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        // 他人主页:帖子里点作者/评论楼层/boost 头像进入。
+        composable(
+            route = Routes.USER_PROFILE + "/{username}?displayName={displayName}&avatar={avatar}",
+            arguments = listOf(
+                navArgument("username") { type = NavType.StringType },
+                navArgument("displayName") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("avatar") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { entry ->
+            val args = entry.arguments
+            UserProfileScreen(
+                username = args?.getString("username").orEmpty(),
+                seedDisplayName = args?.getString("displayName"),
+                seedAvatarTemplate = args?.getString("avatar"),
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTopic = { topicId, title, postNumber ->
+                    val parts = mutableListOf<String>()
+                    title.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                    postNumber?.let { parts.add("target=$it") }
+                    val q = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
+                }
+            )
         }
 
 

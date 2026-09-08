@@ -80,6 +80,8 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.R
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.AcceptedAnswer
+import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicTag
@@ -121,6 +123,7 @@ fun TopicDetailScreen(
     highlightTarget: String? = null,
     onNavigateBack: () -> Unit,
     onNavigateToTopic: (topicId: Long, slug: String?, targetPostNumber: Int?) -> Unit = { _, _, _ -> },
+    onNavigateToUser: (User) -> Unit = {},
     viewModel: TopicDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -136,6 +139,12 @@ fun TopicDetailScreen(
     var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
     // 链接路由（LinkRouter，对齐鸿蒙四类）：TOPIC → 原生详情页（本帖内则直接定位）；
     // DOWNLOAD / USER / WEB 的原生页面未迁移前暂交系统浏览器，日志留痕。
+    // 点作者/评论楼层/boost 头像 → 他人主页(对齐鸿蒙 openUserProfileFor)。
+    val onOpenUser: (User) -> Unit = { user ->
+        if (user.username.isNotEmpty()) {
+            onNavigateToUser(user)
+        }
+    }
     val onOpenUri: (String) -> Unit = { url ->
         when (val route = resolveLinkRoute(url)) {
             is LinkRoute.Topic -> {
@@ -243,6 +252,7 @@ fun TopicDetailScreen(
                                     isLoadingEarlier = ui.isLoadingEarlier,
                                     onLoadEarlier = { viewModel.loadEarlierPosts() },
                                     onOpenLink = onOpenUri,
+                                    onOpenUser = onOpenUser,
                                     onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
                                     onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
                                     onCopyPostLink = { p -> viewModel.postLink(p) },
@@ -254,9 +264,12 @@ fun TopicDetailScreen(
                                     sharedIssueCreated = ui.sharedIssueCreated,
                                     sharedIssueCount = ui.sharedIssueCount,
                                     sharedIssueCanCreate = ui.sharedIssueCanCreate,
+                                    acceptedAnswers = topic.acceptedAnswers.orEmpty(),
                                     onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) },
                                     boostDeleteTargetId = ui.boostDeleteTargetId,
+                                    boostDeleteLoadingId = ui.boostDeleteLoadingId,
                                     onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
+                                    onDeleteBoost = { p, b, done -> viewModel.deleteBoost(p, b, done) },
                                     onAddBoost = viewModel::openComposerForBoost
                                 )
                             }
@@ -377,6 +390,7 @@ private fun TopicDetailContent(
     isLoadingEarlier: Boolean = false,
     onLoadEarlier: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
+    onOpenUser: (User) -> Unit = {},
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onToggleReaction: (TopicPost, String, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onToggleBookmark: (TopicPost, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
@@ -389,10 +403,13 @@ private fun TopicDetailContent(
     sharedIssueCreated: Boolean = false,
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
+    acceptedAnswers: List<AcceptedAnswer> = emptyList(),
     onToggleSharedIssue: ((SharedIssueResult?) -> Unit) -> Unit = {},
     // discourse-boosts：按楼删除目标 + 删除/新增回调。
     boostDeleteTargetId: Long = 0L,
+    boostDeleteLoadingId: Long = 0L,
     onToggleBoostDelete: (Long) -> Unit = {},
+    onDeleteBoost: (TopicPost, PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onAddBoost: (TopicPost) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
@@ -454,6 +471,8 @@ private fun TopicDetailContent(
             TopicPostItem(
                 post = post,
                 topicCreatedById = topicCreatedById,
+                onOpenUser = onOpenUser,
+                acceptedAnswers = if (post.postNumber == 1) acceptedAnswers else emptyList(),
                 flashTargetPostId = flashTargetPostId,
                 onOpenLink = onOpenLink,
                 onOpenImages = onOpenImages,
@@ -466,7 +485,9 @@ private fun TopicDetailContent(
                 sharedIssueCanCreate = sharedIssueCanCreate,
                 onToggleSharedIssue = onToggleSharedIssue,
                 boostDeleteTargetId = boostDeleteTargetId,
+                boostDeleteLoadingId = boostDeleteLoadingId,
                 onToggleBoostDelete = onToggleBoostDelete,
+                onDeleteBoost = onDeleteBoost,
                 onAddBoost = onAddBoost,
                 onToggleReaction = onToggleReaction,
                 onToggleBookmark = onToggleBookmark,
