@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -39,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -523,35 +526,50 @@ private fun CircleCard(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     items.forEach { item ->
-                        // 次数挂头像右下角,偏移 +3/+3;白底(卡底色)圆角 8 细描边。
+                        // 对齐鸿蒙 CircleRow:Stack(BottomEnd){ UserAvatar(30); 徽标 offset(3,3) }。
+                        // 外层不裁切(Stack 不裁,徽标越界保留);数字独立成高 15 的居中盒,保证垂直居中
+                        // (ArkUI Text 在 15 内自带垂直居中,Compose Text 需要盒子代劳)。
                         Box(
                             modifier = Modifier
                                 .padding(end = 8.dp)
-                                .clip(CircleShape)
+                                .size(30.dp)
                                 .clickable {
                                     val u = item.user
                                     if (u.username.isNotEmpty()) {
                                         onOpenUser(u.username, u.name, u.avatarTemplate)
                                     }
-                                }
+                                },
+                            contentAlignment = Alignment.BottomEnd
                         ) {
                             UserAvatar(user = item.user, avatarSize = 30.dp)
                             if (item.count > 1) {
-                                Text(
-                                    text = "${item.count}",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = arkdoColors.textSecondary,
-                                    textAlign = TextAlign.Center,
+                                Box(
                                     modifier = Modifier
                                         .offset(x = 3.dp, y = 3.dp)
-                                        .height(15.dp)
-                                        .widthIn(min = 15.dp)
+                                        .heightIn(min = 15.dp)
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(arkdoColors.surfaceCard)
                                         .border(0.5.dp, arkdoColors.border, RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 3.dp)
-                                )
+                                        .padding(horizontal = 3.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${item.count}",
+                                        // 不用固定 height(15)+小行高:9sp 字形自然行高约 10-11sp,
+                                        // 行高压到 9 会让字形溢出行盒顶部,被胶囊圆角裁成"显示不全"。
+                                        // 行高给 12(略高于字形),胶囊用 minHeight 保住鸿蒙的 15dp,
+                                        // 文本小则胶囊仍 15、绝不裁剪;Center 负责真正的垂直居中。
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = arkdoColors.textSecondary,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        style = TextStyle(
+                                            lineHeight = 12.sp,
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                                        )
+                                    )
+                                }
                             }
                         }
                     }

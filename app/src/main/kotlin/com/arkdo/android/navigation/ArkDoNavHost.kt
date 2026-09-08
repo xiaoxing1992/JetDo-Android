@@ -155,6 +155,22 @@ fun ArkDoNavHost(
                 seedDisplayName = args?.getString("displayName"),
                 seedAvatarTemplate = args?.getString("avatar"),
                 onNavigateBack = { navController.popBackStack() },
+                onOpenUser = { uname, dname, avatarTemplate ->
+                    // 互动圈头像可点:递归 push 同一路由(对齐鸿蒙 openUserProfile 递归跳转),
+                    // 返回栈逐层回退,子页不重新拉取父页数据。
+                    if (uname.isNotEmpty()) {
+                        val q = buildString {
+                            dname?.takeIf { it.isNotEmpty() }?.let {
+                                append("?displayName=${java.net.URLEncoder.encode(it, "UTF-8")}")
+                            }
+                            avatarTemplate?.takeIf { it.isNotEmpty() }?.let {
+                                if (isNotEmpty()) append("&") else append("?")
+                                append("avatar=${java.net.URLEncoder.encode(it, "UTF-8")}")
+                            }
+                        }
+                        navController.navigate("${Routes.USER_PROFILE}/$uname$q")
+                    }
+                },
                 onOpenTopic = { topicId, title, postNumber ->
                     val parts = mutableListOf<String>()
                     title.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }

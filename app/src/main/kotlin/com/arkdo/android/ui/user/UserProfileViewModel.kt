@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /** 分段下标（对齐鸿蒙 SEGMENT_*）。 */
@@ -133,9 +134,18 @@ class UserProfileViewModel @Inject constructor(
     private fun loadSummary(username: String) {
         viewModelScope.launch {
             val result = userProfileService.getSummary(username)
+            Timber.i("[ArkDO][UserProfile] summary result user=%s success=%s status=%d error=%s",
+                username, result.success, result.statusCode,
+                result.error?.let { "${it.code}: ${it.message}" } ?: "-")
             if (loadedUsername != username) return@launch
             if (result.success && result.data != null) {
+                val s = result.data
+                Timber.i("[ArkDO][UserProfile] summary loaded user=%s topics=%d replies=%d circle=%d/%d/%d",
+                    username, s.topTopics.size, s.topReplies.size,
+                    s.mostRepliedToUsers.size, s.mostLikedUsers.size, s.mostLikedByUsers.size)
                 _uiState.update { it.copy(summary = result.data) }
+            } else {
+                _uiState.update { it.copy(error = result.error?.message ?: "摘要加载失败") }
             }
         }
     }
