@@ -6,6 +6,7 @@ import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.data.models.UserProfileDetail
 import com.arkdo.android.data.models.UserSummary
+import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.user.UserProfileService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -68,8 +69,29 @@ class UserProfileViewModel @Inject constructor(
 
     private var loadedUsername: String? = null
 
+    private fun loadCategoriesIfNeeded() {
+        if (_uiState.value.categories.isNotEmpty()) {
+            return
+        }
+        viewModelScope.launch {
+            val loaded = CategoryIndex.loadIfNeeded(
+                bridge = ArkWebNetworkBridge,
+                ready = true,
+                alreadyLoaded = _uiState.value.categories.isNotEmpty(),
+                logTag = "[ArkDO][UserProfile]"
+            ) ?: return@launch
+            _uiState.update { it.copy(categories = loaded) }
+        }
+    }
+
     fun load(username: String, displayName: String?, avatarTemplate: String?) {
         if (username.isBlank()) return
+        // 同一用户重复进入(子页返回):数据已在,直接跳过不重拉(对齐鸿蒙 loadedUsername 校验)。
+        if (loadedUsername == username && _uiState.value.profile != null) {
+            _uiState.update { it.copy(displayName = displayName ?: it.displayName, avatarTemplate = avatarTemplate ?: it.avatarTemplate) }
+            return
+        }
+        loadCategoriesIfNeeded()
         _uiState.update {
             it.copy(
                 username = username,
