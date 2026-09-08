@@ -557,6 +557,7 @@ class TopicDetailViewModel @Inject constructor(
     fun deleteBoost(post: TopicPost, boost: PostBoost, done: (Boolean) -> Unit) {
         val topicId = currentTopicId ?: return done(false)
         viewModelScope.launch {
+            _uiState.update { it.copy(boostDeleteLoadingId = boost.id) }
             val result = topicService.deleteBoost(boost.id, topicId)
             if (result.success) {
                 dataSource.findById(post.id)?.let { target ->
@@ -566,13 +567,14 @@ class TopicDetailViewModel @Inject constructor(
                         it.copy(
                             posts = dataSource.snapshotPosts,
                             boostDeleteTargetId = 0L,
+                            boostDeleteLoadingId = 0L,
                             actionMessage = "Boost 已删除"
                         )
                     }
                 }
                 done(true)
             } else {
-                _uiState.update { it.copy(actionMessage = "Boost 删除失败，请稍后重试") }
+                _uiState.update { it.copy(boostDeleteLoadingId = 0L, actionMessage = "Boost 删除失败，请稍后重试") }
                 done(false)
             }
         }
@@ -665,5 +667,7 @@ data class TopicDetailUiState(
     // boost：当前展开删除图标的 boost id（0=没有，同一时刻只展开一条，对齐鸿蒙 deleteTargetBoostId）。
     val boostDeleteTargetId: Long = 0L,
     // boost 目标楼 id：>0 时回复输入浮层处于 boost 模式（对齐鸿蒙 boostTargetPostId）。
-    val boostTargetPostId: Long = 0L
+    val boostTargetPostId: Long = 0L,
+    // 正在删除的 boost id（转圈防重复，对齐鸿蒙 deletingBoostId）。
+    val boostDeleteLoadingId: Long = 0L
 )

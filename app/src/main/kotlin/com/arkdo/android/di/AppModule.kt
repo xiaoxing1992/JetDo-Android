@@ -11,6 +11,7 @@ import com.arkdo.android.BuildConfig
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.auth.AuthService
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.services.user.UserProfileService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -85,5 +86,11 @@ object AppModule {
     @Singleton
     fun provideAuthService(): AuthService {
         return AuthService(ArkWebNetworkBridge)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserProfileService(): UserProfileService {
+        return UserProfileService(ArkWebNetworkBridge)
     }
 }
