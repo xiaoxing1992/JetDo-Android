@@ -10,6 +10,8 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -20,9 +22,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.navigation.Routes
+import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeScreen
 import com.arkdo.android.ui.home.HomeViewModel
@@ -98,13 +100,23 @@ fun RootTabScreen(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Routes.HOME) {
+                val state by homeViewModel.uiState.collectAsState()
+                val context = androidx.compose.ui.platform.LocalContext.current
                 HomeScreen(
                     isWebViewReady = isWebViewReady,
                     viewModel = homeViewModel,
                     onTopicClick = { topicId, targetPostNumber ->
-                        // target 非空 = 未读行跳楼：详情页加载后滚动到该楼层。
+                        // target 非空 = 未读行跳楼:详情页加载后滚动到该楼层。
                         val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
+                    },
+                    onComposeClick = {
+                        // 发帖前登录闸门:未登录弹登录页,回来后用户自己再点发帖(对齐鸿蒙 openComposer)。
+                        if (LoginGate.ensureLoggedIn(context)) {
+                            val categoryId = state.listQuery.category?.id?.takeIf { it > 0 }
+                            val arg = categoryId?.let { "?categoryId=$it" } ?: ""
+                            navController.navigate("${Routes.NEW_TOPIC}$arg")
+                        }
                     }
                 )
             }

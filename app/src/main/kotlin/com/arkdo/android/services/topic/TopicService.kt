@@ -12,6 +12,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -115,14 +116,38 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
-     * 全站标签联想。抽屉的标签搜索框用它，对齐鸿蒙 TopicService.searchTagsSiteWide()。
+     * 发帖/回复时限定分类的标签联想,对齐鸿蒙 TopicService.searchTags(categoryId, ...)。
+     * 标签隶属分类,/tags/filter/search 带 categoryId 只回该分类下的候选(空 q 即热门前几个)。
      *
-     * pm_only 的标签不在公开列表里出现，直接滤掉。
+     * pm_only 的标签不在公开列表里出现,直接滤掉。
+     */
+    suspend fun searchTags(categoryId: Long, query: String): NetworkResult<List<TagSuggestion>> {
+        return fetchTagSuggestions(query, emptyList(), categoryId)
+    }
+
+    /**
+     * 全站标签联想。抽屉的标签搜索框用它,对齐鸿蒙 TopicService.searchTagsSiteWide()。
+     *
+     * pm_only 的标签不在公开列表里出现,直接滤掉。
      */
     suspend fun searchTagsSiteWide(query: String): NetworkResult<List<TagSuggestion>> {
-        val path = "/tags/filter/search?q=${
-            java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20")
-        }&limit=$TAG_SEARCH_LIMIT&filterForInput=true"
+        return fetchTagSuggestions(query, emptyList(), null)
+    }
+
+    /** 标签联想请求与解析:发帖(限定分类)与搜索(全站)共用,只差 categoryId 带不带。 */
+    private suspend fun fetchTagSuggestions(
+        query: String,
+        selectedTagIds: List<Long>,
+        categoryId: Long?
+    ): NetworkResult<List<TagSuggestion>> {
+        val path = buildString {
+            append("/tags/filter/search?q=")
+            append(java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20"))
+            append("&limit=$TAG_SEARCH_LIMIT")
+            if (categoryId != null) append("&categoryId=$categoryId")
+            selectedTagIds.forEach { append("&selected_tag_ids%5B%5D=$it") }
+            append("&filterForInput=true")
+        }
 
         val response = bridge.getJson(path)
         if (!response.success || response.data == null) {
@@ -689,7 +714,69 @@ class TopicService(private val bridge: JsonNetworkClient) {
         )
     }
 
-    // ========== 数据映射（精简版，完整实现需参考 TopicModels.kt） ==========
+    /**
+     * 发新主题:POST /posts,与回帖同端点,靠 title + category、且不带 topic_id 来区分。
+     * 成功响应同样是 { action:'create_post', post:{...} },post.topic_id 即新主题 id;
+     * 进审核队列时为 { action:'enqueued', pending_post:{...} },此时没有可跳转的主题。
+     * 标题长度/分类权限等规则不在本地猜,交服务端裁决,错误原文经 error.message 上抛。
+     * (对齐鸿蒙 TopicService.createTopic + CreateTopicFlow.submitNewTopic。)
+     */
+    suspend fun createTopic(
+        title: String,
+        categoryId: Long,
+        raw: String,
+        tags: List<String> = emptyList(),
+        typingDurationMs: Long = 0,
+        composerOpenDurationMs: Long = 0
+    ): NetworkResult<CreateTopicOutcome> {
+        val payload = buildCreateNewTopicPayload(
+            title = title,
+            categoryId = categoryId,
+            raw = raw,
+            tags = tags,
+            typingDurationMs = typingDurationMs,
+            composerOpenDurationMs = composerOpenDurationMs
+        )
+        // 官方 composer 发新帖时停在列表页,Referer 给站点根即可(带上以过 CSRF/来源校验)。
+        val referrer = "${AppConstants.BASE_URL}/"
+
+        val response = bridge.postJson(
+            "/posts",
+            payload.toString(),
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点发帖响应为空。"
+            )
+        return runCatching {
+            val outcome = parseCreateTopicOutcome(data, json)
+                ?: return@runCatching NetworkResults.unexpectedResponse(
+                    response.statusCode,
+                    response.challengeState,
+                    "站点发帖响应缺少主题数据。"
+                )
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = outcome
+            )
+        }.getOrElse {
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点发帖响应不是有效 JSON。"
+            )
+        }
+    }
+
+    // ========== 数据映射(精简版,完整实现需参考 TopicModels.kt) ==========
 
     private fun mapTopics(sourceTopics: List<DiscourseTopic>, sourceUsers: List<DiscourseUser>?): List<Topic> {
         val userMap = sourceUsers?.associateBy { it.id } ?: emptyMap()
@@ -984,6 +1071,9 @@ data class DiscoursePostStream(
 data class DiscoursePost(
     val id: Long? = null,
     val post_number: Int? = null,
+    // 发新主题响应(POST /posts)会回带 topic_id/topic_slug,createTopic 解析跳转用。
+    val topic_id: Long? = null,
+    val topic_slug: String? = null,
     val username: String? = null,
     val name: String? = null,
     val avatar_template: String? = null,
@@ -1105,6 +1195,12 @@ data class CreateReplyOutcome(
     val pendingPost: PendingPost? = null
 )
 
+/** 发新主题结果:直接发布则带新主题 id(可跳转);进审核队列则只有 pending。 */
+data class CreateTopicOutcome(
+    val topicId: Long? = null,
+    val pending: Boolean = false
+)
+
 /** POST /posts 响应包装。pending_post 字段结构与 PendingPost（id/raw/created_at）一致，直接复用。 */
 @Serializable
 data class DiscourseCreatePostResponse(
@@ -1145,6 +1241,30 @@ internal fun parseCreateReplyResponse(
 }
 
 /**
+ * 解析 POST /posts 发新主题响应(纯函数,便于单测):
+ * - 直接发布:{ post:{ topic_id } } → 带新主题 id;
+ * - 进审核队列:{ action:'enqueued' } → 只有 pending;
+ * - 两类都不满足 → null(由调用方转为 unexpectedResponse「缺少主题数据」)。
+ */
+internal fun parseCreateTopicOutcome(body: String, json: Json): CreateTopicOutcome? {
+    val wrapper = try {
+        json.decodeFromString<DiscourseCreatePostResponse>(body)
+    } catch (_: SerializationException) {
+        return null
+    } catch (_: IllegalArgumentException) {
+        return null
+    }
+    val created = wrapper.post
+    if (created != null && created.topic_id != null) {
+        return CreateTopicOutcome(topicId = created.topic_id, pending = false)
+    }
+    if (wrapper.action == "enqueued" || wrapper.pendingPost != null) {
+        return CreateTopicOutcome(topicId = null, pending = true)
+    }
+    return null
+}
+
+/**
  * createReply 的 POST body（纯函数，便于单测）。逐字段对齐鸿蒙 CreateReplyPayload：
  * category / reply_to_post_number 仅在非空时下发（条件赋值）。
  */
@@ -1178,6 +1298,37 @@ internal fun buildCreateReplyPayload(
     if (replyToPostNumber != null) {
         put("reply_to_post_number", replyToPostNumber)
     }
+}
+
+/**
+ * createTopic 的 POST body(纯函数,便于单测)。逐字段对齐鸿蒙 CreateTopicPayload:
+ * 比回帖多了 title、category 恒带、draft_key 固定 'new_topic',且不带 topic_id;
+ * tags[] 传标签 name(不是 id,对齐官方 composer)。
+ */
+internal fun buildCreateNewTopicPayload(
+    title: String,
+    categoryId: Long,
+    raw: String,
+    tags: List<String> = emptyList(),
+    typingDurationMs: Long = 0,
+    composerOpenDurationMs: Long = 0
+): JsonObject = buildJsonObject {
+    put("raw", raw)
+    put("title", title)
+    put("category", categoryId)
+    put("unlist_topic", false)
+    put("is_warning", false)
+    put("archetype", "regular")
+    put("typing_duration_msecs", typingDurationMs.coerceAtLeast(0L))
+    put("composer_open_duration_msecs", composerOpenDurationMs.coerceAtLeast(0L))
+    put("composer_version", 1)
+    put("tags", buildJsonArray { tags.forEach { add(JsonPrimitive(it)) } })
+    put("featured_link", JsonNull)
+    put("shared_draft", false)
+    put("draft_key", "new_topic")
+    put("locale", "")
+    put("image_sizes", buildJsonObject {})
+    put("nested_post", true)
 }
 
 /** POST /solution/shared_issue 响应包装（对齐鸿蒙 DiscourseSharedIssueResponse）。 */
