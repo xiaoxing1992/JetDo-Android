@@ -51,9 +51,23 @@ class UserProfileViewModel @Inject constructor(
         // 关注按钮（discourse-follow）。
         val isFollowing: Boolean = false,
         val followPending: Boolean = false,
+        // 认可(discourse-category-experts)。
+        val endorseSheetVisible: Boolean = false,
+        val endorseLoading: Boolean = false,
+        val endorseSubmitting: Boolean = false,
+        val endorsableCategories: List<com.arkdo.android.data.models.EndorsableCategory> = emptyList(),
+        val remainingEndorsements: Int = 0,
+        val endorseSelectedIds: List<Long> = emptyList(),
         val categories: List<TopicCategory> = emptyList()
     ) {
         val displayUsername: String get() = username
+
+        /** 认可可用:detail 里插件字段存在即启用(对齐鸿蒙 endorsementAvailable)。 */
+        val canEndorse: Boolean get() = profile?.endorsementAvailable == true
+
+        /** 已认可分类数(按钮文案「已认可 · N」,对齐鸿蒙 endorsedCount)。 */
+        val endorsedCount: Int get() = profile?.endorsedCategoryIds?.size ?: 0
+
         val avatarUser: com.arkdo.android.data.models.User
             get() = profile?.toAvatarUser() ?: com.arkdo.android.data.models.User(
                 id = 0,
@@ -171,7 +185,11 @@ class UserProfileViewModel @Inject constructor(
         val target = !state.isFollowing
         _uiState.update { it.copy(followPending = true) }
         viewModelScope.launch {
-            val result = userProfileService.toggleFollow(state.username, target)
+            val result = if (target) {
+                userProfileService.followUser(state.username)
+            } else {
+                userProfileService.unfollowUser(state.username)
+            }
             _uiState.update {
                 it.copy(
                     followPending = false,
@@ -183,5 +201,80 @@ class UserProfileViewModel @Inject constructor(
 
     fun setCategories(categories: List<TopicCategory>) {
         _uiState.update { it.copy(categories = categories) }
+    }
+
+    // ==================== 认可(discourse-category-experts)====================
+
+    /** 打开认可弹窗:先复位在途状态,再拉可取分类(对齐鸿蒙 openEndorseSheet)。 */
+    fun openEndorseSheet() {
+        if (_uiState.value.endorseLoading || _uiState.value.endorseSubmitting) return
+        _uiState.update { it.copy(endorseSheetVisible = true) }
+        loadEndorsableCategories()
+    }
+
+    /** 加载可认可分类 + 今日剩余次数;预选当前已认可项(对齐鸿蒙 loadEndorsableCategories)。 */
+    fun loadEndorsableCategories() {
+        val state = _uiState.value
+        if (state.endorseLoading) return
+        // 编辑态预选:弹窗打开即反映当前认可状态。
+        _uiState.update {
+            it.copy(
+                endorseLoading = true,
+                endorseSelectedIds = it.profile?.endorsedCategoryIds ?: emptyList()
+            )
+        }
+        viewModelScope.launch {
+            val username = _uiState.value.username
+            val result = userProfileService.getEndorsableCategories(username)
+            _uiState.update {
+                it.copy(
+                    endorseLoading = false,
+                    endorsableCategories = if (result.success && result.data != null) result.data.categories else emptyList(),
+                    remainingEndorsements = if (result.success && result.data != null) result.data.remainingEndorsements else 0
+                )
+            }
+        }
+    }
+
+    /** 切换一个分类的勾选(对齐鸿蒙 toggleEndorseSelection)。 */
+    fun toggleEndorseSelection(categoryId: Long, checked: Boolean) {
+        _uiState.update { s ->
+            val current = s.endorseSelectedIds
+            val next = when {
+                checked && categoryId !in current -> current + categoryId
+                !checked && categoryId in current -> current - categoryId
+                else -> current
+            }
+            s.copy(endorseSelectedIds = next)
+        }
+    }
+
+    /** 提交认可(对齐鸿蒙 submitEndorse:成功后更新计数并关弹窗)。 */
+    fun submitEndorse() {
+        val state = _uiState.value
+        if (state.endorseSubmitting || state.endorseSelectedIds.isEmpty()) return
+        _uiState.update { it.copy(endorseSubmitting = true) }
+        viewModelScope.launch {
+            val username = _uiState.value.username
+            val selected = _uiState.value.endorseSelectedIds
+            val result = userProfileService.endorseCategories(username, selected)
+            _uiState.update { s ->
+                if (result.success) {
+                    val detail = s.profile?.also { it.endorsedCategoryIds = selected }
+                    s.copy(
+                        endorseSubmitting = false,
+                        endorseSheetVisible = false,
+                        profile = detail
+                    )
+                } else {
+                    s.copy(endorseSubmitting = false)
+                }
+            }
+        }
+    }
+
+    /** 关闭弹窗(拖拽收起 / ✕)。 */
+    fun dismissEndorseSheet() {
+        _uiState.update { it.copy(endorseSheetVisible = false) }
     }
 }

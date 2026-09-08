@@ -54,7 +54,10 @@ data class ArkdoColorTokens(
     // 个人主页等灰底容器页(对齐鸿蒙 page_bg_gray:亮 #F2F3F5 / 暗 #000000)。
     val pageBgGray: Color,
     // 白卡底(对齐鸿蒙 surface_card:亮 #FFFFFF / 暗 #191919)。
-    val surfaceCard: Color
+    val surfaceCard: Color,
+    // 认可/关注与警示语义色(对齐鸿蒙 ld_accent / ld_success / ld_danger)。
+    val ldSuccess: Color,
+    val ldDanger: Color
 ) {
     /** 高亮淡出终点：同色 alpha=0，鸿蒙用 #00E8F1FE / #0013202D 表达的就是这个。 */
     val incomingHighlightFaded: Color get() = incomingHighlight.copy(alpha = 0f)
@@ -97,7 +100,9 @@ val ArkdoLightColors = ArkdoColorTokens(
     immersiveInputBarBg = Color(0xB3F2F3F5),
     immersiveInputFieldBg = Color(0x80FFFFFF),
     immersiveInputBarHighlight = Color(0x66FFFFFF),
-    incomingHighlight = Color(0xFFE8F1FE)
+    incomingHighlight = Color(0xFFE8F1FE),
+    ldSuccess = Color(0xFF009900),
+    ldDanger = Color(0xFFC80001)
 )
 
 /** 暗色。对应鸿蒙 resources/dark/element/color.json。 */
@@ -133,7 +138,9 @@ val ArkdoDarkColors = ArkdoColorTokens(
     immersiveInputBarBg = Color(0xB32A2E33),
     immersiveInputFieldBg = Color(0x80505760),
     immersiveInputBarHighlight = Color(0x66FFFFFF),
-    incomingHighlight = Color(0xFF13202D)
+    incomingHighlight = Color(0xFF13202D),
+    ldSuccess = Color(0xFF4CAF50),
+    ldDanger = Color(0xFFE85D5D)
 )
 
 /**

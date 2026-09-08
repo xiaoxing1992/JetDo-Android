@@ -181,8 +181,8 @@ fun ArkDoNavHost(
                 onOpenBadges = { uname, count ->
                     navController.navigate("${Routes.BADGES}/$uname?badgeCount=$count")
                 },
-                onOpenActivity = { uname, title ->
-                    navController.navigate("${Routes.ACTIVITY_LIST}/$uname?filter=4,5&title=${java.net.URLEncoder.encode(title, "UTF-8")}")
+                onOpenActivity = { uname, filter, title ->
+                    navController.navigate("${Routes.ACTIVITY_LIST}/$uname?filter=${java.net.URLEncoder.encode(filter, "UTF-8")}&title=${java.net.URLEncoder.encode(title, "UTF-8")}")
                 }
             )
         }
