@@ -27,19 +27,27 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,7 +55,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.data.models.UserInteraction
 import com.arkdo.android.data.models.UserTopReply
@@ -88,11 +98,13 @@ fun UserProfileScreen(
     onOpenTopic: (topicId: Long, title: String, postNumber: Int?) -> Unit = { _, _, _ -> },
     onOpenUser: (username: String, displayName: String?, avatarTemplate: String?) -> Unit = { _, _, _ -> },
     onOpenBadges: (username: String, badgeCount: Int) -> Unit = { _, _ -> },
-    onOpenActivity: (username: String, title: String) -> Unit = { _, _ -> },
+    onOpenActivity: (username: String, filter: String, title: String) -> Unit = { _, _, _ -> },
+    onOpenWeb: (url: String, title: String?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(username, seedDisplayName, seedAvatarTemplate) {
         viewModel.load(username, seedDisplayName, seedAvatarTemplate)
@@ -136,7 +148,7 @@ fun UserProfileScreen(
                 .padding(horizontal = PageMargin)
         ) {
             Spacer(modifier = Modifier.height(CardGap))
-            IdentityCard(state = state)
+            IdentityCard(state = state, viewModel = viewModel, onOpenWeb = onOpenWeb)
             if (state.summary != null) {
                 BadgesCard(state = state, onAllBadges = { onOpenBadges(state.username, state.profile?.badgeCount ?: 0) })
                 CircleCard(state = state, onOpenUser = onOpenUser)
@@ -150,12 +162,155 @@ fun UserProfileScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+
+    // 认可弹窗(对齐鸿蒙 EndorseSheet.bindSheet:标题「{名字} 的优点是什么?」+ 分类多选
+    // + 「认可」主按钮 + 「今天还剩 N 个认可」,右上角自带 ✕)。
+    if (state.endorseSheetVisible) {
+        EndorseSheetContent(
+            state = state,
+            onToggle = viewModel::toggleEndorseSelection,
+            onSubmit = viewModel::submitEndorse,
+            onDismiss = viewModel::dismissEndorseSheet
+        )
+    }
 }
 
 @Composable
-private fun IdentityCard(state: UserProfileViewModel.UiState) {
+private fun EndorseSheetContent(
+    state: UserProfileViewModel.UiState,
+    onToggle: (Long, Boolean) -> Unit,
+    onSubmit: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = arkdoColors
+    val displayName = state.profile?.displayName?.takeIf { it.isNotEmpty() }
+        ?: state.displayName.takeIf { it.isNotEmpty() }
+        ?: state.displayUsername
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = colors.surfaceCard
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = "$displayName 的优点是什么?",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            )
+            when {
+                state.endorseLoading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = colors.ldAccent, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("加载可认可的类别", fontSize = 14.sp, color = colors.textSecondary)
+                    }
+                }
+                state.endorsableCategories.isEmpty() -> {
+                    Text(
+                        text = "暂无可认可的类别",
+                        fontSize = 14.sp,
+                        color = colors.textFaint,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .wrapContentHeight(Alignment.CenterVertically),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                else -> {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        state.endorsableCategories.forEach { category ->
+                            val checked = category.id in state.endorseSelectedIds
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { onToggle(category.id, !checked) }
+                                    .padding(top = 6.dp, bottom = 6.dp)
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { onToggle(category.id, it) },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = colors.ldAccent,
+                                        checkmarkColor = Color.White
+                                    )
+                                )
+                                Text(
+                                    text = category.name,
+                                    fontSize = 15.sp,
+                                    color = colors.textPrimary,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp)
+                    ) {
+                        val enabled = state.endorseSelectedIds.isNotEmpty() && !state.endorseSubmitting
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(19.dp))
+                                .background(colors.ldAccent.copy(alpha = if (enabled) 1f else 0.5f))
+                                .clickable(enabled = enabled, onClick = onSubmit)
+                                .padding(horizontal = 28.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "认可",
+                                fontSize = 15.sp,
+                                color = Color.White
+                            )
+                        }
+                        Text(
+                            text = "今天还剩 ${state.remainingEndorsements} 个认可",
+                            fontSize = 13.sp,
+                            color = colors.textFaint,
+                            modifier = Modifier.padding(start = 14.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 对齐鸿蒙 openSegmentAll():热门话题只看话题(4),热门回复只看回复(5),最近看全量(4,5)。 */
+private fun SegmentAllFilterAndTitle(segment: Int, nameLabel: String): Pair<String, String> =
+    when (segment) {
+        SEGMENT_TOP_TOPICS -> "4" to "$nameLabel 的话题"
+        SEGMENT_TOP_REPLIES -> "5" to "$nameLabel 的回复"
+        else -> "4,5" to "$nameLabel 的动态"
+    }
+
+@Composable
+private fun IdentityCard(
+    state: UserProfileViewModel.UiState,
+    viewModel: UserProfileViewModel,
+    onOpenWeb: (String, String?) -> Unit = { _, _ -> }
+) {
     val colors = arkdoColors
     val profile = state.profile
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -163,7 +318,7 @@ private fun IdentityCard(state: UserProfileViewModel.UiState) {
             .clip(RoundedCornerShape(CardRadius))
               .background(arkdoColors.surfaceCard)
     ) {
-        // 头像行：头像 64 + 昵称列 + （关注/认可按钮预留）。
+        // 头像行:头像 64 + 昵称列 + 右侧私信小按钮(与头像垂直居中)。
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -217,6 +372,34 @@ private fun IdentityCard(state: UserProfileViewModel.UiState) {
                     )
                 }
             }
+
+            // 私信小按钮:与头像垂直居中;图标 13 + 文字 13,白字 ld_accent 胶囊,右对齐。
+            // 恒显(鸿蒙对私信无字段条件),点开站内 new-message(对齐 openPrivateMessage)。
+            Box(
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(arkdoColors.ldAccent)
+                    .clickable {
+                        onOpenWeb(
+                            "https://linux.do/new-message?username=${state.username}",
+                            "私信 ${state.displayUsername}"
+                        )
+                    }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FaIcon("envelope", Color.White, 13.dp)
+                    Text(
+                        text = "私信",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        modifier = Modifier.padding(start = 5.dp)
+                    )
+                }
+            }
         }
 
         // 简介（最多 2 行）。
@@ -244,13 +427,55 @@ private fun IdentityCard(state: UserProfileViewModel.UiState) {
                 color = colors.textFaint,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = CardPadding, end = CardPadding, top = 4.dp, bottom = 8.dp)
+                    .padding(start = CardPadding, end = CardPadding, top = 4.dp, bottom = 2.dp)
             )
         }
 
-        HorizontalDivider(color = colors.border, thickness = 0.5.dp)
+        // 操作区:认可 + 关注同一行,各半宽;只渲染可用的(对齐鸿蒙 ActionButtons)。
+        // 鸿蒙顺序:meta → ActionButtons → Hairline(分割线)→ 统计区,按钮在分割线上方。
+        val canEndorse = state.canEndorse
+        val canFollow = profile?.canFollow == true
+        if (canEndorse || canFollow) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = CardPadding, end = CardPadding, top = 2.dp, bottom = 14.dp)
+            ) {
+                if (canEndorse) {
+                    ActionButton(
+                        onClick = { if (LoginGate.ensureLoggedIn(context)) viewModel.openEndorseSheet() },
+                        leadingIcon = if (state.endorsedCount > 0) "circle-check" else null,
+                        accent = state.endorsedCount > 0,
+                        loading = false,
+                        text = if (state.endorsedCount > 0) "已认可 · ${state.endorsedCount}" else "认可",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (canFollow) {
+                    ActionButton(
+                        onClick = { if (LoginGate.ensureLoggedIn(context)) viewModel.toggleFollow() },
+                        leadingIcon = if (state.isFollowing) "user-check" else "user-plus",
+                        accent = state.isFollowing,
+                        loading = state.followPending,
+                        text = if (state.isFollowing) "已关注" else "关注",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            // 无操作可显示时留一点底部间距,避免统计区贴着 meta 行。
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
-        // 统计网格：2 行 x 4 格。
+        // 操作区下方的分割线(对齐鸿蒙 HairlineInset:左右各留 CARD_PADDING)。
+        HorizontalDivider(
+            color = colors.border,
+            thickness = 0.5.dp,
+            modifier = Modifier.padding(horizontal = CardPadding)
+        )
+
+        // 统计网格:2 行 x 4 格。
         val stats = state.summary?.stats
         if (stats != null) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -323,6 +548,51 @@ private fun androidx.compose.foundation.layout.RowScope.SolvedCell(value: String
             color = arkdoColors.textFaint,
             modifier = Modifier.padding(top = 2.dp)
         )
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ActionButton(
+    onClick: () -> Unit,
+    text: String,
+    leadingIcon: String?,
+    accent: Boolean,
+    loading: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colors = arkdoColors
+    val fg = if (accent) colors.ldAccent else colors.textBody
+    Box(
+        modifier = modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(19.dp))
+            .background(colors.surfaceCard)
+            .border(1.dp, colors.border, RoundedCornerShape(19.dp))
+            .clickable(enabled = !loading, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = fg,
+                    strokeWidth = 2.dp
+                )
+            } else if (leadingIcon != null) {
+                FaIcon(leadingIcon, fg, 15.dp)
+            }
+            if (loading || leadingIcon != null) {
+                Spacer(modifier = Modifier.width(7.dp))
+            }
+            Text(
+                text = text,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = fg,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -585,7 +855,7 @@ private fun ContentCard(
     state: UserProfileViewModel.UiState,
     onOpenTopic: (Long, String, Int?) -> Unit,
     onSelectSegment: (Int) -> Unit = {},
-    onOpenActivity: (String, String) -> Unit = { _, _ -> }
+    onOpenActivity: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val colors = arkdoColors
     Column(
@@ -606,14 +876,20 @@ private fun ContentCard(
             SegmentTab("热门回复", SEGMENT_TOP_REPLIES, state.selectedSegment) { onSelectSegment(SEGMENT_TOP_REPLIES) }
             SegmentTab("最近", SEGMENT_RECENT, state.selectedSegment) { onSelectSegment(SEGMENT_RECENT) }
             Spacer(modifier = Modifier.weight(1f))
-            // 「全部 ›」对齐鸿蒙内容卡右角:进通用动态列表。
+            // 「全部 ›」对齐鸿蒙 openSegmentAll():不切分段,按当前分段选动态过滤器——
+            // 热门话题=只看话题(4),热门回复=只看回复(5),最近=全量(4,5)。
+            // 鸿蒙 onClick 的 Column 无 click 阻断,不会误触身后 tab,这里不用 onSelectSegment。
             Text(
                 text = "全部 ›",
                 fontSize = 13.sp,
                 color = arkdoColors.ldAccent,
                 modifier = Modifier
                     .padding(start = 14.dp, end = 2.dp, bottom = 7.dp)
-                    .clickable { onSelectSegment(SEGMENT_RECENT); onOpenActivity(state.username, "全部动态") }
+                    .clickable {
+                        // 不再本地切 segment —— 只按当前分段选过滤器进动态页(对齐鸿蒙)。
+                        val (filter, title) = SegmentAllFilterAndTitle(state.selectedSegment, state.displayUsername)
+                        onOpenActivity(state.username, filter, title)
+                    }
             )
         }
         HorizontalDivider(color = colors.border, thickness = 0.5.dp, modifier = Modifier.padding(top = 10.dp))

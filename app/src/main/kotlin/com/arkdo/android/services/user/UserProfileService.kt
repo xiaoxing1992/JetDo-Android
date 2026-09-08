@@ -1,6 +1,8 @@
 package com.arkdo.android.services.user
 
 import com.arkdo.android.data.models.UserProfileDetail
+import com.arkdo.android.data.models.EndorsableCategoriesResult
+import com.arkdo.android.data.models.EndorsableCategory
 import com.arkdo.android.data.models.UserSummary
 import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.data.models.UserActivityPage
@@ -54,7 +56,33 @@ private data class DiscourseProfileUser(
     @SerialName("can_follow") val canFollow: Boolean? = null,
     @SerialName("is_followed") val isFollowed: Boolean? = null,
     @SerialName("total_followers") val totalFollowers: Int? = null,
-    @SerialName("total_following") val totalFollowing: Int? = null
+    @SerialName("total_following") val totalFollowing: Int? = null,
+    val status: com.arkdo.android.data.models.UserStatus? = null,
+    @SerialName("category_expert_endorsements")
+    val categoryExpertEndorsements: List<DiscourseEndorsementRecord>? = null
+)
+
+@Serializable
+private data class DiscourseEndorsementRecord(
+    @SerialName("category_id") val categoryId: Long? = null
+)
+
+@Serializable
+private data class DiscourseEndorsableCategory(
+    val id: Long? = null,
+    val name: String? = null,
+    val color: String? = null
+)
+
+@Serializable
+private data class DiscourseEndorsableExtras(
+    @SerialName("remaining_endorsements") val remainingEndorsements: Int? = null
+)
+
+@Serializable
+private data class DiscourseEndorsableResponse(
+    val categories: List<DiscourseEndorsableCategory>? = null,
+    val extras: DiscourseEndorsableExtras? = null
 )
 
 @Serializable
@@ -221,33 +249,41 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
                     response.statusCode, response.challengeState, "站点用户资料响应字段无效。"
                 )
             }
+            val detail = UserProfileDetail(
+                id = source.id,
+                username = source.username,
+                displayName = source.name,
+                title = source.title,
+                trustLevel = source.trustLevel,
+                createdAt = source.createdAt,
+                lastPostedAt = source.lastPostedAt,
+                badgeCount = source.badgeCount,
+                profileViewCount = source.profileViewCount,
+                avatarTemplate = source.avatarTemplate,
+                animatedAvatar = source.animatedAvatar?.takeIf { it.isNotEmpty() },
+                flairUrl = source.flairUrl?.takeIf { it.isNotEmpty() },
+                flairBgColor = source.flairBgColor?.takeIf { it.isNotEmpty() },
+                flairColor = source.flairColor?.takeIf { it.isNotEmpty() },
+                flairName = source.flairName?.takeIf { it.isNotEmpty() },
+                bioExcerpt = source.bioExcerpt,
+                websiteName = source.websiteName,
+                canFollow = source.canFollow,
+                isFollowed = source.isFollowed,
+                totalFollowers = source.totalFollowers,
+                totalFollowing = source.totalFollowing,
+                status = source.status
+            )
+            // discourse-category-experts:字段存在(哪怕空数组)= 插件启用,可认可。
+            // 元素 category_id 是当前登录者已认可的分类(对齐鸿蒙 Array.isArray 判定)。
+            source.categoryExpertEndorsements?.let { records ->
+                detail.endorsementAvailable = true
+                detail.endorsedCategoryIds = records.mapNotNull { it.categoryId }
+            }
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
                 challengeState = response.challengeState,
-                data = UserProfileDetail(
-                    id = source.id,
-                    username = source.username,
-                    displayName = source.name,
-                    title = source.title,
-                    trustLevel = source.trustLevel,
-                    createdAt = source.createdAt,
-                    lastPostedAt = source.lastPostedAt,
-                    badgeCount = source.badgeCount,
-                    profileViewCount = source.profileViewCount,
-                    avatarTemplate = source.avatarTemplate,
-                    animatedAvatar = source.animatedAvatar?.takeIf { it.isNotEmpty() },
-                    flairUrl = source.flairUrl?.takeIf { it.isNotEmpty() },
-                    flairBgColor = source.flairBgColor?.takeIf { it.isNotEmpty() },
-                    flairColor = source.flairColor?.takeIf { it.isNotEmpty() },
-                    flairName = source.flairName?.takeIf { it.isNotEmpty() },
-                    bioExcerpt = source.bioExcerpt,
-                    websiteName = source.websiteName,
-                    canFollow = source.canFollow,
-                    isFollowed = source.isFollowed,
-                    totalFollowers = source.totalFollowers,
-                    totalFollowing = source.totalFollowing
-                )
+                data = detail
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
@@ -466,14 +502,20 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
     }
 
-    /** 关注 toggle（discourse-follow）。对齐鸿蒙 setFollowing。 */
-    suspend fun toggleFollow(username: String, follow: Boolean): NetworkResult<Boolean> {
-        val path = if (follow) "/follow" else "/unfollow"
-        val response = bridge.postForm(
-            path,
-            "username=${java.net.URLEncoder.encode(username, "UTF-8")}",
-            JsonRequestOptions(notifyChallenge = true)
-        )
+    /** 关注(discourse-follow)。对齐鸿蒙 followUser:PUT /follow/{username}.json 空 body。 */
+    suspend fun followUser(username: String): NetworkResult<Boolean> {
+        val response = bridge.putJson("/follow/${java.net.URLEncoder.encode(username, "UTF-8")}.json")
+        return asWriteResult(response)
+    }
+
+    /** 取消关注:DELETE /follow/{username}.json(对齐鸿蒙 unfollowUser)。 */
+    suspend fun unfollowUser(username: String): NetworkResult<Boolean> {
+        val response = bridge.deleteForm("/follow/${java.net.URLEncoder.encode(username, "UTF-8")}.json", "")
+        return asWriteResult(response)
+    }
+
+    /** follow/unfollow 只判成败,响应体 {"success":"OK"} 不细解析。 */
+    private fun asWriteResult(response: NetworkResult<String>): NetworkResult<Boolean> {
         if (!response.success) {
             return NetworkResults.forwardFailure(response)
         }
@@ -483,6 +525,57 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             challengeState = response.challengeState,
             data = true
         )
+    }
+
+    /** 认可弹窗数据 GET /category-experts/endorsable-categories/{u}.json(对齐鸿蒙 getEndorsableCategories)。 */
+    suspend fun getEndorsableCategories(username: String): NetworkResult<EndorsableCategoriesResult> {
+        val path = "/category-experts/endorsable-categories/${java.net.URLEncoder.encode(username, "UTF-8")}.json"
+        val response = bridge.getJson(path)
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode, response.challengeState, "站点认可分类响应为空。"
+            )
+        return try {
+            val payload = json.decodeFromString<DiscourseEndorsableResponse>(data)
+            val categories = payload.categories.orEmpty().mapNotNull { c ->
+                if (c.id == null || c.name.isNullOrEmpty()) return@mapNotNull null
+                EndorsableCategory(id = c.id, name = c.name, color = c.color?.takeIf { it.isNotEmpty() })
+            }
+            val remaining = payload.extras?.remainingEndorsements ?: 0
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = EndorsableCategoriesResult(categories = categories, remainingEndorsements = remaining)
+            )
+        } catch (_: Exception) {
+            NetworkResults.unexpectedResponse(
+                response.statusCode, response.challengeState, "站点认可分类响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /** 提交认可 PUT /category-experts/endorse/{u}.json,body categoryIds[]=id(可多选)。 */
+    suspend fun endorseCategories(username: String, categoryIds: List<Long>): NetworkResult<Boolean> {
+        if (categoryIds.isEmpty()) {
+            return NetworkResult(
+                success = false,
+                statusCode = 0,
+                challengeState = ChallengeState.NONE,
+                error = com.arkdo.android.services.network.NetworkError(
+                    code = com.arkdo.android.services.network.NetworkErrorCode.UNEXPECTED_RESPONSE,
+                    message = "请至少选择一个类别。",
+                    requiresChallenge = false
+                )
+            )
+        }
+        val body = categoryIds.joinToString("&") { "categoryIds[]=$it" }
+        val path = "/category-experts/endorse/${java.net.URLEncoder.encode(username, "UTF-8")}.json"
+        val response = bridge.putForm(path, body)
+        return asWriteResult(response)
     }
 
 
