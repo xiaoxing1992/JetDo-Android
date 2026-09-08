@@ -253,11 +253,14 @@ fun ArkDoNavHost(
             val seedCategory = entry.arguments?.getLong("categoryId")?.takeIf { it > 0 }
             NewTopicScreen(
                 seedCategoryId = seedCategory,
-                onNavigateBack = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
                 onPublished = { topicId ->
-                    // 发帖成功:先广播会话变化让首页列表刷新,再进新帖详情。
+                    // 发帖成功:广播会话变化让首页列表刷新,弹掉发帖页再进新帖详情,
+                    // 使从详情返回时回到首页(而不是一张已发出的发帖页)。
                     com.arkdo.android.services.session.SessionEventBus.notifySessionChanged()
-                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId") {
+                        popUpTo(Routes.NEW_TOPIC) { inclusive = true }
+                    }
                 }
             )
         }

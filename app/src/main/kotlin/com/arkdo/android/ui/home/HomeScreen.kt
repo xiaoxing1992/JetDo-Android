@@ -67,8 +67,6 @@ import kotlinx.coroutines.launch
 //
 // 已对齐：顶栏构成与尺寸、新话题提示条、双态 FAB、列表页脚、各加载/空/错误态。
 // 尚未移植（鸿蒙侧独立组件，属另一批工作）：
-//   · 侧边版块筛选抽屉 CategoryDrawer + 边缘手势
-//   · 发帖浮层 ComposerPage
 //   · 版本公告 bindSheet
 //   · 沉浸式标题栏（列表穿到标题栏下方 + 渐变模糊）
 // ==========================================================================
@@ -87,7 +85,8 @@ fun HomeScreen(
     onTopicClick: (topicId: Long, targetPostNumber: Int?) -> Unit = { _, _ -> },
     onProfileClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
-    onSearchClick: () -> Unit = {}
+    onSearchClick: () -> Unit = {},
+    onComposeClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -126,7 +125,7 @@ fun HomeScreen(
             if (uiState.topics.isNotEmpty()) {
                 HomeFab(
                     showBackToTop = uiState.showBackToTopFab,
-                    onCompose = { /* TODO: 发帖浮层尚未移植 */ },
+                    onCompose = onComposeClick,
                     onBackToTop = { coroutineScope.launch { listState.animateScrollToItem(0) } }
                 )
             }
