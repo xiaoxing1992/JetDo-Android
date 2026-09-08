@@ -16,9 +16,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.arkdo.android.services.session.LoginGate
+import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.RootTabScreen
+import com.arkdo.android.ui.screens.WebViewPage
 import com.arkdo.android.ui.user.BadgesScreen
 import com.arkdo.android.ui.user.ActivityScreen
 import com.arkdo.android.ui.user.UserProfileScreen
@@ -183,6 +185,18 @@ fun ArkDoNavHost(
                 },
                 onOpenActivity = { uname, filter, title ->
                     navController.navigate("${Routes.ACTIVITY_LIST}/$uname?filter=${java.net.URLEncoder.encode(filter, "UTF-8")}&title=${java.net.URLEncoder.encode(title, "UTF-8")}")
+                },
+                onOpenWeb = { url, title ->
+                    // 私信/网页打开:走原生通用 WebView 页(对齐鸿蒙 openWebPage → AppRouteName.WEB)。
+                    // 目标整段 URL 都要作为单个路径段编码(& / ? 会让导航把它拆成 query 参数)。
+                    if (url.isNotEmpty()) {
+                        val q = buildString {
+                            title?.takeIf { it.isNotEmpty() }?.let {
+                                append("?title=${java.net.URLEncoder.encode(it, "UTF-8")}")
+                            }
+                        }
+                        navController.navigate("${Routes.WEBVIEW}/${java.net.URLEncoder.encode(url, "UTF-8")}$q")
+                    }
                 }
             )
         }
@@ -229,6 +243,44 @@ fun ArkDoNavHost(
             )
         }
 
+        // 发新主题页(首页 FAB 进入;发帖成功跳进新帖详情)。
+        composable(
+            route = Routes.NEW_TOPIC + "?categoryId={categoryId}",
+            arguments = listOf(
+                navArgument("categoryId") { type = NavType.LongType; defaultValue = -1L }
+            )
+        ) { entry ->
+            val seedCategory = entry.arguments?.getLong("categoryId")?.takeIf { it > 0 }
+            NewTopicScreen(
+                seedCategoryId = seedCategory,
+                onNavigateBack = { navController.popBackStack() },
+                onPublished = { topicId ->
+                    // 发帖成功:先广播会话变化让首页列表刷新,再进新帖详情。
+                    com.arkdo.android.services.session.SessionEventBus.notifySessionChanged()
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId")
+                }
+            )
+        }
+
+        // 通用 WebView 页(对齐鸿蒙 AppRouteName.WEB:私信 / 外站 / 站内非帖子页)。
+        composable(
+            route = Routes.WEBVIEW + "/{url}?title={title}",
+            arguments = listOf(
+                navArgument("url") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { entry ->
+            val args = entry.arguments
+            val rawUrl = args?.getString("url").orEmpty()
+            // URL 里可能带编码的 & / ?,取回后先 URL 解码还原完整地址。
+            val decoded = java.net.URLDecoder.decode(rawUrl, "UTF-8")
+            WebViewPage(
+                url = decoded,
+                pageTitle = args?.getString("title").orEmpty(),
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
         // TODO: 添加其他页面路由
         // composable(Routes.SETTINGS) { ... }
         }
@@ -271,5 +323,6 @@ object Routes {
     const val LEVEL_PROGRESS = "level_progress"
     const val BADGES = "badges"
     const val ACTIVITY_LIST = "activity_list"
+    const val NEW_TOPIC = "new_topic"
     const val WEBVIEW = "webview"
 }
