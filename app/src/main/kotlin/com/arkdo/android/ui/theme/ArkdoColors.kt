@@ -50,7 +50,11 @@ data class ArkdoColorTokens(
     // 「俺也一样」按钮（对齐鸿蒙 me_too_fg / me_too_border）与 boost 气泡底（boost_bubble_bg）。
     val meTooFg: Color,
     val meTooBorder: Color,
-    val boostBubbleBg: Color
+    val boostBubbleBg: Color,
+    // 个人主页等灰底容器页(对齐鸿蒙 page_bg_gray:亮 #F2F3F5 / 暗 #000000)。
+    val pageBgGray: Color,
+    // 白卡底(对齐鸿蒙 surface_card:亮 #FFFFFF / 暗 #191919)。
+    val surfaceCard: Color
 ) {
     /** 高亮淡出终点：同色 alpha=0，鸿蒙用 #00E8F1FE / #0013202D 表达的就是这个。 */
     val incomingHighlightFaded: Color get() = incomingHighlight.copy(alpha = 0f)
@@ -88,6 +92,8 @@ val ArkdoLightColors = ArkdoColorTokens(
     meTooFg = Color(0xFF434343),
     meTooBorder = Color(0xFFD3D3D3),
     boostBubbleBg = Color(0xFFE6E8EB),
+    pageBgGray = Color(0xFFF2F3F5),
+    surfaceCard = Color(0xFFFFFFFF),
     immersiveInputBarBg = Color(0xB3F2F3F5),
     immersiveInputFieldBg = Color(0x80FFFFFF),
     immersiveInputBarHighlight = Color(0x66FFFFFF),
@@ -122,6 +128,8 @@ val ArkdoDarkColors = ArkdoColorTokens(
     meTooFg = Color(0xFFC8CCD2),
     meTooBorder = Color(0xFF3A3D42),
     boostBubbleBg = Color(0xFF26292E),
+    pageBgGray = Color(0xFF000000),
+    surfaceCard = Color(0xFF191919),
     immersiveInputBarBg = Color(0xB32A2E33),
     immersiveInputFieldBg = Color(0x80505760),
     immersiveInputBarHighlight = Color(0x66FFFFFF),

@@ -19,6 +19,8 @@ import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.RootTabScreen
+import com.arkdo.android.ui.user.BadgesScreen
+import com.arkdo.android.ui.user.ActivityScreen
 import com.arkdo.android.ui.user.UserProfileScreen
 import com.arkdo.android.ui.topic.TopicDetailScreen
 
@@ -159,10 +161,57 @@ fun ArkDoNavHost(
                     postNumber?.let { parts.add("target=$it") }
                     val q = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
                     navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
+                },
+                onOpenBadges = { uname, count ->
+                    navController.navigate("${Routes.BADGES}/$uname?badgeCount=$count")
+                },
+                onOpenActivity = { uname, title ->
+                    navController.navigate("${Routes.ACTIVITY_LIST}/$uname?filter=4,5&title=${java.net.URLEncoder.encode(title, "UTF-8")}")
                 }
             )
         }
 
+
+        // 全部徽章页。
+        composable(
+            route = Routes.BADGES + "/{username}?badgeCount={badgeCount}",
+            arguments = listOf(
+                navArgument("username") { type = NavType.StringType },
+                navArgument("badgeCount") { type = NavType.StringType; nullable = true; defaultValue = "0" }
+            )
+        ) { entry ->
+            val args = entry.arguments
+            BadgesScreen(
+                username = args?.getString("username").orEmpty(),
+                badgeCount = args?.getString("badgeCount")?.toIntOrNull() ?: 0,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // 个人动态列表页。
+        composable(
+            route = Routes.ACTIVITY_LIST + "/{username}?filter={filter}&title={title}",
+            arguments = listOf(
+                navArgument("username") { type = NavType.StringType },
+                navArgument("filter") { type = NavType.StringType; nullable = true; defaultValue = "4,5" },
+                navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = "动态" }
+            )
+        ) { entry ->
+            val args = entry.arguments
+            ActivityScreen(
+                username = args?.getString("username").orEmpty(),
+                filter = args?.getString("filter") ?: "4,5",
+                pageTitle = args?.getString("title") ?: "动态",
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTopic = { tid, title, postNum ->
+                    val parts = mutableListOf<String>()
+                    title.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                    postNum?.let { parts.add("target=$it") }
+                    val q = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$tid$q")
+                }
+            )
+        }
 
         // TODO: 添加其他页面路由
         // composable(Routes.SETTINGS) { ... }

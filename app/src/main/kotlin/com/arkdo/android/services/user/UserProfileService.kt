@@ -3,8 +3,10 @@ package com.arkdo.android.services.user
 import com.arkdo.android.data.models.UserProfileDetail
 import com.arkdo.android.data.models.UserSummary
 import com.arkdo.android.data.models.UserActivityItem
+import com.arkdo.android.data.models.UserActivityPage
 import com.arkdo.android.data.models.SolvedPostPage
 import com.arkdo.android.data.models.SolvedPostItem
+import com.arkdo.android.data.models.UserBadgeGroup
 import com.arkdo.android.data.models.UserBadgeItem
 import com.arkdo.android.data.models.UserTopTopic
 import com.arkdo.android.data.models.UserTopReply
@@ -56,7 +58,12 @@ private data class DiscourseProfileUser(
 )
 
 @Serializable
-private data class DiscourseSummaryResponse(@SerialName("user_summary") val userSummary: DiscourseUserSummary? = null)
+private data class DiscourseSummaryResponse(
+    @SerialName("user_summary") val userSummary: DiscourseUserSummary? = null,
+    // 顶层徽章定义与话题字典(所有被引用话题,含热门回复所在话题)。
+    val badges: List<DiscourseSummaryBadge>? = null,
+    val topics: List<DiscourseSummaryTopic>? = null
+)
 
 @Serializable
 private data class DiscourseUserSummary(
@@ -68,9 +75,12 @@ private data class DiscourseUserSummary(
     @SerialName("post_count") val postCount: Int? = null,
     @SerialName("topics_entered") val topicsEntered: Int? = null,
     @SerialName("solved_count") val solvedCount: Int? = null,
-    @SerialName("badges") val badges: List<DiscourseSummaryBadge>? = null,
-    @SerialName("top_topics") val topTopics: List<DiscourseTopTopic>? = null,
-    @SerialName("top_replies") val topReplies: List<DiscourseTopReply>? = null,
+    // 本用户的徽章授予记录:badge_id 对应顶层 badges 定义(计数来自这里)。
+    @SerialName("badges") val grants: List<DiscourseBadgeGrant>? = null,
+    // 热门话题 id 列表(顺序即展示顺序),详情在顶层 topics。
+    @SerialName("topic_ids") val topicIds: List<Long>? = null,
+    // 获赞最多回复:自身无标题,需按 topic_id 去顶层 topics 关联。
+    val replies: List<DiscourseSummaryReply>? = null,
     @SerialName("most_replied_to_users") val mostRepliedToUsers: List<DiscourseInteraction>? = null,
     @SerialName("most_liked_users") val mostLikedUsers: List<DiscourseInteraction>? = null,
     @SerialName("most_liked_by_users") val mostLikedByUsers: List<DiscourseInteraction>? = null
@@ -82,45 +92,47 @@ private data class DiscourseSummaryBadge(
     val name: String? = null,
     @SerialName("badge_type_id") val badgeTypeId: Int? = null,
     val icon: String? = null,
-    val image: String? = null,
-    @SerialName("grant_count") val grantCount: Int? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
     val description: String? = null
 )
 
 @Serializable
-private data class DiscourseTopTopic(
-    val id: Long? = null,
-    val slug: String? = null,
-    val title: String? = null,
-    @SerialName("like_count") val likeCount: Int? = null,
-    @SerialName("created_at") val createdAt: String? = null,
-    @SerialName("category_id") val categoryId: Long? = null
-)
-
-@Serializable
-private data class DiscourseTopReply(
-    val id: Long? = null,
-    val slug: String? = null,
-    val title: String? = null,
-    @SerialName("like_count") val likeCount: Int? = null,
-    @SerialName("post_number") val postNumber: Int? = null,
-    @SerialName("created_at") val createdAt: String? = null,
-    @SerialName("category_id") val categoryId: Long? = null
-)
-
-@Serializable
-private data class DiscourseInteraction(
-    val user: DiscourseInteractionUser? = null,
+private data class DiscourseBadgeGrant(
+    @SerialName("badge_id") val badgeId: Long? = null,
     val count: Int? = null
 )
 
 @Serializable
-private data class DiscourseInteractionUser(
+private data class DiscourseSummaryTopic(
+    val id: Long? = null,
+    val title: String? = null,
+    val slug: String? = null,
+    @SerialName("like_count") val likeCount: Int? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("category_id") val categoryId: Long? = null
+)
+
+@Serializable
+private data class DiscourseSummaryReply(
+    @SerialName("topic_id") val topicId: Long? = null,
+    @SerialName("post_number") val postNumber: Int? = null,
+    @SerialName("like_count") val likeCount: Int? = null,
+    @SerialName("created_at") val createdAt: String? = null
+)
+
+// most_*_users 一条:BasicUser 字段与 count 同级(扁平,非嵌套 user 对象),对齐鸿蒙 DiscourseUserWithCount。
+@Serializable
+private data class DiscourseInteraction(
     val id: Long? = null,
     val username: String? = null,
     val name: String? = null,
     @SerialName("avatar_template") val avatarTemplate: String? = null,
-    @SerialName("animated_avatar") val animatedAvatar: String? = null
+    @SerialName("animated_avatar") val animatedAvatar: String? = null,
+    val count: Int? = null,
+    @SerialName("flair_url") val flairUrl: String? = null,
+    @SerialName("flair_bg_color") val flairBgColor: String? = null,
+    @SerialName("flair_color") val flairColor: String? = null,
+    @SerialName("flair_name") val flairName: String? = null
 )
 
 @Serializable
@@ -136,9 +148,34 @@ private data class DiscourseUserAction(
     @SerialName("category_id") val categoryId: Long? = null,
     val tags: List<String>? = null,
     @SerialName("created_at") val createdAt: String? = null,
+    // 动作发起人(自己的动态流与作者同一人),楼层作者头像用。
+    @SerialName("acting_user_id") val actingUserId: Long? = null,
+    @SerialName("acting_username") val actingUsername: String? = null,
+    @SerialName("acting_name") val actingName: String? = null,
+    @SerialName("acting_avatar_template") val actingAvatarTemplate: String? = null,
     val username: String? = null,
     val name: String? = null,
     @SerialName("avatar_template") val avatarTemplate: String? = null
+)
+
+@Serializable
+private data class DiscourseUserBadgesResponse(
+    val badges: List<DiscourseSummaryBadge>? = null,
+    @SerialName("badge_types") val badgeTypes: List<DiscourseBadgeType>? = null,
+    @SerialName("user_badges") val userBadges: List<DiscourseUserBadgeRecord>? = null
+)
+
+@Serializable
+private data class DiscourseBadgeType(
+    val id: Int? = null,
+    val name: String? = null
+)
+
+@Serializable
+private data class DiscourseUserBadgeRecord(
+    @SerialName("badge_id") val badgeId: Long? = null,
+    @SerialName("granted_at") val grantedAt: String? = null,
+    val count: Int? = null
 )
 
 @Serializable
@@ -237,6 +274,12 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
                     response.statusCode, response.challengeState, "站点用户摘要响应缺少 user_summary。"
                 )
             }
+            // 对齐鸿蒙映射:徽章取「顶层定义 ∩ 本用户授予计数」;热门话题按 topic_ids 顺序
+            // 关联顶层 topics;热门回复 replies 自身无标题,按 topic_id 关联;互动圈各取前 5。
+            val topicIndex = payload.topics.orEmpty().associateBy { it.id }
+            val grantCounts = src.grants.orEmpty().mapNotNull { g ->
+                g.badgeId?.let { it to (g.count ?: 0) }
+            }.toMap()
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
@@ -252,44 +295,45 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
                         topicsEntered = src.topicsEntered ?: 0,
                         solvedCount = src.solvedCount
                     ),
-                    topBadges = src.badges.orEmpty().mapNotNull { b ->
+                    topBadges = payload.badges.orEmpty().mapNotNull { b ->
                         if (b.id == null || b.name.isNullOrEmpty()) return@mapNotNull null
                         UserBadgeItem(
                             id = b.id,
                             name = b.name,
-                            badgeTypeId = b.badgeTypeId ?: 0,
-                            icon = b.icon,
-                            imageUrl = b.image,
-                            grantCount = b.grantCount,
-                            description = b.description
+                            badgeTypeId = b.badgeTypeId ?: 3,
+                            icon = b.icon?.takeIf { it.isNotEmpty() },
+                            imageUrl = b.imageUrl?.takeIf { it.isNotEmpty() },
+                            grantCount = grantCounts[b.id]?.takeIf { it > 0 }
                         )
-                    },
-                    topTopics = src.topTopics.orEmpty().mapNotNull { t ->
-                        if (t.id == null || t.title.isNullOrEmpty()) return@mapNotNull null
+                    }.take(8),
+                    topTopics = src.topicIds.orEmpty().mapNotNull { id ->
+                        val t = topicIndex[id] ?: return@mapNotNull null
+                        if (t.title.isNullOrEmpty()) return@mapNotNull null
                         UserTopTopic(
-                            topicId = t.id,
+                            topicId = id,
                             slug = t.slug,
                             title = t.title,
                             likeCount = t.likeCount ?: 0,
                             createdAt = t.createdAt,
                             categoryId = t.categoryId
                         )
-                    },
-                    topReplies = src.topReplies.orEmpty().mapNotNull { r ->
-                        if (r.id == null || r.title.isNullOrEmpty() || r.postNumber == null) return@mapNotNull null
+                    }.take(6),
+                    topReplies = src.replies.orEmpty().mapNotNull { r ->
+                        val t = r.topicId?.let { topicIndex[it] } ?: return@mapNotNull null
+                        if (t.title.isNullOrEmpty()) return@mapNotNull null
                         UserTopReply(
-                            topicId = r.id,
-                            slug = r.slug,
-                            topicTitle = r.title,
+                            topicId = r.topicId ?: 0,
+                            slug = t.slug,
+                            topicTitle = t.title,
                             likeCount = r.likeCount ?: 0,
-                            postNumber = r.postNumber,
+                            postNumber = r.postNumber ?: 1,
                             createdAt = r.createdAt,
-                            categoryId = r.categoryId
+                            categoryId = t.categoryId
                         )
-                    },
-                    mostRepliedToUsers = src.mostRepliedToUsers.orEmpty().mapNotNull { it.toInteraction() },
-                    mostLikedUsers = src.mostLikedUsers.orEmpty().mapNotNull { it.toInteraction() },
-                    mostLikedByUsers = src.mostLikedByUsers.orEmpty().mapNotNull { it.toInteraction() }
+                    }.take(6),
+                    mostRepliedToUsers = src.mostRepliedToUsers.orEmpty().mapNotNull { it.toInteraction() }.take(5),
+                    mostLikedUsers = src.mostLikedUsers.orEmpty().mapNotNull { it.toInteraction() }.take(5),
+                    mostLikedByUsers = src.mostLikedByUsers.orEmpty().mapNotNull { it.toInteraction() }.take(5)
                 )
             )
         } catch (_: Exception) {
@@ -299,45 +343,87 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
     }
 
-    /** 最近动态：/user_actions.json?filter=4,5。 */
-    suspend fun getRecentActivity(username: String): NetworkResult<List<UserActivityItem>> {
-        val response = bridge.getJson("/user_actions.json?filter=4,5&username=${java.net.URLEncoder.encode(username, "UTF-8")}")
+    /** 每页固定条数(服务端每页返回上限),据此判 hasMore(对齐鸿蒙 ACTIVITY_PAGE_SIZE)。 */
+    private companion object {
+        const val ACTIVITY_PAGE_SIZE = 30
+        const val USER_ACTIONS_FILTER_ALL = "4,5"
+    }
+
+    /** 动态分页：/user_actions.json?offset=&username=&filter=。offset = 已加载条数。 */
+    suspend fun getActivity(username: String, filter: String, offset: Int): NetworkResult<UserActivityPage> {
+        val path = "/user_actions.json?offset=$offset&username=${java.net.URLEncoder.encode(username, "UTF-8")}&filter=$filter"
+        val response = bridge.getJson(path)
         if (!response.success) {
             return NetworkResults.forwardFailure(response)
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户动态响应为空。"
+                response.statusCode, response.challengeState, "站点用户活动响应为空。"
             )
         return try {
             val payload = json.decodeFromString<DiscourseUserActionsResponse>(data)
-            val items = payload.user_actions.orEmpty().mapNotNull { a ->
-                if (a.actionType == null || a.topicId == null || a.title.isNullOrEmpty()) return@mapNotNull null
-                UserActivityItem(
-                    actionType = a.actionType,
-                    topicId = a.topicId,
-                    postNumber = a.postNumber,
-                    title = a.title,
-                    excerpt = a.excerpt ?: "",
-                    categoryId = a.categoryId,
-                    tags = emptyList(),
-                    createdAt = a.createdAt,
-                    username = a.username,
-                    name = a.name,
-                    avatarTemplate = a.avatarTemplate
-                )
-            }
+            val sourceActions = payload.user_actions.orEmpty()
+            val items = sourceActions.mapNotNull { a -> mapActionToActivity(a) }
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
                 challengeState = response.challengeState,
-                data = items
+                data = UserActivityPage(
+                    items = items,
+                    hasMore = sourceActions.size >= ACTIVITY_PAGE_SIZE
+                )
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户动态响应不是有效 JSON。"
+                response.statusCode, response.challengeState, "站点用户活动响应不是有效 JSON。"
             )
         }
+    }
+
+    /** 最近动态(他人主页内容卡「最近」段用,取第一页)。 */
+    suspend fun getRecentActivity(username: String): NetworkResult<List<UserActivityItem>> {
+        val page = getActivity(username, USER_ACTIONS_FILTER_ALL, 0)
+        if (!page.success || page.data == null) {
+            return NetworkResult(
+                success = page.success,
+                statusCode = page.statusCode,
+                challengeState = page.challengeState,
+                data = null,
+                error = page.error
+            )
+        }
+        return NetworkResult(
+            success = true,
+            statusCode = page.statusCode,
+            challengeState = page.challengeState,
+            data = page.data.items
+        )
+    }
+
+    /** 对齐鸿蒙 mapAction:作者 = acting_* (自己的动态流与作者同一人),摘要转纯文本。 */
+    private fun mapActionToActivity(a: DiscourseUserAction): UserActivityItem? {
+        if (a.actionType == null || a.topicId == null || a.title.isNullOrEmpty()) return null
+        val item = UserActivityItem(
+            actionType = a.actionType,
+            topicId = a.topicId,
+            postNumber = a.postNumber?.takeIf { it > 1 },
+            title = a.title,
+            excerpt = com.arkdo.android.services.content.CookedHtmlParser.toPlainText(a.excerpt ?: ""),
+            categoryId = a.categoryId,
+            tags = emptyList(),
+            createdAt = a.createdAt,
+            username = a.actingUsername ?: a.username,
+            name = a.actingName ?: a.name,
+            avatarTemplate = a.actingAvatarTemplate ?: a.avatarTemplate
+        )
+        item.author = User(
+            id = a.actingUserId ?: 0,
+            username = a.actingUsername ?: a.username ?: "",
+            name = a.actingName ?: a.name,
+            avatarTemplate = a.actingAvatarTemplate ?: a.avatarTemplate,
+            animatedAvatar = null
+        )
+        return item
     }
 
     /** 已解决列表：/solution/by_user.json。 */
@@ -399,16 +485,96 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         )
     }
 
+
+    /** 全部徽章：/user-badges/{u}.json?grouped=true,按金/银/铜分组(对齐鸿蒙 mapUserBadges)。 */
+    suspend fun getUserBadges(username: String): NetworkResult<List<UserBadgeGroup>> {
+        val path = "/user-badges/${java.net.URLEncoder.encode(username, "UTF-8")}.json?grouped=true"
+        val response = bridge.getJson(path)
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode, response.challengeState, "站点徽章响应为空。"
+            )
+        return try {
+            val payload = json.decodeFromString<DiscourseUserBadgesResponse>(data)
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = mapUserBadges(payload)
+            )
+        } catch (_: Exception) {
+            NetworkResults.unexpectedResponse(
+                response.statusCode, response.challengeState, "站点徽章响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /** 对齐鸿蒙 mapUserBadges:按 user_badges 顺序遍历归桶、去重;组序 金(1)→银(2)→铜(3)。 */
+    private fun mapUserBadges(payload: DiscourseUserBadgesResponse): List<UserBadgeGroup> {
+        val records = payload.userBadges.orEmpty()
+        if (records.isEmpty()) return emptyList()
+        val defById = payload.badges.orEmpty().associateBy { it.id }
+        val typeNames = payload.badgeTypes.orEmpty().associate { it.id to (it.name ?: "") }
+
+        val bucketByType = LinkedHashMap<Int, MutableList<UserBadgeItem>>()
+        val seen = HashSet<Long>()
+        for (record in records) {
+            val badgeId = record.badgeId ?: continue
+            if (!seen.add(badgeId)) continue
+            val def = defById[badgeId] ?: continue
+            if (def.id == null || def.name.isNullOrEmpty()) continue
+            val typeId = def.badgeTypeId ?: 3
+            var item = UserBadgeItem(id = def.id, name = def.name, badgeTypeId = typeId)
+            def.imageUrl?.takeIf { it.isNotEmpty() }?.let { u -> item = item.copy(imageUrl = u) }
+                ?: def.icon?.takeIf { it.isNotEmpty() }?.let { ic -> item = item.copy(icon = ic) }
+            def.description?.takeIf { it.isNotEmpty() }?.let { d -> item = item.copy(description = d) }
+            (record.count ?: 0).takeIf { it > 1 }?.let { c -> item = item.copy(grantCount = c) }
+            record.grantedAt?.takeIf { it.isNotEmpty() }?.let { g -> item = item.copy(grantedAt = g) }
+            bucketByType.getOrPut(typeId) { mutableListOf() }.add(item)
+        }
+        val groups = mutableListOf<UserBadgeGroup>()
+        bucketByType.keys.sorted().forEach { typeId ->
+            val list = bucketByType[typeId] ?: return@forEach
+            if (list.isNotEmpty()) {
+                groups.add(
+                    UserBadgeGroup(
+                        typeId = typeId.toInt(),
+                        typeName = badgeTypeName(typeId, typeNames),
+                        badges = list
+                    )
+                )
+            }
+        }
+        return groups
+    }
+
+    private fun badgeTypeName(typeId: Int, typeNames: Map<Int?, String>): String {
+        val name = typeNames[typeId]
+        if (!name.isNullOrEmpty()) return name
+        return when (typeId) {
+            1 -> "金牌"
+            2 -> "银牌"
+            else -> "铜牌"
+        }
+    }
+
     private fun DiscourseInteraction.toInteraction(): UserInteraction? {
-        val u = user ?: return null
-        if (u.id == null || u.username.isNullOrEmpty()) return null
+        // 对齐鸿蒙 mapInteractions:username 空即丢弃;id 缺省 0。
+        if (username.isNullOrEmpty()) return null
         return UserInteraction(
             user = User(
-                id = u.id,
-                username = u.username,
-                name = u.name,
-                avatarTemplate = u.avatarTemplate,
-                animatedAvatar = u.animatedAvatar?.takeIf { it.isNotEmpty() }
+                id = id ?: 0,
+                username = username,
+                name = name,
+                avatarTemplate = avatarTemplate,
+                animatedAvatar = animatedAvatar?.takeIf { it.isNotEmpty() },
+                flairUrl = flairUrl?.takeIf { it.isNotEmpty() },
+                flairBgColor = flairBgColor?.takeIf { it.isNotEmpty() },
+                flairColor = flairColor?.takeIf { it.isNotEmpty() },
+                flairName = flairName?.takeIf { it.isNotEmpty() }
             ),
             count = count ?: 0
         )
