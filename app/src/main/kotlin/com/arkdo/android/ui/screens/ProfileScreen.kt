@@ -83,15 +83,46 @@ private val CardPadding = 16.dp
 private val CardGap = 12.dp
 private val StatsAreaHeight = 126.dp
 
+/** 顶栏:返回 + 「我的」 + 设置。 */
+@Composable
+private fun ProfileTopBar(onNavigateBack: () -> Unit, onOpenSettings: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .height(56.dp)
+            .padding(horizontal = 4.dp)
+    ) {
+        IconButton(onClick = onNavigateBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+        }
+        Text(
+            text = "我的",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = arkdoColors.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onOpenSettings) {
+            Icon(Icons.Filled.Settings, contentDescription = "设置")
+        }
+    }
+}
+
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    onNavigateBack: () -> Unit,
-    onOpenSettings: () -> Unit,
+    // 独立页(push 进根导航)时传 null:顶栏只有返回箭头,无设置;底部 Tab 视图传空实现
+    // 并在 onOpenSettings/onShowSettings 给出设置入口。见 ProfileScaffold 的 showBar 参数。
+    onNavigateBack: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onOpenLogin: () -> Unit,
     onOpenWeb: (String, String?) -> Unit = { _, _ -> },
     onOpenActivity: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenBadges: (String, Int) -> Unit = { _, _ -> },
+    showTopBar: Boolean = true,
+    immersive: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -109,36 +140,26 @@ fun ProfileScreen(
         }
     }
 
-    Column(
-        modifier = modifier
+    // 状态栏条区:Tab 沉浸视图顶到状态栏,条区颜色由这里接管(亮 #F2F3F5 同 pageBgGray)。
+    // 用 Box 把灰色垫在内容底下,再正常 padding 内容避开状态栏。独立页走系统条默认色。
+    Box(
+        modifier = Modifier
             .fillMaxSize()
-            .background(arkdoColors.pageBgGray)
-    ) {
-        // 顶栏:返回 + 「我的」 + 设置。
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .height(56.dp)
-                .padding(horizontal = 4.dp)
-        ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Text(
-                text = "我的",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = arkdoColors.textPrimary,
-                modifier = Modifier.weight(1f)
+            .background(
+                if (immersive && !showTopBar) {
+                    com.arkdo.android.ui.theme.ArkdoFixedColors.ProfileStatusBarBg
+                } else {
+                    arkdoColors.pageBgGray
+                }
             )
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Filled.Settings, contentDescription = "设置")
-            }
+    ) {
+        if (showTopBar) {
+            ProfileTopBar(onNavigateBack = onNavigateBack, onOpenSettings = onOpenSettings)
+            HorizontalDivider(color = arkdoColors.border, thickness = 0.5.dp)
+        } else if (immersive) {
+            // 内容与状态栏条同灰:直接顶到屏幕顶,状态栏透明并透出本 Box 的灰底。
+            Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars))
         }
-        HorizontalDivider(color = arkdoColors.border, thickness = 0.5.dp)
-
         Column(
             modifier = Modifier
                 .fillMaxSize()

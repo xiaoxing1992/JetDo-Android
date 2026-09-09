@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -51,17 +52,23 @@ fun RootTabScreen(
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
     val homeViewModel: HomeViewModel = hiltViewModel()
 
-    // 启动会话检查（对齐鸿蒙 RootTabPage aboutToAppear 的 checkCurrentUser 触发点）：
-    // 写 LoginGate 登录态/信任等级镜像，详情页回复等写操作的闸门据此放行或拦截。
+    // 启动会话检查(对齐鸿蒙 RootTabPage handleArkWebReady:宿主就绪后才发 session 请求;
+    // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录)。
     val sessionViewModel: SessionViewModel = hiltViewModel()
-    LaunchedEffect(Unit) {
-        sessionViewModel.checkCurrentUser()
+    LaunchedEffect(isWebViewReady) {
+        if (isWebViewReady) {
+            sessionViewModel.checkCurrentUser()
+        }
     }
 
 
     // 抽屉包在最外层，才能盖住底部标签栏和上下系统栏。
     HomeDrawerHost(viewModel = homeViewModel) {
     Scaffold(
+        // 内容顶到屏幕顶(状态栏后),各 Tab 页自行处理状态栏 inset 与背景:
+        // 默认 contentWindowInsets 会把 NavHost 从状态栏下方排起,状态栏条恒为容器白,
+        // 「我的」灰页永远够不到状态栏区。关掉后由 HomeTitleBar/ProfileScreen 自己垫 inset。
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
                 TabItem.entries.forEach { tab ->
@@ -138,23 +145,14 @@ fun RootTabScreen(
                 NotificationScreen(navController = navController)
             }
             composable(Routes.PROFILE) {
-                // 个人中心(Tab 视图,保留底部导航)。
+                // 底部 Tab「我的」:沉浸式内容(无返回/设置栏,顶到状态栏),与独立页共用 ProfileScreen。
                 ProfileScreen(
-                    onNavigateBack = {
-                        tabNavController.navigate(Routes.HOME) {
-                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onOpenSettings = {
-                        // 设置页尚未迁移为原生路由,暂以调试/占位入口保留导航。
-                        navController.navigate(Routes.DEBUG_LOG)
-                    },
                     onOpenLogin = {
                         // 未登录「立即登录」→ 请求根层弹登录半窗。
                         LoginGate.requestLogin()
-                    }
+                    },
+                    showTopBar = false,
+                    immersive = true
                 )
             }
         }

@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -200,6 +203,8 @@ private fun HomeTitleBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // 状态栏 inset 由这里垫(根 Scaffold 已关掉系统栏排布,内容顶到屏幕顶)。
+            .windowInsetsPadding(WindowInsets.statusBars)
             .height(BAR_HEIGHT)
             .background(colors.pageBg)
             .padding(horizontal = 12.dp),
