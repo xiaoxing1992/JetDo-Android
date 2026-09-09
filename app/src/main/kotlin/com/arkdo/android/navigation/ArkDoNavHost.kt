@@ -19,6 +19,7 @@ import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.LoginScreen
+import com.arkdo.android.ui.screens.ProfileScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.screens.WebViewPage
 import com.arkdo.android.ui.user.BadgesScreen
@@ -76,6 +77,21 @@ fun ArkDoNavHost(
             )
         }
 
+        // 个人中心:首页右上角头像 push 进来的根级全屏页(对齐鸿蒙 AppRouteName.PROFILE)。
+        // 它压在 ROOT(含底部导航)之上,能盖住底栏;返回 pop 回 ROOT。
+        composable(Routes.PROFILE) {
+            ProfileScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenSettings = {
+                    // 设置页尚未迁移为原生路由,暂以调试/占位入口保留导航。
+                    navController.navigate(Routes.DEBUG_LOG)
+                },
+                onOpenLogin = {
+                    // 未登录「立即登录」→ 请求根层弹登录半窗。
+                    LoginGate.requestLogin()
+                }
+            )
+        }
         // 话题详情页
         composable(
             route = Routes.TOPIC_DETAIL + "/{topicId}?slug={slug}&title={title}&target={target}",
