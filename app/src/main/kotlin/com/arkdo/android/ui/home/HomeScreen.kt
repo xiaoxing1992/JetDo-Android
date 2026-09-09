@@ -58,6 +58,7 @@ import com.arkdo.android.services.topic.isDefault
 import com.arkdo.android.services.topic.topicListPrimaryTitle
 import com.arkdo.android.ui.components.FaIcon
 import com.arkdo.android.ui.components.TopicListItem as EnhancedTopicListItem
+import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.launch
@@ -86,7 +87,10 @@ fun HomeScreen(
     onProfileClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
-    onComposeClick: () -> Unit = {}
+    onComposeClick: () -> Unit = {},
+    isLoggedIn: Boolean = false,
+    isCheckingSession: Boolean = false,
+    accountUser: com.arkdo.android.data.models.User? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -94,7 +98,7 @@ fun HomeScreen(
     val colors = arkdoColors
 
     LaunchedEffect(isWebViewReady) {
-        // 版块单独加载：卡片上的版块徽章要靠它解析，和话题列表是否已有数据无关。
+        // 版块单独加载:卡片上的版块徽章要靠它解析,和话题列表是否已有数据无关。
         viewModel.loadSiteMetadataIfNeeded(isWebViewReady)
         if (isWebViewReady && uiState.topics.isEmpty() && !uiState.isInitialLoading) {
             viewModel.loadInitial()
@@ -114,6 +118,9 @@ fun HomeScreen(
         topBar = {
             HomeTitleBar(
                 uiState = uiState,
+                isLoggedIn = isLoggedIn,
+                isCheckingSession = isCheckingSession,
+                accountUser = accountUser,
                 onMenuClick = { viewModel.openDrawer() },
                 onSearchClick = onSearchClick,
                 onNotificationsClick = onNotificationsClick,
@@ -179,6 +186,9 @@ private fun feedTitle(uiState: HomeUiState): String =
 @Composable
 private fun HomeTitleBar(
     uiState: HomeUiState,
+    isLoggedIn: Boolean,
+    isCheckingSession: Boolean,
+    accountUser: com.arkdo.android.data.models.User?,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
@@ -222,19 +232,32 @@ private fun HomeTitleBar(
             FaIcon("bell", ArkdoFixedColors.Amber, 24.dp)
         }
 
-        // TODO: 已登录时这里是 UserAvatar(34)，需要 HomeUiState 带上会话用户。
+        // 账号入口(对齐鸿蒙 AccountEntry):会话检查中转圈;已登录显示头像(34);
+        // 未登录显示 person 图标(brand 色,28)。点击恒定进入个人中心。
         BarIconButton(onClick = onProfileClick, endMargin = 0.dp) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "个人中心",
-                tint = colors.brand,
-                modifier = Modifier.size(28.dp)
-            )
+            when {
+                isCheckingSession -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = colors.brand,
+                        strokeWidth = 2.dp
+                    )
+                }
+                isLoggedIn && accountUser != null -> {
+                    UserAvatar(user = accountUser, avatarSize = 34.dp)
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "个人中心",
+                        tint = colors.brand,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
         }
     }
-}
-
-/** 汉堡按钮：三条 18×2 的横线，间距 4。 */
+}/** 汉堡按钮：三条 18×2 的横线，间距 4。 */
 @Composable
 private fun MenuButton(onClick: () -> Unit) {
     val colors = arkdoColors

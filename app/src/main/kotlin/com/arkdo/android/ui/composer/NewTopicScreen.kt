@@ -44,6 +44,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -67,17 +69,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.ui.components.FaIcon
+import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.TopicBadgeUtils
 import com.arkdo.android.ui.composer.MarkdownActions.EditState
 import com.arkdo.android.ui.composer.MarkdownActions.MdAction
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -89,7 +94,8 @@ import java.io.ByteArrayOutputStream
  * 工具栏 / 预览。分类与标签选择器走底部弹窗,图片走系统相册→压缩→上传→光标处插 markdown。
  * 提交成功经 onPublished 跳新帖详情;进审核队列只提示;失败保留内容供重试。
  *
- * 预览当前为近似展示(真实 markdown-it 编译走隐藏 Web,属后续切片)。
+ * 预览:离屏 WebView 加载 assets/markdown/render.html(markdown-it)把 raw 编译成 HTML,
+ * 交给 PostRichContent 与详情页同管线渲染;引擎未就绪/超时时退回原文。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,6 +133,11 @@ fun NewTopicScreen(
     var categoryPickerVisible by remember { mutableStateOf(false) }
     var tagPickerVisible by remember { mutableStateOf(false) }
     var expandedParentId by remember { mutableLongStateOf(-1L) }
+
+    // 预览态:HTML + 加载中 + 本次编译 job(切走即取消)。
+    var previewHtml by remember { mutableStateOf<String?>(null) }
+    var isPreviewLoading by remember { mutableStateOf(false) }
+    var previewJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     /** 光标/选区镜像:工具栏按它包裹/插入,操作后回写。 */
     fun applyMdAction(action: MdAction) {
@@ -176,7 +187,25 @@ fun NewTopicScreen(
 
     BackHandler { onBack() }
 
+    // 离屏 markdown 编译 WebView(1×1、近透明,不可见;必须挂在视图树里才会加载完成)。
+    val markdownEngine = remember(context) { viewModel.ensureRenderEngine(context.applicationContext) }
+    DisposableEffect(markdownEngine) {
+        onDispose {
+            previewJob?.cancel()
+            // 页面卸载即释放引擎:在途/排队请求全部失败,WebView destroy。
+            viewModel.close()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { markdownEngine.webView },
+            modifier = Modifier
+                .size(1.dp)
+                .alpha(0.01f),
+            update = {}
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -196,8 +225,23 @@ fun NewTopicScreen(
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    SegmentTab("编辑", selected = editMode) { editMode = true }
-                    SegmentTab("预览", selected = !editMode) { editMode = false }
+                    SegmentTab("编辑", selected = editMode) {
+                        editMode = true
+                        previewJob?.cancel()
+                    }
+                    SegmentTab("预览", selected = !editMode) {
+                        editMode = false
+                        previewHtml = null
+                        isPreviewLoading = true
+                        previewJob = scope.launch {
+                            val html = viewModel.renderPreview(bodyField.text)
+                            // 编辑期间切回/又切走会让 job 取消,取消后不再落地结果。
+                            if (isActive) {
+                                isPreviewLoading = false
+                                previewHtml = html
+                            }
+                        }
+                    }
                 }
                 SendButton(
                     enabled = !uiState.isSubmitting && !uiState.isUploading,
@@ -328,30 +372,12 @@ fun NewTopicScreen(
                     onAction = { applyMdAction(it) }
                 )
             } else {
-                // 预览:近似展示(markdown 编译切 Web 后补齐)。
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
-                ) {
-                    if (bodyField.text.isBlank()) {
-                        Text(
-                            "(无内容可预览)",
-                            fontSize = 15.sp,
-                            color = colors.textTertiary,
-                            modifier = Modifier.padding(vertical = 20.dp)
-                        )
-                    } else {
-                        Text(
-                            bodyField.text,
-                            fontSize = 15.sp,
-                            lineHeight = 22.sp,
-                            color = colors.textBody
-                        )
-                    }
-                }
+                PreviewPane(
+                    html = previewHtml,
+                    rawText = bodyField.text,
+                    loading = isPreviewLoading,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -782,6 +808,74 @@ private fun TagPickerContent(
     }
 }
 
+// ========== 预览 ==========
+
+/** 预览内容区:编译好的 HTML 走 PostRichContent 富文本渲染;失败/空内容退回原文/占位。 */
+@Composable
+private fun PreviewPane(html: String?, rawText: String, loading: Boolean, modifier: Modifier = Modifier) {
+    val colors = arkdoColors
+    Box(modifier = modifier.fillMaxWidth()) {
+        if (loading) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = colors.ldAccent,
+                    strokeWidth = 2.dp
+                )
+                Text(
+                    "正在生成预览...",
+                    fontSize = 14.sp,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+            }
+        } else if (!html.isNullOrEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                PostRichContent(
+                    html = html,
+                    // 预览里不上传图片解析,预览中的图(如已有 markdown 图链)原样显示链接/兜底。
+                    onOpenImages = { _, _ -> },
+                    onLinkClick = {}
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        } else if (rawText.isBlank()) {
+            Text(
+                "(无内容可预览)",
+                fontSize = 15.sp,
+                color = colors.textTertiary,
+                modifier = Modifier.padding(16.dp)
+            )
+        } else {
+            // 编译失败(引擎未就绪/超时):退回原文展示,与鸿蒙「(无内容可预览)」同层兜底。
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    rawText,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = colors.textBody
+                )
+            }
+        }
+    }
+}
+
 // ========== Markdown 工具栏 ==========
 
 /**
@@ -826,12 +920,12 @@ private fun ToolIcon(icon: String, enabled: Boolean, onClick: () -> Unit) {
     val colors = arkdoColors
     Box(
         modifier = Modifier
-            .size(38.dp)
-            .clip(CircleShape)
+            .size(40.dp)
+            .clip(RoundedCornerShape(8.dp))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        FaIcon(icon, if (enabled) colors.textSecondary else colors.textFaint, 16.dp)
+        FaIcon(icon, if (enabled) colors.textSecondary else colors.textFaint, 18.dp)
     }
 }
 

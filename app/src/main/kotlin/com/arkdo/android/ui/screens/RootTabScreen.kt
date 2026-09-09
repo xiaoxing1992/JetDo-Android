@@ -102,6 +102,9 @@ fun RootTabScreen(
             composable(Routes.HOME) {
                 val state by homeViewModel.uiState.collectAsState()
                 val context = androidx.compose.ui.platform.LocalContext.current
+                // 登录态/当前用户镜像:会话检查成功后写入;首页右上角账号入口据此渲染。
+                val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
+                val loggedIn = currentUser != null
                 HomeScreen(
                     isWebViewReady = isWebViewReady,
                     viewModel = homeViewModel,
@@ -110,6 +113,17 @@ fun RootTabScreen(
                         val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
                     },
+                    onProfileClick = {
+                        // 首页右上角头像 → 个人中心(对齐鸿蒙 handleAccountClick→push PROFILE)。
+                        // 「我的」页是根导航上的独立页,能盖住底部栏(Android 无底部栏,等效盖住 Tab 内容);
+                        // 从首页 push,返回键/返回按钮回首页。
+                        navController.navigate(Routes.PROFILE) {
+                            launchSingleTop = true
+                        }
+                    },
+                    isLoggedIn = loggedIn,
+                    isCheckingSession = false,
+                    accountUser = currentUser,
                     onComposeClick = {
                         // 发帖前登录闸门:未登录弹登录页,回来后用户自己再点发帖(对齐鸿蒙 openComposer)。
                         if (LoginGate.ensureLoggedIn(context)) {
@@ -124,7 +138,24 @@ fun RootTabScreen(
                 NotificationScreen(navController = navController)
             }
             composable(Routes.PROFILE) {
-                ProfileScreen(navController = navController)
+                // 个人中心(Tab 视图,保留底部导航)。
+                ProfileScreen(
+                    onNavigateBack = {
+                        tabNavController.navigate(Routes.HOME) {
+                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenSettings = {
+                        // 设置页尚未迁移为原生路由,暂以调试/占位入口保留导航。
+                        navController.navigate(Routes.DEBUG_LOG)
+                    },
+                    onOpenLogin = {
+                        // 未登录「立即登录」→ 请求根层弹登录半窗。
+                        LoginGate.requestLogin()
+                    }
+                )
             }
         }
     }

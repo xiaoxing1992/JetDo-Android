@@ -51,6 +51,17 @@ class NewTopicViewModel @Inject constructor(
     private var tagQuerySeq = 0
     private var tagLoadingJob: Job? = null
 
+    // 离屏 markdown 引擎:跟随首帧加载,页面销毁释放。仅当渲染真正需要时才懒建。
+    private var renderEngine: MarkdownRenderEngine? = null
+
+    /** 懒建渲染引擎(首次切预览时)。线程安全要求不高:UI 串行调用。 */
+    fun ensureRenderEngine(context: Context): MarkdownRenderEngine {
+        renderEngine?.let { return it }
+        val engine = MarkdownRenderEngine(context)
+        renderEngine = engine
+        return engine
+    }
+
     // 遥测:展开时刻;composerMs 结算用。
     private var appearTimeMs = 0L
 
@@ -211,6 +222,16 @@ class NewTopicViewModel @Inject constructor(
         _uiState.update { it.copy(uploadFailures = emptyList()) }
     }
 
+    // ========== 预览 ==========
+
+    /**
+     * 把正文编译成可渲染的 HTML(本地 markdown-it 引擎)。
+     * @param raw markdown 原文(当前光标所在候选,见调用侧说明)
+     * @return 编译后的 HTML;失败/引擎未就绪返回 null,由 UI 退回原文。
+     */
+    suspend fun renderPreview(raw: String): String? =
+        renderEngine?.render(raw)
+
     // ========== 提交 ==========
 
     fun canSubmit(): Boolean {
@@ -270,6 +291,8 @@ class NewTopicViewModel @Inject constructor(
     fun close() {
         tagDebounceJob?.cancel()
         tagLoadingJob?.cancel()
+        renderEngine?.release()
+        renderEngine = null
     }
 }
 

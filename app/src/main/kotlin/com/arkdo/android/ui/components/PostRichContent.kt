@@ -110,6 +110,33 @@ fun PostRichContent(
     }
 }
 
+/**
+ * 归一化行内文本:把行内链路上仅剩的直引号实体还原成用户手打的直引号。
+ *
+ * 成因:markdown-it 会把正文里的 " 统一转义成 &quot; 塞进 HTML(测试见 markdown-it 产物),
+ * 而 InlineHtmlParser 遵循「jsoup 已解码、不再二次解码」的原则,TextNode 里保留下来的就是
+ * 字面 &quot; —— 在标题/正文/链接文本里原样显示成 "双引号"。这里在渲染出口兜底还原。
+ *
+ * 只动直引号与撇号这一个子集:中文语境最常踩的就是「引号显示成双引号」;nbsp、&lt;/&gt;/&amp;
+ * 保持实体语义不动(它们应在更早的解析层按各自的语义消费)。
+ */
+private fun normalizeTextQuotes(raw: String): String {
+    if (raw.isEmpty()) return raw
+    return raw
+        .replace("&quot;", "\"")
+        .replace("&#34;", "\"")
+        .replace("\u201C", "\"")
+        .replace("\u201D", "\"")
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+}
+
+/**
+ * 行内文本统一入口:所有从富文本/源码来的文本(RichInlineNode.text、纯文本兜底、代码块、
+ * onebox 标题/摘要等)先过 [normalizeTextQuotes] 再做 Compose 文本,避免渲染链路各层各写一遍。
+ */
+internal fun plainNodeText(raw: String): String = normalizeTextQuotes(raw)
+
 @Composable
 private fun BlockView(
     block: RichBlock,
@@ -191,7 +218,7 @@ private fun BlockView(
         )
 
         RichBlockType.UNSUPPORTED -> Text(
-            text = block.text.orEmpty(),
+            text = plainNodeText(block.text.orEmpty()),
             fontSize = 14.sp,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -200,6 +227,8 @@ private fun BlockView(
 }
 
 /** 引用：左侧 3dp 竖线 + 弱化底色，内部递归渲染子块。 */
+/** 引用:左侧 3dp 竖线 + 弱化底色,内部递归渲染子块。对齐鸿蒙 QuoteBlock:背景 post_content_surface_bg
+ *  (亮 #E6E8EB / 暗 #23262C),左条 post_content_border(更深一档)。此前误用 surfaceMuted(浅)+border(更浅)。 */
 @Composable
 private fun QuoteBlock(
     block: RichBlock,
@@ -211,11 +240,16 @@ private fun QuoteBlock(
     onLinkClick: (String) -> Unit
 ) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        Box(modifier = Modifier.width(3.dp).fillMaxHeight().background(arkdoColors.border))
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(QuoteAccent(bar = true))
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .background(arkdoColors.surfaceMuted)
+                .background(QuoteAccent(bar = false))
                 .padding(10.dp)
         ) {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
@@ -225,7 +259,19 @@ private fun QuoteBlock(
     }
 }
 
-/** 话题/帖子引用卡：头像 + 标题 + 分类徽章头部，正文预览递归渲染，整卡可点跳转。 */
+/** 引用块配色:亮/暗分别对齐鸿蒙 post_content_border(左条)与 post_content_surface_bg(背景)。 */
+@androidx.compose.runtime.ReadOnlyComposable
+@androidx.compose.runtime.Composable
+private fun QuoteAccent(bar: Boolean): Color {
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    return if (bar) {
+        if (dark) Color(0xFF454B54) else Color(0xFFC7CDD5)
+    } else {
+        if (dark) Color(0xFF23262C) else Color(0xFFE6E8EB)
+    }
+}
+
+/** 话题/帖子引用卡:头像 + 标题 + 分类徽章头部,正文预览递归渲染,整卡可点跳转。 */
 @Composable
 private fun TopicQuoteBlock(
     block: RichBlock,
@@ -233,11 +279,16 @@ private fun TopicQuoteBlock(
     onLinkClick: (String) -> Unit
 ) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        Box(modifier = Modifier.width(3.dp).fillMaxHeight().background(arkdoColors.border))
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(QuoteAccent(bar = true))
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .background(arkdoColors.surfaceMuted)
+                .background(QuoteAccent(bar = false))
                 .clickable { block.href?.let(onLinkClick) }
                 .padding(10.dp)
         ) {
@@ -254,7 +305,7 @@ private fun TopicQuoteBlock(
             )
             Column(modifier = Modifier.padding(start = 8.dp)) {
                 block.quoteTitle?.let {
-                    Text(it, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(plainNodeText(it), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 block.quoteCategory?.let { category ->
                     Text(
@@ -338,7 +389,7 @@ private fun CodeBlock(block: RichBlock) {
             Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(
-            text = block.text.orEmpty(),
+            text = plainNodeText(block.text.orEmpty()),
             fontFamily = FontFamily.Monospace,
             fontSize = 13.sp,
             lineHeight = 19.sp,
@@ -508,7 +559,7 @@ private fun DisclosureBlock(
                 .padding(10.dp)
         ) {
             Text(
-                text = block.title ?: "详情",
+                text = plainNodeText(block.title ?: "详情"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
@@ -555,7 +606,7 @@ private fun OneboxBlock(block: RichBlock, onLinkClick: (String) -> Unit) {
         }
         block.title?.let {
             Text(
-                it,
+                plainNodeText(it),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.primary,
@@ -564,7 +615,7 @@ private fun OneboxBlock(block: RichBlock, onLinkClick: (String) -> Unit) {
         }
         block.description?.let {
             Text(
-                it,
+                plainNodeText(it),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
@@ -628,7 +679,7 @@ internal fun InlineText(
     val imageContents = mutableMapOf<String, InlineTextContent>()
     val text = buildAnnotatedString {
         if (inlines.isEmpty() && !fallbackText.isNullOrEmpty()) {
-            append(fallbackText)
+            append(plainNodeText(fallbackText))
             return@buildAnnotatedString
         }
         inlines.forEachIndexed { index, token ->
@@ -667,7 +718,7 @@ internal fun InlineText(
                             ),
                             linkInteractionListener = { token.href?.let(onLinkClick) }
                         )
-                    ) { append(token.text) }
+                    ) { append(plainNodeText(token.text)) }
 
                     // 链接点击数角标（对齐官方 span.badge-notification.clicks）：0 次不显示。
                     val clicks = clicksForHref(linkClicks, token.href)
@@ -704,7 +755,7 @@ internal fun InlineText(
                 }
 
                 RichInlineType.CODE, RichInlineType.TEXT -> withStyle(base) {
-                    append(token.text)
+                    append(plainNodeText(token.text))
                 }
 
                 RichInlineType.MATH -> withStyle(
