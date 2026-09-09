@@ -254,57 +254,48 @@ fun LoginScreen(
         }
     }
 
-    // 弹层呈现：底部半弹窗、默认停在约 88% 高度（大于半屏、不到全屏），可下拉滑落关闭，
-    // 也保留继续上滑到满高的能力（鸿蒙 bindSheet 是 height 100% 满高；按用户要求改为
-    // 默认近满高的 modal 档位，视觉对齐苹果模态）。拖动条 dragBar、遮罩 SCRIM、
-    // 底色 surface_card、点外部关闭。
-    ModalBottomSheet(
-        onDismissRequest = onNavigateBack,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = colors.surfaceMuted,
-        scrimColor = ArkdoFixedColors.Scrim,
-        dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle() }
+    
+    // 弹层呈现:全屏页面盖在根容器上(替换原底部 88% 半弹窗)。全屏让登录 WebView 与其后的
+    // Cloudflare Turnstile 人机验证框拿到完整可视区,不再被弹窗裁掉一截导致空白/无法交互。
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.pageBg)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(fraction = 0.88f)
-                .background(colors.surfaceMuted)
-        ) {
-        // 顶栏：标题「登录」居中（20sp Medium）+ 右上角关闭（bindSheet showClose），
-        // 底部 1dp 分割线。
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-                .background(colors.surfaceMuted)
-                .padding(horizontal = 16.dp)
-        ) {
-            Text(
-                text = "登录",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.align(Alignment.Center)
-            )
-            Text(
-                text = "✕",
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.onSurface,
+        Column(modifier = Modifier.fillMaxSize()) {
+            // 顶栏:标题「登录」居中 + 右上角关闭。
+            Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .clickable { onNavigateBack() }
-                    .padding(8.dp)
-            )
-        }
-        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .background(colors.pageBg)
+                    .padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    text = "登录",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textPrimary,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+                Text(
+                    text = "✕",
+                    fontSize = 18.sp,
+                    color = colors.textPrimary,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .clickable { onNavigateBack() }
+                        .padding(8.dp)
+                )
+            }
+            HorizontalDivider(thickness = 1.dp, color = colors.border)
 
-        AndroidView(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            factory = { ctx ->
-                WebView(ctx).apply {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                factory = { ctx ->
+                    WebView(ctx).apply {
                     // Cookie/UA 配置(对齐 configureCookieAccess / applyUserAgent)+ Web 开关
                     // 对齐 Web(...) 的 javaScriptAccess/domStorageAccess/databaseAccess 等参数。
                     WebSessionManager.configureCookieAccess(this, "LoginPage")
@@ -321,6 +312,13 @@ fun LoginScreen(
                     webChromeClient = WebChromeClient()
 
                     webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView?,
+                            request: android.webkit.WebResourceRequest?
+                        ): android.webkit.WebResourceResponse? =
+                            com.arkdo.android.services.network.WebViewDohInterceptor.intercept(request)
+                                ?: super.shouldInterceptRequest(view, request)
+
                         override fun onPageFinished(view: WebView, url: String) {
                             Timber.i("%s page end url=%s", LOG_TAG, url)
                             scope.launch { WebSessionManager.saveCookies("LoginPage") }
@@ -345,15 +343,15 @@ fun LoginScreen(
                             view: WebView,
                             request: WebResourceRequest,
                             response: WebResourceResponse
-                        ) {
-                            val url = request.url?.toString().orEmpty()
-                            val statusCode = response.statusCode
-                            Timber.i("%s http error url=%s status=%d reason=%s",
-                                LOG_TAG, url, statusCode, response.reasonPhrase.orEmpty())
-                            if (isChallengeRelatedHttpError(url, statusCode)) {
-                                startChallengeCookiePolling()
-                            }
-                        }
+                    ) {
+                    val url = request.url?.toString().orEmpty()
+                    val statusCode = response.statusCode
+                    Timber.i("%s http error url=%s status=%d reason=%s",
+                    LOG_TAG, url, statusCode, response.reasonPhrase.orEmpty())
+                    if (isChallengeRelatedHttpError(url, statusCode)) {
+                    startChallengeCookiePolling()
+                    }
+                    }
                     }
                     webViewRef = this
                     loadUrl(AppConstants.LOGIN_URL)
