@@ -168,6 +168,9 @@ object ArkdoFixedColors {
     /** 头像描边。 */
     val AvatarBorder = Color(0x4D00AEFF)
 
+    /** 「我的」Tab 沉浸内容顶到状态栏时,状态栏条区/根底色(亮 #F2F3F5,暗 #000)。 */
+    val ProfileStatusBarBg = Color(0xFFF2F3F5)
+
     /** flair 徽章缺省底色。 */
     val FlairFallbackBg = Color(0xFFBE123C)
 

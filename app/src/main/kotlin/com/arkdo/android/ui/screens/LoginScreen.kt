@@ -8,11 +8,13 @@ package com.arkdo.android.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.view.inputmethod.InputMethodManager
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -303,7 +305,7 @@ fun LoginScreen(
                 .weight(1f),
             factory = { ctx ->
                 WebView(ctx).apply {
-                    // Cookie/UA 配置（对齐 configureCookieAccess / applyUserAgent）+ Web 开关
+                    // Cookie/UA 配置(对齐 configureCookieAccess / applyUserAgent)+ Web 开关
                     // 对齐 Web(...) 的 javaScriptAccess/domStorageAccess/databaseAccess 等参数。
                     WebSessionManager.configureCookieAccess(this, "LoginPage")
                     WebSessionManager.applyUserAgent(this, "LoginPage")
@@ -311,7 +313,12 @@ fun LoginScreen(
                     settings.domStorageEnabled = true
                     settings.databaseEnabled = true
                     settings.cacheMode = WebSettings.LOAD_DEFAULT
+                    // 人机验证弹层(Challenges iframe)需要跨域 cookie 与 DOM 存储,这里放行
+                    // 三方 cookie,否则 Cloudflare Turnstile 页面一片空白什么都渲染不出来。
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     addJavascriptInterface(LoginKeyboardProxy { hideNativeKeyboard() }, "arkdoLoginKeyboard7f3a")
+
+                    webChromeClient = WebChromeClient()
 
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) {
