@@ -138,6 +138,10 @@ fun RootTabScreen(
                             val arg = categoryId?.let { "?categoryId=$it" } ?: ""
                             navController.navigate("${Routes.NEW_TOPIC}$arg")
                         }
+                    },
+                    onDebugClick = {
+                        // 顶栏虫形图标 → 调试日志页(排障用,无需登录,可分享/复制日志文件)。
+                        navController.navigate(Routes.DEBUG_LOG)
                     }
                 )
             }

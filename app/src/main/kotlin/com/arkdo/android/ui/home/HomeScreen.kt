@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,6 +92,7 @@ fun HomeScreen(
     onNotificationsClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onComposeClick: () -> Unit = {},
+    onDebugClick: () -> Unit = {},
     isLoggedIn: Boolean = false,
     isCheckingSession: Boolean = false,
     accountUser: com.arkdo.android.data.models.User? = null
@@ -127,7 +129,8 @@ fun HomeScreen(
                 onMenuClick = { viewModel.openDrawer() },
                 onSearchClick = onSearchClick,
                 onNotificationsClick = onNotificationsClick,
-                onProfileClick = onProfileClick
+                onProfileClick = onProfileClick,
+                onDebugClick = onDebugClick
             )
         },
         floatingActionButton = {
@@ -195,7 +198,8 @@ private fun HomeTitleBar(
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onDebugClick: () -> Unit
 ) {
     val colors = arkdoColors
     val isDefaultQuery = uiState.listQuery.isDefault()
@@ -260,6 +264,16 @@ private fun HomeTitleBar(
                     )
                 }
             }
+        }
+
+        // 调试入口(排障用):一键把日志缓冲落盘并调起系统分享面板,不依赖登录态。
+        BarIconButton(onClick = onDebugClick, endMargin = 0.dp) {
+            Icon(
+                imageVector = Icons.Filled.BugReport,
+                contentDescription = "分享日志",
+                tint = colors.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }/** 汉堡按钮：三条 18×2 的横线，间距 4。 */

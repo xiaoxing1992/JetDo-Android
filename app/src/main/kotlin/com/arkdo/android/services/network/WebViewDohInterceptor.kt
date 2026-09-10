@@ -61,7 +61,23 @@ object WebViewDohInterceptor {
         val host = url.host?.lowercase() ?: return null
         if (host != ROOT_HOST && !host.endsWith(".$ROOT_HOST")) return null
 
-        // WebResourceRequest 不给请求体，POST/PUT/PATCH 没法原样重放。
+        // Cloudflare 自身的挑战基础设施(/cdn-cgi/challenge-platform/**)全部放行:
+        // 它靠 302 + JS 自举多次跳转/上报,经 OkHttp 代发后 3xx 与 cookie 时序都会走样,
+        // 是 Turnstile/hCaptcha 渲染不出来的直接原因。交给 WebView 原生网络栈。
+        if (url.path?.contains("/cdn-cgi/challenge-platform") == true) return null
+
+        // 主框架文档一律放行给 WebView 原生网络栈。
+        // 原因:手工用 WebResourceResponse 塞回主文档会丢掉 Content-Length/Set-Cookie 等头,
+        // 更关键的是会让文档的安全上下文走样 —— Turnstile 的验证控件跑在 about:srcdoc 的
+        // iframe 里,日志实测其 origin 变成 'null'(「origin-keyed agent cluster」告警),
+        // 环境自检必然失败、验证框渲染不出来。子资源(图片/JS/接口)继续走 DoH 接管,
+        // 主域名的解析交给系统 DNS(能正常加载登录页即说明主站可达)。
+        if (req.isForMainFrame) {
+            Timber.i("$TAG main frame passed back to WebView %s", url)
+            return null
+        }
+
+        // WebResourceRequest 不给请求体,POST/PUT/PATCH 没法原样重放。
         if (!req.method.equals("GET", ignoreCase = true)) return null
 
         val target = url.toString()
@@ -115,12 +131,21 @@ object WebViewDohInterceptor {
         val encoding = contentType?.substringAfter("charset=", "")
             ?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
 
-        // 204/304 按规范不能带 body，塞流进去某些 WebView 版本会报错。
+        // 3xx 交回 WebView 自己跟:WebResourceResponse 不允许 300~399 状态码(构造会抛
+        // IllegalArgumentException),包成响应塞回会让整条拦截失败、请求被丢弃 —— 尤其会打断
+        // CF challenge 平台的 302 链路(登录/验证空白的一处根因)。
+        if (statusCode in 300..399) {
+            response.close()
+            Timber.i("$TAG %d redirect passed back to WebView %s", statusCode, target)
+            return null
+        }
+
+        // 204/304 按规范不能带 body,塞流进去某些 WebView 版本会报错。
         val body = if (statusCode == 204 || statusCode == 304) {
             response.close()
             null
         } else {
-            // 不整块读进内存：WebResourceResponse 会接管这个流并在读完后关闭它。
+            // 不整块读进内存:WebResourceResponse 会接管这个流并在读完后关闭它。
             response.body.byteStream()
         }
 
