@@ -257,7 +257,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
         // 设置 User-Agent 必须与 CfChallengeScreen 完全一致
         // Cloudflare 的 cf_clearance cookie 与 User-Agent 绑定
-        web.settings.userAgentString = com.arkdo.android.services.web.UserAgentProvider.get(context)
+        // (applyUserAgent 同时统一 UA Client Hints / X-Requested-With,全 app 一份)
+        com.arkdo.android.services.web.WebSessionManager.applyUserAgent(web, "ArkWebHost")
         Timber.i("[ArkDO][Network] attachHost: User-Agent set to %s", web.settings.userAgentString)
 
         // 启用现代网络特性
@@ -1120,7 +1121,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
 private object WebSessionManagerInternal {
     fun configure(web: WebView, source: String) {
-        web.settings.userAgentString = com.arkdo.android.services.web.UserAgentProvider.get(web.context)
+        com.arkdo.android.services.web.WebSessionManager.applyUserAgent(web, source)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
     }

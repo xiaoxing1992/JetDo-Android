@@ -36,6 +36,8 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         Timber.plant(DebugLogStore.tree())
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
+            // chrome://inspect 直接看 WebView(含 Turnstile iframe)的 console/network,排障用。
+            android.webkit.WebView.setWebContentsDebuggingEnabled(true)
         }
         DebugLogStore.install(this)
 

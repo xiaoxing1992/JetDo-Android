@@ -126,6 +126,11 @@ dependencies {
     // OkHttp
     // cooked HTML 解析（PostRichContent 的块/行内节点树来源）
     implementation(libs.jsoup)
+    // 登录页 X5 内核对比实验(TBS)
+    implementation(libs.androidx.browser)
+    implementation(libs.tbssdk)
+    // WebView 身份统一(UA Client Hints / X-Requested-With),见 WebSessionManager.applyUserAgent
+    implementation(libs.androidx.webkit)
     // 标题栏渐进式模糊（对齐鸿蒙 HDS 渐进模糊材质）
     implementation(libs.haze)
     implementation(libs.okhttp)

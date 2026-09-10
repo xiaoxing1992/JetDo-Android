@@ -69,6 +69,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DebugLogScreen(
     onNavigateBack: () -> Unit,
+    onOpenUrl: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var logs by remember { mutableStateOf(DebugLogStore.snapshot()) }
@@ -133,6 +134,11 @@ fun DebugLogScreen(
                     }
                 },
                 actions = {
+                    // 人机验证渲染自测:在同一套 WebView 配置下打开 hCaptcha 官方演示页。
+                    // 这里能画出复选框 → 内核没问题,是站点弹层/布局的事;这里也空白 → 内核层问题。
+                    IconButton(onClick = { onOpenUrl("https://accounts.hcaptcha.com/demo", "hCaptcha 自测") }) {
+                        Icon(Icons.Default.BugReport, contentDescription = "hCaptcha 渲染自测")
+                    }
                     IconButton(onClick = { copyAll() }) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "复制全部日志")
                     }

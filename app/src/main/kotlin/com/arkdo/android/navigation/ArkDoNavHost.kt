@@ -156,7 +156,14 @@ fun ArkDoNavHost(
 
         // 调试日志页（排障用，Profile 页 FAB 进入）
         composable(Routes.DEBUG_LOG) {
-            DebugLogScreen(onNavigateBack = { navController.popBackStack() })
+            DebugLogScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenUrl = { url, title ->
+                    navController.navigate(
+                        "${Routes.WEBVIEW}/${java.net.URLEncoder.encode(url, "UTF-8")}?title=${java.net.URLEncoder.encode(title, "UTF-8")}"
+                    )
+                }
+            )
         }
         // 他人主页:帖子里点作者/评论楼层/boost 头像进入。
         composable(

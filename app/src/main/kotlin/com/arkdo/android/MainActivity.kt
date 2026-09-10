@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
         ArkWebNetworkBridge.clearMediaCacheDir(this)
 
         // Edge-to-Edge：沉浸式状态栏和导航栏
-        enableEdgeToEdge()
+        // enableEdgeToEdge()  // 暂关:Edge-to-Edge 关闭,恢复系统默认窗口模式
 
         setContent {
             ArkDoTheme {

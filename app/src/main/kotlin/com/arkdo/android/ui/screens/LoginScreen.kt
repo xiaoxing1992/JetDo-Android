@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -72,8 +74,10 @@ import timber.log.Timber
 // 1. 登录态 cookie 轮询：每 800ms 查 `_t`；从「无」变「有」判成功 —— Discourse SPA
 //    登录走客户端路由（pushState），不触发 onPageEnd，单靠 URL 判定会漏检。
 // 2. onPageEnd URL 判定：落在站点域且不是 /login、/challenge 即成功。
-// 3. CF 盾恢复：401/403/429（login/challenges.cloudflare.com）→ 每 1s 查 cf_clearance
-//    （上限 90 次）→ 拿到即重载 /login（单次守卫）。
+// 3. CF 盾恢复：主文档 401/403/429（login/challenges.cloudflare.com）→ 每 1s 查 cf_clearance
+//    （上限 90 次）→ 值变化且页面仍停在盾页才重载 /login（单次守卫）。
+//    Android 差异：鸿蒙不分帧、只判 exists 就重载；这里收紧,避免子资源 403 触发的
+//    静默换 cookie 把正常表单/hCaptcha 弹层冲掉。
 //
 // 成功统一出口（单次守卫）：停两路轮询 → 落盘 cookie → onLoginSuccess
 // （markHostReloading + SessionEventBus + 复查会话写 LoginGate + 关页），
@@ -156,6 +160,10 @@ fun LoginScreen(
 
     // 登录态轮询基线：进页时 `_t` 是否已在（常态为无），只在其后新出现时才判成功。
     var initialAuthCookiePresent by remember { mutableStateOf(false) }
+    // CF 盾恢复基线:进页时的 cf_clearance 值。页面通常一进来就带着它(宿主过盾产物),
+    // 只有它**发生变化**才说明登录流程里真的重新过了一次盾 —— 否则会把「本来就有」当成
+    // 「刚过盾」而立即 reload,把正在初始化的 Turnstile 验证框打断(验证框空白的直接原因)。
+    var initialCfClearance by remember { mutableStateOf("") }
     var hasSignaledLoginSuccess by remember { mutableStateOf(false) }
     var hasReloadedAfterChallenge by remember { mutableStateOf(false) }
     var challengePollJob by remember { mutableStateOf<Job?>(null) }
@@ -173,9 +181,27 @@ fun LoginScreen(
         return true
     }
 
-    fun isChallengeRelatedHttpError(url: String, statusCode: Int): Boolean {
+    fun safeUrlLabel(url: String): String = runCatching {
+        android.net.Uri.parse(url).host ?: url.take(60)
+    }.getOrDefault(url.take(60))
+
+    // 只认主文档被盾:子资源(接口/图片/CF 探针)回 401/403 也会触发 onReceivedHttpError,
+    // 但那不代表页面被拦。之前不分帧一律开轮询,CF 后台静默换一次 cf_clearance 就把
+    // 正常登录表单整个 reload,正在初始化的 hCaptcha 弹层随之被冲掉(验证框空白的时序根因)。
+    fun isChallengeRelatedHttpError(url: String, statusCode: Int, isForMainFrame: Boolean): Boolean {
+        if (!isForMainFrame) return false
         if (statusCode != 401 && statusCode != 403 && statusCode != 429) return false
         return url.startsWith(AppConstants.LOGIN_URL) || url.contains("challenges.cloudflare.com")
+    }
+
+    /** 当前主文档是否仍停在盾页/验证页(过盾后 reload 的前置条件)。 */
+    fun isStuckOnChallenge(): Boolean {
+        val current = webViewRef?.url.orEmpty()
+        if (current.startsWith(AppConstants.CHALLENGE_URL)) return true
+        if (current.contains("challenges.cloudflare.com") || current.contains("/cdn-cgi/")) return true
+        // 盾页 URL 与 /login 相同时,只能看标题:CF 拦截页标题固定为 "Just a moment..."。
+        val title = webViewRef?.title.orEmpty()
+        return title.contains("Just a moment", ignoreCase = true) || title.contains("Attention Required", ignoreCase = true)
     }
 
     fun hideNativeKeyboard() {
@@ -215,17 +241,28 @@ fun LoginScreen(
             while (isActive && count < MAX_CHALLENGE_POLL_COUNT) {
                 delay(CHALLENGE_POLL_INTERVAL_MS)
                 count++
-                val snapshot = WebSessionManager.getCookiePresenceSnapshot("cf_clearance")
-                if (snapshot.hasCookie) {
-                    Timber.i("%s cf_clearance detected, reload login", LOG_TAG)
+                // 只认「值变化」:登录页进页时通常已带着宿主的 cf_clearance,只判 exists 会在
+                // Turnstile 刚初始化时立刻 reload 打断它(验证框空白)。
+                val current = WebSessionManager.getCfClearanceValue()
+                if (current.isNotEmpty() && current != initialCfClearance) {
                     WebSessionManager.saveCookies("LoginPage")
+                    // 拿到新盾 cookie 但页面已经是正常登录表单(CF 自己完成了跳转),不再 reload,
+                    // 否则会把用户正在填的表单/hCaptcha 弹层冲掉。
+                    if (!isStuckOnChallenge()) {
+                        Timber.i("%s cf_clearance changed but page already past challenge, skip reload url=%s",
+                            LOG_TAG, safeUrlLabel(webViewRef?.url.orEmpty()))
+                        hasReloadedAfterChallenge = true
+                        return@launch
+                    }
+                    Timber.i("%s cf_clearance changed, reload login", LOG_TAG)
                     hasReloadedAfterChallenge = true
                     webViewRef?.loadUrl(AppConstants.LOGIN_URL)
                     return@launch
                 }
                 if (count % 5 == 0) {
-                    Timber.i("%s cf_clearance pending attempt=%d/%d cookieHeaderLength=%d",
-                        LOG_TAG, count, MAX_CHALLENGE_POLL_COUNT, snapshot.headerLength)
+                    Timber.i("%s cf_clearance pending attempt=%d/%d headerLength=%d",
+                        LOG_TAG, count, MAX_CHALLENGE_POLL_COUNT,
+                        WebSessionManager.getCookiePresenceSnapshot("cf_clearance").headerLength)
                 }
             }
             Timber.i("%s cf_clearance polling timeout", LOG_TAG)
@@ -235,6 +272,7 @@ fun LoginScreen(
     // 进页先记 `_t` 基线，再开 800ms 登录态轮询（对齐 aboutToAppear）。
     LaunchedEffect(Unit) {
         initialAuthCookiePresent = WebSessionManager.hasCookie(AUTH_COOKIE_NAME)
+        initialCfClearance = WebSessionManager.getCfClearanceValue()
         while (isActive) {
             delay(LOGIN_POLL_INTERVAL_MS)
             val hasAuthCookie = WebSessionManager.hasCookie(AUTH_COOKIE_NAME)
@@ -263,10 +301,12 @@ fun LoginScreen(
             .background(colors.pageBg)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 顶栏:标题「登录」居中 + 右上角关闭。
+            // 顶栏:标题「登录」居中 + 右上角关闭。状态栏 inset 由这里垫(根 Scaffold 已关掉
+            // 系统栏排布,内容顶到屏幕顶,与首页 HomeTitleBar 同一套处理)。
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
                     .height(60.dp)
                     .background(colors.pageBg)
                     .padding(horizontal = 16.dp)
@@ -295,70 +335,34 @@ fun LoginScreen(
                     .fillMaxWidth()
                     .weight(1f),
                 factory = { ctx ->
-                    WebView(ctx).apply {
-                    // Cookie/UA 配置(对齐 configureCookieAccess / applyUserAgent)+ Web 开关
-                    // 对齐 Web(...) 的 javaScriptAccess/domStorageAccess/databaseAccess 等参数。
-                    WebSessionManager.configureCookieAccess(this, "LoginPage")
-                    WebSessionManager.applyUserAgent(this, "LoginPage")
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.databaseEnabled = true
-                    settings.cacheMode = WebSettings.LOAD_DEFAULT
-                    // 人机验证弹层(Challenges iframe)需要跨域 cookie 与 DOM 存储,这里放行
-                    // 三方 cookie,否则 Cloudflare Turnstile 页面一片空白什么都渲染不出来。
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    addJavascriptInterface(LoginKeyboardProxy { hideNativeKeyboard() }, "arkdoLoginKeyboard7f3a")
-
-                    webChromeClient = WebChromeClient()
-
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldInterceptRequest(
-                            view: WebView?,
-                            request: android.webkit.WebResourceRequest?
-                        ): android.webkit.WebResourceResponse? =
-                            com.arkdo.android.services.network.WebViewDohInterceptor.intercept(request)
-                                ?: super.shouldInterceptRequest(view, request)
-
-                        override fun onPageFinished(view: WebView, url: String) {
+                    // X5 可用则用 X5,否则回落系统 WebView(见 LoginWebViewFactory)。
+                    val f = LoginWebViewFactory(
+                        onPageFinished = { url ->
                             Timber.i("%s page end url=%s", LOG_TAG, url)
                             scope.launch { WebSessionManager.saveCookies("LoginPage") }
                             logCfClearanceSnapshot("pageEnd")
-                            if (isLikelyLoggedInUrl(url)) {
-                                signalLoginSuccess("pageEnd", url)
-                            }
-                        }
-
-                        override fun onReceivedError(
-                            view: WebView,
-                            request: WebResourceRequest?,
-                            error: WebResourceError?
-                        ) {
-                            val url = request?.url?.toString().orEmpty()
-                            val code = error?.errorCode ?: 0
-                            val info = error?.description?.toString().orEmpty()
-                            Timber.i("%s load error url=%s code=%d info=%s", LOG_TAG, url, code, info)
-                        }
-
-                        override fun onReceivedHttpError(
-                            view: WebView,
-                            request: WebResourceRequest,
-                            response: WebResourceResponse
-                    ) {
-                    val url = request.url?.toString().orEmpty()
-                    val statusCode = response.statusCode
-                    Timber.i("%s http error url=%s status=%d reason=%s",
-                    LOG_TAG, url, statusCode, response.reasonPhrase.orEmpty())
-                    if (isChallengeRelatedHttpError(url, statusCode)) {
-                    startChallengeCookiePolling()
-                    }
-                    }
-                    }
-                    webViewRef = this
-                    loadUrl(AppConstants.LOGIN_URL)
+                            if (isLikelyLoggedInUrl(url)) signalLoginSuccess("pageEnd", url)
+                        },
+                        onHttpError = { url, statusCode, isForMainFrame ->
+                            Timber.i("%s http error url=%s status=%d mainFrame=%b", LOG_TAG, safeUrlLabel(url), statusCode, isForMainFrame)
+                            if (isChallengeRelatedHttpError(url, statusCode, isForMainFrame)) startChallengeCookiePolling()
+                        },
+                        onLoadError = { url, code, info ->
+                            Timber.i("%s load error url=%s code=%d info=%s", LOG_TAG, safeUrlLabel(url), code, info)
+                        },
+                        onConsole = { msg ->
+                            Timber.i("%s console %s", LOG_TAG, msg)
+                        },
+                        onLoadResource = { url ->
+                            Timber.i("%s loadResource host=%s", LOG_TAG, safeUrlLabel(url))
+                        },
+                        onHideKeyboard = { hideNativeKeyboard() }
+                    )
+                    val wv = f.build(ctx)
+                    webViewRef = wv as? WebView
+                    wv
                 }
-            },
-            onRelease = { webViewRef = null }
-        )
+            )
         }
     }
 }
