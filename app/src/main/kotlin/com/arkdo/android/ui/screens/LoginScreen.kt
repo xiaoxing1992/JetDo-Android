@@ -146,6 +146,66 @@ private object LoginKeyboardScript {
           document.addEventListener('submit', function () { dismiss('submit'); }, true);
         })();
     """.trimIndent()
+
+    /**
+     * hCaptcha iframe 尺寸兜底(复选框 + 图像挑战两个 iframe)。
+     *
+     * 实测(华为 WebView / Chromium 114):hCaptcha api.js 把 iframe 留成 display:inline,
+     * 复选框 iframe 不写尺寸、挑战 iframe 写了内联 width/height(如 320×400)—— 这版内核里
+     * 两者的布局高度都停在 0,弹层中间/挑战框整块空白。hCaptcha 官方 demo 页能渲染是因为
+     * 它的容器没有 Discourse 弹层那套 fixed+overflow 布局。鸿蒙 ArkWeb 内核更新,无此问题。
+     * 这里每 500ms 查一次可见且高度为 0 的 hCaptcha iframe:复选框补标准 302×76,
+     * 挑战框按 api.js 自己写的内联尺寸,以 display:block + !important 钉上。
+     * 挑战框被隐藏(visibility:hidden 挪到屏外)时不碰,不干扰 hCaptcha 的显隐切换。
+     *
+     * 循环不设上限:关掉验证弹层再点登录,Discourse 会重建弹层、hCaptcha 重新 render 出
+     * 新的 iframe,任何"跑够 N 次就停"的守卫都会让第二次弹层空白。登录页关闭时文档销毁,
+     * 定时器随之消失,无泄漏。另挂一个 MutationObserver 在 iframe 刚插入时立刻补一次,
+     * 减少 500ms 的空白闪烁。
+     */
+    val FIX: String = """
+        (function () {
+          if (window.__arkdoCaptchaFix) { return; }
+          window.__arkdoCaptchaFix = true;
+          function fix() {
+            // 两类 iframe 同一个根因(这版内核 display:inline 的 iframe 不吃内联 height):
+            //  - 复选框(#frame=checkbox):api.js 连尺寸都不写,直接补标准的 302×76。
+            //  - 图像挑战(#frame=challenge):api.js 已写 width/height(如 320×400)并切到可见,
+            //    但实际布局高度仍是 0,表现为挑战框整块白屏。按它自己写的尺寸重新以块级钉上。
+            var frames = document.querySelectorAll('iframe[src*="hcaptcha.com/captcha"]');
+            frames.forEach(function (f) {
+              var r = f.getBoundingClientRect();
+              var cs = getComputedStyle(f);
+              if (r.height > 0 || cs.visibility !== 'visible') { return; }
+              var isChallenge = f.src.indexOf('frame=challenge') >= 0;
+              var isCheckbox = f.src.indexOf('frame=checkbox') >= 0;
+              if (!isChallenge && !isCheckbox) { return; }
+              var w = isChallenge ? (f.style.width || '320px') : '302px';
+              var h = isChallenge ? (f.style.height || '400px') : '76px';
+              // 挑战框刚切可见时 api.js 还没写尺寸的话先等下一轮,不用默认值抢跑。
+              if (isChallenge && !f.style.height) { return; }
+              // api.js 会反复重写内联样式,单次赋值会被覆盖 —— 用 !important 且每轮都补。
+              f.style.setProperty('display', 'block', 'important');
+              f.style.setProperty('width', w, 'important');
+              f.style.setProperty('height', h, 'important');
+              f.style.setProperty('min-height', h, 'important');
+              f.style.setProperty('border', '0', 'important');
+              if (!f.__arkdoFixLogged) {
+                f.__arkdoFixLogged = true;
+                console.log('captchaFix applied kind=' + (isChallenge ? 'challenge' : 'checkbox') + ' size=' + w + 'x' + h);
+              }
+            });
+          }
+          setInterval(fix, 500);
+          try {
+            new MutationObserver(function (muts) {
+              for (var i = 0; i < muts.length; i++) {
+                if (muts[i].addedNodes && muts[i].addedNodes.length) { fix(); return; }
+              }
+            }).observe(document.documentElement, { childList: true, subtree: true });
+          } catch (e) {}
+        })();
+    """.trimIndent()
 }
 
 @Composable
@@ -285,10 +345,13 @@ fun LoginScreen(
     // 收键盘脚本注入时机：绑在「软键盘弹起」上（对齐鸿蒙 avoidAreaChange 监听）。
     // 键盘弹起意味着用户已点进表单输入框：文档一定是最终那个且可交互。每次弹起都注入，
     // 脚本自身有 __arkdoLoginKbdReady 标记挡重复。
+    // hCaptcha 尺寸兜底脚本(FIX)不能只靠键盘触发:第二次点登录时表单已填好、键盘不弹,
+    // 所以 onPageFinished 也注入一份;脚本内部有 __arkdoCaptchaFix 守卫,重复注入无副作用。
     val imeVisible = WindowInsets.isImeVisible
     LaunchedEffect(imeVisible) {
         if (imeVisible) {
             webViewRef?.evaluateJavascript(LoginKeyboardScript.SCRIPT, null)
+            webViewRef?.evaluateJavascript(LoginKeyboardScript.FIX, null)
         }
     }
 
@@ -341,6 +404,10 @@ fun LoginScreen(
                             Timber.i("%s page end url=%s", LOG_TAG, url)
                             scope.launch { WebSessionManager.saveCookies("LoginPage") }
                             logCfClearanceSnapshot("pageEnd")
+                            // 只在站点自身文档上装 hCaptcha 尺寸兜底(三方 OAuth 跳转页不碰)。
+                            if (url.startsWith(AppConstants.BASE_URL)) {
+                                webViewRef?.evaluateJavascript(LoginKeyboardScript.FIX, null)
+                            }
                             if (isLikelyLoggedInUrl(url)) signalLoginSuccess("pageEnd", url)
                         },
                         onHttpError = { url, statusCode, isForMainFrame ->

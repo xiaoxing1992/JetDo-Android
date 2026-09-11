@@ -51,7 +51,8 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
+            // 暂不加 .debug 后缀:排查登录人机验证时排除包名变量,与正式包保持同一 applicationId。
+            // applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
     }
