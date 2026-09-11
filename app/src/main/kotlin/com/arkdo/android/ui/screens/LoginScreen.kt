@@ -29,7 +29,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -358,10 +360,15 @@ fun LoginScreen(
     
     // 弹层呈现:全屏页面盖在根容器上(替换原底部 88% 半弹窗)。全屏让登录 WebView 与其后的
     // Cloudflare Turnstile 人机验证框拿到完整可视区,不再被弹窗裁掉一截导致空白/无法交互。
+    // 键盘避让:Edge-to-Edge 下窗口不再自动 resize,WebView 得靠 imePadding 缩高,
+    // Chromium 才会把聚焦的输入框滚进可视区(否则键盘直接盖住表单)。背景先铺满再 padding,
+    // 导航栏/键盘后面仍是页面底色,不露出底下的首页。
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.pageBg)
+            .navigationBarsPadding()
+            .imePadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 顶栏:标题「登录」居中 + 右上角关闭。状态栏 inset 由这里垫(根 Scaffold 已关掉
