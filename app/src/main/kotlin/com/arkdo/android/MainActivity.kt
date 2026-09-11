@@ -73,8 +73,13 @@ class MainActivity : ComponentActivity() {
         // 清理媒体缓存（冷启动）
         ArkWebNetworkBridge.clearMediaCacheDir(this)
 
-        // Edge-to-Edge：沉浸式状态栏和导航栏
-        // enableEdgeToEdge()  // 暂关:Edge-to-Edge 关闭,恢复系统默认窗口模式
+        // Edge-to-Edge:沉浸式状态栏和导航栏。全 app 各页自行垫 statusBars/navigationBars inset
+        // (RootTabScreen 已把 Scaffold 的 contentWindowInsets 关掉)。曾因 WebView 输入框不随键盘
+        // 顶起而关掉过它,但关掉后状态栏区露出窗口背景(灰),首页不再沉浸;正确做法是保留
+        // Edge-to-Edge,由承载 WebView 的页面自己 imePadding(见 LoginScreen/WebViewPage)。
+        // 另:targetSdk 35+ 在 Android 15 上系统强制 Edge-to-Edge,关掉也不生效,键盘问题
+        // 终究要靠 imePadding 解决。
+        enableEdgeToEdge()
 
         setContent {
             ArkDoTheme {

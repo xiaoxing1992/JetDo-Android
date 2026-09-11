@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -163,10 +165,14 @@ fun WebViewPage(
         }
     }
 
+    // 背景先铺满再垫导航栏/键盘 inset:Edge-to-Edge 下 WebView 靠 imePadding 缩高,
+    // 聚焦的输入框才会被 Chromium 滚进可视区(私信输入等场景)。
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
+            .navigationBarsPadding()
+            .imePadding()
     ) {
         // 顶栏:返回 + 标题(副标题域名)+ ⋯ 菜单。
         Row(

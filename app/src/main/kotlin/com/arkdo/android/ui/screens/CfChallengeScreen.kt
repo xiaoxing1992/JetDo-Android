@@ -99,6 +99,8 @@ fun CfChallengeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                // Scaffold 只垫系统栏,键盘 inset 另补:验证页偶有输入(如短信/邮箱验证码)。
+                .imePadding()
         ) {
             // 连接失败提示条
             if (showConnectivityHint) {
