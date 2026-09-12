@@ -12,6 +12,8 @@ ArkDO Android 是 LINUX DO 社区的第三方 Android 原生客户端，基于 H
 - **图片加载**：Coil
 - **持久化**：DataStore + Room
 
+首页核心列表已按 Now in Android 风格拆为垂直切片：`feature:home` 只依赖稳定的 `core:model`、`core:data` 和 `core:designsystem`；app 通过 Hilt 提供 WebView 网络桥接适配器。旧首页 ViewModel 和抽屉实现暂时保留，供后续分类筛选迁移使用。
+
 ## 目录结构
 
 ```
@@ -115,6 +117,17 @@ app/src/main/kotlin/com/arkdo/android/
         └── ...                         # 其他 30+ 组件
 ```
 
+### 模块化核心目录
+
+```
+core/model/       # 跨模块稳定业务模型
+core/network/     # JsonNetworkClient 与网络结果契约
+core/data/        # Repository 实现（首页、通知）
+core/designsystem/# 可复用 Compose 组件
+feature/home/     # 首页 feed、状态、分页和列表 UI
+feature/notification/ # 通知垂直切片
+```
+
 ## 核心服务说明
 
 ### 1. WebViewNetworkBridge（网络桥接）
@@ -167,11 +180,14 @@ UI (Compose)
 - [x] 通知垂直切片：`core:model`、`core:network`、`core:data`、`feature:notification`
 - [x] app 网络桥接与通知未读事件总线适配
 - [x] 通知 Repository、ViewModel、Compose 页面及单元测试
+- [x] 首页核心列表垂直切片：`core:model`、`core:data`、`feature:home`
+- [x] 首页最新/热门/未读 feed、刷新、分页、去重和基础错误态
+- [ ] RootTab 接入 `HomeRoute`（待完成视觉与交互对齐；当前继续使用旧首页入口）
 
 ### 高优先级（对齐 HarmonyOS 版本核心功能）
 - [ ] WebView 网络桥接完整实现
 - [ ] Cloudflare 挑战检测与静默恢复
-- [ ] 话题列表 API 适配与渲染
+- [x] 首页核心话题列表 API 适配与渲染
 - [ ] 话题详情页（分页加载、楼层跳转）
 - [ ] Cooked HTML 解析器（→ Compose AnnotatedString）
 - [ ] 登录流程（WebView OAuth）
@@ -184,7 +200,9 @@ UI (Compose)
 - [ ] 通知中心剩余类型与交互完整对齐（当前已完成基础列表、分页、刷新、已读和导航）
 - [ ] 个人主页（用户动态、徽章墙）
 - [ ] 搜索功能
-- [ ] 版块筛选抽屉
+- [ ] 版块筛选抽屉（旧首页仍保留，待后续迁移）
+
+首页本轮明确暂缓：将新 feature 替换到 RootTab 前的视觉/交互对齐、分类抽屉、标签联想、实时新话题提示、版本公告和复杂 FAB 动画；当前 RootTab 继续使用原首页，话题详情、发帖和搜索仍由 app 侧页面负责。
 
 ### 低优先级（增强功能）
 - [ ] LaTeX 公式渲染

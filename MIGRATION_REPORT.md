@@ -1,9 +1,17 @@
-# ArkDO-Android 垂直切片迁移完成报告
+# ArkDO-Android 垂直切片迁移报告
 
 ## 迁移概览
 从 HarmonyOS (ArkTS) 到 Android (Kotlin + Jetpack Compose) 的核心功能垂直切片迁移已完成。
 
-本轮进一步完成了通知功能的 Now in Android 风格模块化：`core:model` 定义稳定模型，`core:network` 定义网络契约，`core:data` 提供 Repository，`feature:notification` 承担状态、ViewModel 与 Compose UI；app 仅保留 Hilt 组装和兼容入口。
+本轮进一步完成了通知和首页核心列表的 Now in Android 风格模块化：`core:model` 定义稳定模型，`core:network` 定义网络契约，`core:data` 提供 Repository，`feature:notification` 与 `feature:home` 承担各自状态、ViewModel 与 Compose UI；app 仅保留 Hilt 组装和兼容入口。
+
+## 最近完成：首页垂直切片
+
+- `core:model`：新增 `HomeFeed`、`HomeQuery`、`HomeTopic`、`HomePage`。
+- `core:data`：新增 `HomeRepository` 和 `DefaultHomeRepository`，支持 `/latest.json`、`/hot.json`、`/unread.json`、分类/标签路径、错误映射和用户/标签解析。
+- `feature/home`：新增单一 `HomeUiState`、feed 切换、首次加载、刷新、分页、请求互斥、话题 ID 去重和 Compose 列表。
+- app：新增 `HomeModule` 与 `HomeFeatureScreen` 作为兼容入口，但 RootTab 暂不切换，继续使用原首页 UI；旧首页抽屉和高级 ViewModel 保留为当前实现，待完成视觉对齐后再替换。
+- 测试：Repository 覆盖映射、分页路径和网络失败；ViewModel 覆盖首载、刷新、分页去重和重复请求。
 
 ## 已完成模块
 

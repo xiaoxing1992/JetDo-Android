@@ -1,0 +1,19 @@
+package com.arkdo.android.di
+
+import com.arkdo.android.core.data.home.DefaultHomeRepository
+import com.arkdo.android.core.data.home.HomeRepository
+import com.arkdo.android.core.network.JsonNetworkClient
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object HomeModule {
+    @Provides
+    @Singleton
+    fun provideHomeRepository(client: JsonNetworkClient): HomeRepository =
+        DefaultHomeRepository(client)
+}
