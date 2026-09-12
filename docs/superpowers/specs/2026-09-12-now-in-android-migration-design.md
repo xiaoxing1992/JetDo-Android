@@ -40,7 +40,7 @@ feature/
   settings/     future migration target
 ```
 
-首期只创建真正需要的模块：`:core:model`、`:core:network`、`:core:data`、`:core:datastore`、`:core:designsystem` 和 `:feature:notification`。空的未来 feature 目录不作为本次代码改动创建。
+首期只创建真正需要的模块：`:core:common`、`:core:model`、`:core:network`、`:core:data`、`:core:datastore`、`:core:designsystem` 和 `:feature:notification`。空的未来 feature 目录不作为本次代码改动创建。
 
 依赖方向固定为：
 
@@ -48,7 +48,7 @@ feature/
 :app -> :feature:notification -> :core:data -> :core:network
                                       |          -> :core:model
                                       -> :core:datastore
-:core:designsystem -> :core:ui / :core:model
+:core:designsystem -> :core:common / :core:model
 ```
 
 Feature 模块不得依赖 `:app` 或其他 feature 模块。`app` 可以依赖多个 feature，并负责把 feature 的导航入口注册到顶层 NavHost。
