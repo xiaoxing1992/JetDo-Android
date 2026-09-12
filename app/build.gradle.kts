@@ -78,6 +78,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:network"))
     implementation(project(":feature:notification"))
+    implementation(project(":feature:home"))
 
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
