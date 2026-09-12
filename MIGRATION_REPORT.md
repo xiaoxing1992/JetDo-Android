@@ -3,6 +3,8 @@
 ## 迁移概览
 从 HarmonyOS (ArkTS) 到 Android (Kotlin + Jetpack Compose) 的核心功能垂直切片迁移已完成。
 
+本轮进一步完成了通知功能的 Now in Android 风格模块化：`core:model` 定义稳定模型，`core:network` 定义网络契约，`core:data` 提供 Repository，`feature:notification` 承担状态、ViewModel 与 Compose UI；app 仅保留 Hilt 组装和兼容入口。
+
 ## 已完成模块
 
 ### 1. ✅ Network 层（WebView 桥接）
@@ -150,7 +152,7 @@ data/models/
 
 ### P2 - 高级功能
 11. 搜索（SearchService）
-12. 通知（NotificationService 已有，UI 未接）
+12. 通知剩余类型与交互（基础列表 UI、Repository、ViewModel 已迁移）
 13. 用户主页（UserProfileService）
 14. 阅读进度上报（reportTimings）
 15. 草稿（DraftService）

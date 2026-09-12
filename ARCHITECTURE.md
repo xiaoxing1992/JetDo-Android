@@ -84,10 +84,10 @@ app/src/main/kotlin/com/arkdo/android/
 └── ui/                          # UI 层
     ├── theme/                  # 主题定义（Theme.kt、Type.kt、Color.kt）
     │
-    ├── screens/                # 页面（15 个，对齐 HarmonyOS 版本）
+    ├── screens/                # 页面（仍在渐进迁移）
     │   ├── RootTabScreen.kt            # 根 Tab 容器（首页、通知、个人中心）
     │   ├── HomeScreen.kt               # 首页（最新、热门、未读）
-    │   ├── NotificationScreen.kt       # 通知中心
+    │   ├── NotificationScreen.kt       # 通知兼容入口（实际 UI 在 feature/notification）
     │   ├── ProfileScreen.kt            # 个人主页
     │   ├── TopicDetailScreen.kt        # 话题详情
     │   ├── LoginScreen.kt              # 登录页
@@ -161,7 +161,12 @@ UI (Compose)
   ↓ Compose 重组渲染
 ```
 
-## 待实现功能清单
+## 迁移状态与待实现功能清单
+
+### 已迁移到 Now in Android 风格模块
+- [x] 通知垂直切片：`core:model`、`core:network`、`core:data`、`feature:notification`
+- [x] app 网络桥接与通知未读事件总线适配
+- [x] 通知 Repository、ViewModel、Compose 页面及单元测试
 
 ### 高优先级（对齐 HarmonyOS 版本核心功能）
 - [ ] WebView 网络桥接完整实现
@@ -176,7 +181,7 @@ UI (Compose)
 - [ ] 回复评论（Bottom Sheet + 输入框）
 - [ ] 表情回应、Boost、投票
 - [ ] 书签管理
-- [ ] 通知中心（30+ 种通知类型）
+- [ ] 通知中心剩余类型与交互完整对齐（当前已完成基础列表、分页、刷新、已读和导航）
 - [ ] 个人主页（用户动态、徽章墙）
 - [ ] 搜索功能
 - [ ] 版块筛选抽屉

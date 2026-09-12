@@ -37,21 +37,21 @@
 - Produces Gradle modules named `:core:common`, `:core:model`, `:core:network`, `:core:data`, `:core:datastore`, `:core:designsystem`, and `:feature:notification`.
 - Produces dependency direction `feature:notification -> core:data -> core:network/core:model`.
 
-- [ ] **Step 1: Write the module-graph verification test**
+- [x] **Step 1: Write the module-graph verification test**
 
 Create a lightweight Gradle configuration check in the plan execution notes by asserting the expected module names with `./gradlew projects`; no production behavior is changed by this check.
 
-- [ ] **Step 2: Run the verification before adding modules**
+- [x] **Step 2: Run the verification before adding modules**
 
 Run: `./gradlew projects --console=plain`
 
 Expected: output contains only `:app` and does not contain `:core:model`.
 
-- [ ] **Step 3: Add module declarations and version aliases**
+- [x] **Step 3: Add module declarations and version aliases**
 
 Add the seven modules to `settings.gradle.kts`. Add the Coroutines version and library aliases needed by `core:data` and tests. Each Android library module uses `com.android.library`, Kotlin Compose only where Compose code exists, and the existing Hilt/KSP plugin aliases where ViewModel injection is used.
 
-- [ ] **Step 4: Add minimal module build files**
+- [x] **Step 4: Add minimal module build files**
 
 Configure:
 
@@ -66,7 +66,7 @@ Configure:
 
 Use the existing `compileSdk`, Java 17, Compose BOM, Hilt, KSP, and test libraries. Do not add a new third-party dependency beyond the Coroutines alias already present in the local Gradle cache.
 
-- [ ] **Step 5: Verify the new graph resolves**
+- [x] **Step 5: Verify the new graph resolves**
 
 Run: `./gradlew projects --console=plain`
 
@@ -85,23 +85,23 @@ Expected: all seven modules are listed and configuration exits with code 0.
 **Interfaces:**
 - Produces `com.arkdo.android.core.model.NotificationItem` with the existing notification display fields.
 - Produces `com.arkdo.android.core.network.JsonNetworkClient` with the existing request methods and `NetworkResult`/`NetworkError` types.
-- The app's old `services.network` package remains source-compatible through typealiases so existing services do not need a broad migration in this slice.
+- The app's old `services.network` package remains source-compatible as a parallel legacy contract; the new notification slice uses the canonical `core:network` contract through an app-local adapter.
 
-- [ ] **Step 1: Write model compatibility tests**
+- [x] **Step 1: Write model compatibility tests**
 
 Add `core/model/src/test/kotlin/com/arkdo/android/core/model/NotificationItemTest.kt` with a test that constructs a notification item and verifies `copy(read = true)` changes only the read field.
 
-- [ ] **Step 2: Run the model test to verify the missing module fails**
+- [x] **Step 2: Run the model test to verify the missing module fails**
 
 Run: `./gradlew :core:model:test --console=plain`
 
 Expected: fail because the module and `NotificationItem` do not exist yet.
 
-- [ ] **Step 3: Implement the stable model and network contracts**
+- [x] **Step 3: Implement the stable model and network contracts**
 
-Move only the presentation-neutral `NotificationItem` shape into `core:model`. Copy the existing network contract into `core:network` without importing any app package. Replace the old app declarations with typealiases and a forwarding `NetworkResults` object so existing app services keep compiling against the new canonical types.
+Move only the presentation-neutral `NotificationItem` shape into `core:model`. Copy the existing network contract into `core:network` without importing any app package. Keep the old app declarations as a source-compatible parallel contract while the migrated notification path uses the canonical types through its adapter.
 
-- [ ] **Step 4: Run the model test and app compilation**
+- [x] **Step 4: Run the model test and app compilation**
 
 Run: `./gradlew :core:model:test :app:compileDebugKotlin --console=plain`
 
@@ -136,7 +136,7 @@ sealed interface NotificationPageResult {
 
 The Repository implementation owns Discourse notification DTOs, JSON parsing, visual metadata mapping, and conversion of network failures into `NotificationPageResult`. It must not expose `RawNotification`, `NetworkResult`, or `JsonNetworkClient` to feature modules.
 
-- [ ] **Step 1: Write the failing repository tests**
+- [x] **Step 1: Write the failing repository tests**
 
 Cover these exact behaviors:
 
@@ -149,17 +149,17 @@ Cover these exact behaviors:
 
 The fake client returns a JSON payload containing one actor notification and one malformed notification. Assertions verify the mapped actor, title, icon metadata, filtered malformed row, and failure message.
 
-- [ ] **Step 2: Run the repository tests to verify failure**
+- [x] **Step 2: Run the repository tests to verify failure**
 
 Run: `./gradlew :core:data:test --tests '*DefaultNotificationRepositoryTest' --console=plain`
 
 Expected: fail because `NotificationRepository`, `DefaultNotificationRepository`, and the fake client do not exist.
 
-- [ ] **Step 3: Implement the Repository and private DTOs**
+- [x] **Step 3: Implement the Repository and private DTOs**
 
 Port the existing notification parsing and type-to-visual mapping into `core:data`. Keep DTOs private to the data package. Use the canonical `core:network` contract and return stable failure messages. Preserve the existing API paths, page size semantics, recent flag, mark-read path, referrer, and unknown-type fallback behavior.
 
-- [ ] **Step 4: Run repository tests to verify green**
+- [x] **Step 4: Run repository tests to verify green**
 
 Run: `./gradlew :core:data:test --tests '*DefaultNotificationRepositoryTest' --console=plain`
 
@@ -195,21 +195,21 @@ class NotificationViewModel(
 
 `NotificationUnreadStore` is a small interface in `core:data` with `publish(unread, highPriority)`, `decrement(highPriority)`, and `currentHighPriority()`. The feature depends on this interface, not the app event bus.
 
-- [ ] **Step 1: Write failing ViewModel tests**
+- [x] **Step 1: Write failing ViewModel tests**
 
 Cover initial load success, failed initial load, retry after failure, append load-more behavior, optimistic item read rollback, and mark-all-read rollback. Tests use a fake Repository and fake unread store, and assert state values rather than implementation calls.
 
-- [ ] **Step 2: Run ViewModel tests to verify failure**
+- [x] **Step 2: Run ViewModel tests to verify failure**
 
 Run: `./gradlew :feature:notification:test --tests '*NotificationViewModelTest' --console=plain`
 
 Expected: fail because the feature ViewModel and contracts do not exist.
 
-- [ ] **Step 3: Implement the feature ViewModel**
+- [x] **Step 3: Implement the feature ViewModel**
 
 Port the current state transitions to the Repository contract. Use `viewModelScope`, preserve the single in-flight load guard, page offsets, optimistic read behavior, and unread-store updates. Add `@HiltViewModel` and constructor injection in the feature module.
 
-- [ ] **Step 4: Run ViewModel tests to verify green**
+- [x] **Step 4: Run ViewModel tests to verify green**
 
 Run: `./gradlew :feature:notification:test --tests '*NotificationViewModelTest' --console=plain`
 
@@ -242,21 +242,21 @@ fun NotificationRoute(
 
 The feature screen consumes only `NotificationUiState`, `NotificationItem`, core design-system components, and callbacks. The app wrapper reads `CurrentUserHolder` and calls `LoginGate.requestLogin()`, preserving the existing caller signature in `RootTabScreen` while keeping those app concerns out of the feature module.
 
-- [ ] **Step 1: Add the UI test before moving the screen**
+- [x] **Step 1: Add the UI test before moving the screen**
 
 Create a Compose test in `feature/notification/src/androidTest` or a JVM state-level test when the local emulator is unavailable. The required assertions are: a successful state renders the notification title, and an error state renders the retry action.
 
-- [ ] **Step 2: Run the UI test to verify the moved screen is absent**
+- [x] **Step 2: Run the UI test to verify the moved screen is absent**
 
 Run: `./gradlew :feature:notification:testDebugUnitTest --console=plain`
 
 Expected: fail because the feature screen and test harness do not exist.
 
-- [ ] **Step 3: Move the screen and shared notification-only UI helpers**
+- [x] **Step 3: Move the screen and shared notification-only UI helpers**
 
 Move the current notification layout without changing user-facing strings, row behavior, pagination trigger, pull-to-refresh, mark-all-read action, topic navigation arguments, or user navigation arguments. Replace app-only `UserAvatar` with the shared `NotificationAvatar` and use `core:common` for relative time formatting. Keep the app wrapper source-compatible.
 
-- [ ] **Step 4: Run feature compilation and UI/state tests**
+- [x] **Step 4: Run feature compilation and UI/state tests**
 
 Run: `./gradlew :feature:notification:testDebugUnitTest :feature:notification:compileDebugKotlin --console=plain`
 
@@ -279,25 +279,25 @@ Expected: tests pass and the feature compiles without an `app` dependency.
 - Hilt provides `NotificationUnreadStore` through an app-local adapter delegating to `NotificationEventBus`.
 - `feature:notification` is added as an app dependency; `app` no longer provides the old `NotificationApi` for the notification screen.
 
-- [ ] **Step 1: Add a DI boundary test/compile check**
+- [x] **Step 1: Add a DI boundary test/compile check**
 
 Use the feature compilation plus app compile as the dependency-boundary check. Add no test-only production coupling to `ArkWebNetworkBridge`.
 
-- [ ] **Step 2: Run the check before wiring**
+- [x] **Step 2: Run the check before wiring**
 
 Run: `./gradlew :feature:notification:compileDebugKotlin :app:compileDebugKotlin --console=plain`
 
 Expected: fail because the feature dependency and Hilt bindings are not wired.
 
-- [ ] **Step 3: Add the Hilt providers and app adapter**
+- [x] **Step 3: Add the Hilt providers and app adapter**
 
 Implement the network adapter by delegating every method of the core `JsonNetworkClient` to the existing app bridge. Implement the unread-store adapter by forwarding to `NotificationEventBus`. Add module dependencies and replace the old `NotificationApi` provider only after the new Repository is available.
 
-- [ ] **Step 4: Wire the compatibility wrapper and remove old ViewModel usage**
+- [x] **Step 4: Wire the compatibility wrapper and remove old ViewModel usage**
 
 Keep `RootTabScreen` behavior unchanged. The old app `NotificationScreen` function delegates to `NotificationRoute`, passing current login state and callbacks. Remove the old app ViewModel and old screen-private notification state logic.
 
-- [ ] **Step 5: Verify the app and feature together**
+- [x] **Step 5: Verify the app and feature together**
 
 Run: `./gradlew :feature:notification:compileDebugKotlin :app:compileDebugKotlin --console=plain`
 
@@ -311,25 +311,25 @@ Expected: both modules compile and no feature source imports an app package.
 - Modify: `ARCHITECTURE.md` to document the new module graph and migration rule.
 - Modify: `MIGRATION_REPORT.md` with the completed notification slice and next migration targets.
 
-- [ ] **Step 1: Run focused tests**
+- [x] **Step 1: Run focused tests**
 
 Run: `./gradlew :core:model:test :core:data:test :feature:notification:testDebugUnitTest --console=plain`
 
 Expected: exit code 0 with no failed tests.
 
-- [ ] **Step 2: Run the complete unit test suite**
+- [x] **Step 2: Run the complete unit test suite**
 
 Run: `./gradlew :app:testDebugUnitTest --console=plain`
 
 Expected: existing app tests and migrated feature tests pass.
 
-- [ ] **Step 3: Build the debug APK**
+- [x] **Step 3: Build the debug APK**
 
 Run: `./gradlew :app:assembleDebug --no-daemon --console=plain`
 
 Expected: exit code 0 and a debug APK is produced.
 
-- [ ] **Step 4: Verify the diff and architecture constraints**
+- [x] **Step 4: Verify the diff and architecture constraints**
 
 Run: `git diff --check`; `rg -n "com\.arkdo\.android\.(services|ui|data)" feature/notification core/data core/model core/network core/designsystem core/common`; `git status --short`.
 
