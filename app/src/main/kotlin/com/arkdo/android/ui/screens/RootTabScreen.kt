@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -29,6 +31,7 @@ import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeScreen
 import com.arkdo.android.ui.home.HomeViewModel
+import com.arkdo.android.ui.notification.NotificationScreen
 
 /**
  * Root Tab 容器
@@ -53,11 +56,32 @@ fun RootTabScreen(
     val homeViewModel: HomeViewModel = hiltViewModel()
 
     // 启动会话检查(对齐鸿蒙 RootTabPage handleArkWebReady:宿主就绪后才发 session 请求;
-    // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录)。
+    // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录。之后 WebView 就绪、
+    // 会话广播、页面回到前台都各补一次 —— CurrentUserHolder 是头像/铃铛的唯一真源,
+    // 只在 WebView 就绪那一次核对的话,未登录用户的登录态会一直是初始化时的残留值。
     val sessionViewModel: SessionViewModel = hiltViewModel()
     LaunchedEffect(isWebViewReady) {
         if (isWebViewReady) {
             sessionViewModel.checkCurrentUser()
+        }
+    }
+
+    // 会话变化(登录/登出/换号)与页面回到前台都复查当前用户,刷新 CurrentUserHolder。
+    // CurrentUserHolder 是首页头像/铃铛的唯一真源:若只在 WebView 就绪时核对一次,
+    // 未登录用户(会话检查失败 → 不写 null)会一直渲染初始化残留的登录态。
+    // rememberUpdatedState 保证 LaunchedEffect(Unit) 这种只组合一次的闭包里,读到的是最新 ready。
+    val currentWebViewReady by rememberUpdatedState(isWebViewReady)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(Unit) {
+        com.arkdo.android.services.session.SessionEventBus.subscribe { _ ->
+            if (currentWebViewReady) {
+                sessionViewModel.checkCurrentUser()
+            }
+        }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            if (currentWebViewReady) {
+                sessionViewModel.checkCurrentUser()
+            }
         }
     }
 
@@ -128,6 +152,16 @@ fun RootTabScreen(
                             launchSingleTop = true
                         }
                     },
+                    onNotificationsClick = {
+                        // 首页顶栏铃铛 → 通知 tab(对齐鸿蒙 handleNotificationClick→switchTab NOTIFICATIONS)。
+                        tabNavController.navigate(Routes.NOTIFICATION) {
+                            popUpTo(tabNavController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     isLoggedIn = loggedIn,
                     isCheckingSession = false,
                     accountUser = currentUser,
@@ -146,7 +180,29 @@ fun RootTabScreen(
                 )
             }
             composable(Routes.NOTIFICATION) {
-                NotificationScreen(navController = navController)
+                NotificationScreen(
+                    onOpenTopic = { topicId, slug, title, postNumber ->
+                        val parts = mutableListOf<String>()
+                        slug?.takeIf { it.isNotEmpty() }?.let { parts.add("slug=$it") }
+                        title?.takeIf { it.isNotEmpty() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                        postNumber?.let { parts.add("target=$it") }
+                        val q = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
+                    },
+                    onOpenUser = { uname, displayName, avatarTemplate ->
+                        if (uname.isEmpty()) return@NotificationScreen
+                        val q = buildString {
+                            displayName?.takeIf { it.isNotEmpty() }?.let {
+                                append("?displayName=${java.net.URLEncoder.encode(it, "UTF-8")}")
+                            }
+                            avatarTemplate?.takeIf { it.isNotEmpty() }?.let {
+                                if (isNotEmpty()) append("&") else append("?")
+                                append("avatar=${java.net.URLEncoder.encode(it, "UTF-8")}")
+                            }
+                        }
+                        navController.navigate("${Routes.USER_PROFILE}/$uname$q")
+                    }
+                )
             }
             composable(Routes.PROFILE) {
                 // 底部 Tab「我的」:沉浸式内容(无返回/设置栏,顶到状态栏),与独立页共用 ProfileScreen。

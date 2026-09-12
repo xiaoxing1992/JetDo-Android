@@ -66,6 +66,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 
 // ==========================================================================
@@ -277,7 +279,7 @@ fun LoginScreen(
      * 登录成功统一出口：单次守卫，停掉两路轮询、落盘 cookie，再通知上层
      * （对齐鸿蒙 signalLoginSuccess + handleLoginSuccess：关登录页 + 刷新会话）。
      */
-    fun signalLoginSuccess(source: String, url: String) {
+fun signalLoginSuccess(source: String, url: String) {
         if (hasSignaledLoginSuccess) return
         hasSignaledLoginSuccess = true
         Timber.i("%s login success signaled source=%s url=%s", LOG_TAG, source, url)
@@ -285,12 +287,14 @@ fun LoginScreen(
         challengePollJob = null
         scope.launch {
             WebSessionManager.saveCookies("LoginPage")
-            // 对齐 RootTabPage.handleLoginSuccess：先关就绪门闩，再广播会话变化，
+            // 先关登录页:关页让出主线程,cookiePoll 的 800ms 循环才有机会把 hasSignaledLoginSuccess
+            // 读成 true。复查落在关页之后 —— host 未就绪时会话请求会卡住等待,先关页立刻可见。
+            onNavigateBack()
+            // 对齐 RootTabPage.handleLoginSuccess:先关就绪门闩,再广播会话变化,
             // 并立即复查 /session/current.json 把 LoginGate 翻成已登录。
             ArkWebNetworkBridge.markHostReloading()
             SessionEventBus.notifySessionChanged()
             sessionViewModel.checkCurrentUser()
-            onNavigateBack()
         }
     }
 

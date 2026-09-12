@@ -237,8 +237,11 @@ private fun HomeTitleBar(
             FaIcon("magnifying-glass", colors.textPrimary, 20.dp)
         }
 
-        BarIconButton(onClick = onNotificationsClick, endMargin = 4.dp) {
-            FaIcon("bell", ArkdoFixedColors.Amber, 24.dp)
+        // 通知铃铛只在登录后显示(对齐鸿蒙:未登录无通知入口)。
+        if (isLoggedIn) {
+            BarIconButton(onClick = onNotificationsClick, endMargin = 4.dp) {
+                FaIcon("bell", ArkdoFixedColors.Amber, 24.dp)
+            }
         }
 
         // 账号入口(对齐鸿蒙 AccountEntry):会话检查中转圈;已登录显示头像(34);
