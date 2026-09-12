@@ -13,22 +13,34 @@ fun HomeRoute(
     onSearchClick: () -> Unit,
     onDebugClick: () -> Unit,
     onComposeClick: () -> Unit,
+    onMenuClick: () -> Unit = {},
+    isWebViewReady: Boolean = true,
+    isLoggedIn: Boolean = false,
+    isCheckingSession: Boolean = false,
+    accountUser: com.arkdo.android.core.model.HomeUser? = null,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
-    LaunchedEffect(Unit) { viewModel.loadInitial() }
+    LaunchedEffect(isWebViewReady) {
+        if (isWebViewReady) viewModel.loadInitial()
+    }
 
     HomeScreen(
         state = state,
-        onFeedSelected = viewModel::selectFeed,
         onRetry = viewModel::retry,
         onRefresh = viewModel::refresh,
         onLoadMore = viewModel::loadMore,
         onTopicClick = onTopicClick,
+        onMenuClick = onMenuClick,
         onProfileClick = onProfileClick,
         onNotificationsClick = onNotificationsClick,
         onSearchClick = onSearchClick,
         onDebugClick = onDebugClick,
-        onComposeClick = onComposeClick
+        onComposeClick = onComposeClick,
+        isWebViewReady = isWebViewReady,
+        isLoggedIn = isLoggedIn,
+        isCheckingSession = isCheckingSession,
+        accountUser = accountUser,
+        onFabScroll = viewModel::updateFabMode
     )
 }

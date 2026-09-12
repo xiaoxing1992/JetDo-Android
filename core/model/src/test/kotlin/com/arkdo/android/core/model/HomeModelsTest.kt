@@ -22,5 +22,24 @@ class HomeModelsTest {
         assertEquals(1L, page.items.single().id)
     }
 
+    @Test
+    fun topic_calculates_first_unread_post_and_caps_at_highest_post() {
+        val topic = HomeTopic(
+            id = 2,
+            title = "Unread",
+            lastReadPostNumber = 9,
+            highestPostNumber = 10
+        )
+
+        assertEquals(10, topic.firstUnreadPostNumber())
+    }
+
+    @Test
+    fun topic_without_read_history_opens_from_the_top() {
+        val topic = HomeTopic(id = 3, title = "Unread", lastReadPostNumber = 0)
+
+        assertEquals(null, topic.firstUnreadPostNumber())
+    }
+
     private fun topic(id: Long) = HomeTopic(id = id, title = "Topic $id")
 }

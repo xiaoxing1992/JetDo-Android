@@ -26,6 +26,14 @@ data class HomeUser(
     val avatarTemplate: String? = null
 )
 
+data class HomeCategory(
+    val id: Long,
+    val name: String,
+    val color: String = "6B7280",
+    val textColor: String = "FFFFFF",
+    val parentCategoryId: Long? = null
+)
+
 data class HomeTopic(
     val id: Long,
     val title: String,
@@ -37,10 +45,21 @@ data class HomeTopic(
     val lastPostedAt: String? = null,
     val unseen: Boolean = false,
     val unreadPosts: Int = 0,
+    val lastReadPostNumber: Int? = null,
+    val highestPostNumber: Int? = null,
     val bookmarked: Boolean = false,
     val hasAcceptedAnswer: Boolean = false,
+    val category: HomeCategory? = null,
     val author: HomeUser? = null
-)
+) {
+    /** The first unread post, capped to the topic's highest known post. */
+    fun firstUnreadPostNumber(): Int? {
+        val lastRead = lastReadPostNumber ?: 0
+        if (lastRead <= 0) return null
+        val highest = highestPostNumber ?: 0
+        return if (highest > 0) minOf(lastRead + 1, highest) else lastRead + 1
+    }
+}
 
 data class HomePage(
     val items: List<HomeTopic>,
