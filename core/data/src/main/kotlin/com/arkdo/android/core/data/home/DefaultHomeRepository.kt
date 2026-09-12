@@ -3,6 +3,7 @@ package com.arkdo.android.core.data.home
 import com.arkdo.android.core.model.HomePage
 import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
@@ -74,9 +75,24 @@ class DefaultHomeRepository(
             lastPostedAt = obj.string("last_posted_at"),
             unseen = obj.boolean("unseen"),
             unreadPosts = obj.int("unread_posts") ?: 0,
+            lastReadPostNumber = obj.int("last_read_post_number"),
+            highestPostNumber = obj.int("highest_post_number"),
             bookmarked = obj.boolean("bookmarked"),
             hasAcceptedAnswer = obj.boolean("has_accepted_answer"),
+            category = obj["category"]?.jsonObject?.let(::parseCategory),
             author = authorId?.let(users::get)
+        )
+    }
+
+    private fun parseCategory(obj: JsonObject): HomeCategory? {
+        val id = obj.long("id") ?: return null
+        val name = obj.string("name") ?: return null
+        return HomeCategory(
+            id = id,
+            name = name,
+            color = obj.string("color") ?: "6B7280",
+            textColor = obj.string("text_color") ?: "FFFFFF",
+            parentCategoryId = obj.long("parent_category_id")
         )
     }
 

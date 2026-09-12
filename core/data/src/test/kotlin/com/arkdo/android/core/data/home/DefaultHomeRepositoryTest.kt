@@ -26,7 +26,10 @@ class DefaultHomeRepositoryTest {
                     {"users":[{"id":7,"username":"ada","name":"Ada","avatar_template":"/u/ada/{size}/x.png"}],
                      "topic_list":{"more_topics_url":"/latest.json?page=1","topics":[
                        {"id":11,"title":"Hello","slug":"hello","category_id":3,"reply_count":4,
-                        "last_posted_at":"2026-09-12T10:00:00.000Z","unread_posts":2,"posters":[{"user_id":7}],
+                        "last_posted_at":"2026-09-12T10:00:00.000Z","unread_posts":2,
+                        "last_read_post_number":8,"highest_post_number":10,
+                        "category":{"id":3,"name":"开发","color":"112233","text_color":"FFFFFF"},
+                        "posters":[{"user_id":7}],
                         "tags":["kotlin"]}]}}
                 """.trimIndent()
             )
@@ -39,6 +42,8 @@ class DefaultHomeRepositoryTest {
         assertEquals(11L, item.id)
         assertEquals("Ada", item.author?.name)
         assertEquals("kotlin", item.tags.single().name)
+        assertEquals("开发", item.category?.name)
+        assertEquals(9, item.firstUnreadPostNumber())
         assertTrue((result as HomePageResult.Success).page.hasMore)
         assertEquals("/latest.json", client.lastPath)
     }

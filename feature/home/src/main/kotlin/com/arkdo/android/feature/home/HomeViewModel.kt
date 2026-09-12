@@ -23,7 +23,8 @@ data class HomeUiState(
     val isInitialLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val showBackToTopFab: Boolean = false
 )
 
 @HiltViewModel
@@ -56,6 +57,18 @@ class HomeViewModel @Inject constructor(
 
     fun retry() {
         if (_uiState.value.topics.isEmpty()) loadInitial() else refresh()
+    }
+
+    fun updateFabMode(scrollOffset: Float, viewportHeight: Float) {
+        if (viewportHeight <= 0f) return
+        val ratio = scrollOffset / viewportHeight
+        val state = _uiState.value
+        when {
+            !state.showBackToTopFab && ratio > 1.5f ->
+                _uiState.update { it.copy(showBackToTopFab = true) }
+            state.showBackToTopFab && ratio < 1.2f ->
+                _uiState.update { it.copy(showBackToTopFab = false) }
+        }
     }
 
     fun selectFeed(feed: HomeFeed) {

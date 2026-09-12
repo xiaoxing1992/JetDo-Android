@@ -99,6 +99,25 @@ class HomeViewModelTest {
 
         assertEquals(1, repository.callCount)
     }
+
+    @Test
+    fun scroll_past_one_and_a_half_viewports_shows_back_to_top_fab() = runTest {
+        val viewModel = HomeViewModel(FakeHomeRepository())
+
+        viewModel.updateFabMode(scrollOffset = 1_501f, viewportHeight = 1_000f)
+
+        assertTrue(viewModel.uiState.value.showBackToTopFab)
+    }
+
+    @Test
+    fun scrolling_back_inside_hysteresis_hides_back_to_top_fab() = runTest {
+        val viewModel = HomeViewModel(FakeHomeRepository())
+
+        viewModel.updateFabMode(scrollOffset = 1_501f, viewportHeight = 1_000f)
+        viewModel.updateFabMode(scrollOffset = 1_199f, viewportHeight = 1_000f)
+
+        assertFalse(viewModel.uiState.value.showBackToTopFab)
+    }
 }
 
 private fun topic(id: Long) = HomeTopic(
