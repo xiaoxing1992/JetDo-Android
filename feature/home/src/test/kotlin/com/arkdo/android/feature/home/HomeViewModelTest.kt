@@ -118,6 +118,102 @@ class HomeViewModelTest {
 
         assertFalse(viewModel.uiState.value.showBackToTopFab)
     }
+
+    @Test
+    fun setQuery_reloads_using_the_complete_legacy_scope() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = false)),
+            HomePageResult.Success(HomePage(listOf(topic(2)), page = 0, hasMore = false))
+        )
+        val viewModel = HomeViewModel(repository)
+
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        viewModel.setQuery(
+            HomeQuery(
+                feed = HomeFeed.TOP,
+                categoryId = 42L,
+                categorySlug = "android",
+                tag = "kotlin",
+                tagId = 7L,
+                tagSlug = "kotlin"
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(HomeFeed.TOP, repository.queries.last().feed)
+        assertEquals(42L, repository.queries.last().categoryId)
+        assertEquals(7L, repository.queries.last().tagId)
+        assertEquals(listOf(2L), viewModel.uiState.value.topics.map(HomeTopic::id))
+    }
+
+    @Test
+    fun incomingTopics_are_deduplicated_and_show_prompt() = runTest {
+        val viewModel = HomeViewModel(FakeHomeRepository())
+
+        viewModel.addIncomingTopic(11L)
+        viewModel.addIncomingTopic(11L)
+        viewModel.addIncomingTopic(12L)
+
+        assertEquals(listOf(11L, 12L), viewModel.uiState.value.incomingTopicIds)
+        assertTrue(viewModel.uiState.value.incomingPromptVisible)
+    }
+
+    @Test
+    fun loadIncomingTopics_prepends_only_topics_missing_from_current_list() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = true)),
+            byIds = listOf(topic(1), topic(2))
+        )
+        val viewModel = HomeViewModel(repository)
+
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        viewModel.addIncomingTopic(1L)
+        viewModel.addIncomingTopic(2L)
+        viewModel.loadIncomingTopics()
+        advanceUntilIdle()
+
+        assertEquals(listOf(2L, 1L), viewModel.uiState.value.topics.map(HomeTopic::id))
+        assertEquals(listOf(1L, 2L), repository.byIdsCalls)
+        assertTrue(viewModel.uiState.value.incomingTopicIds.isEmpty())
+        assertFalse(viewModel.uiState.value.incomingPromptVisible)
+    }
+
+    @Test
+    fun incomingTopics_wait_for_current_list_request_to_finish() = runTest {
+        val repository = DeferredHomeRepository()
+        val viewModel = HomeViewModel(repository)
+
+        viewModel.loadInitial()
+        viewModel.addIncomingTopic(2L)
+        viewModel.loadIncomingTopics()
+
+        assertTrue(viewModel.uiState.value.pendingIncomingRefresh)
+        assertTrue(repository.byIdsCalls.isEmpty())
+
+        repository.initial.complete(HomePageResult.Success(HomePage(listOf(topic(1)), 0, true)))
+        advanceUntilIdle()
+
+        assertEquals(listOf(2L), repository.byIdsCalls)
+    }
+
+    @Test
+    fun refresh_clears_pending_incoming_topics() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = true)),
+            HomePageResult.Success(HomePage(listOf(topic(3)), page = 0, hasMore = false))
+        )
+        val viewModel = HomeViewModel(repository)
+
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        viewModel.addIncomingTopic(2L)
+        viewModel.refresh()
+
+        assertTrue(viewModel.uiState.value.incomingTopicIds.isEmpty())
+        assertFalse(viewModel.uiState.value.incomingPromptVisible)
+    }
 }
 
 private fun topic(id: Long) = HomeTopic(
@@ -127,14 +223,23 @@ private fun topic(id: Long) = HomeTopic(
 )
 
 private open class FakeHomeRepository(
-    private vararg val results: HomePageResult
+    private vararg val results: HomePageResult,
+    private val byIds: List<HomeTopic> = emptyList()
 ) : HomeRepository {
     val calls = mutableListOf<Pair<HomeFeed, Int>>()
+    val queries = mutableListOf<HomeQuery>()
+    val byIdsCalls = mutableListOf<Long>()
     private var index = 0
 
     override suspend fun load(query: HomeQuery, page: Int): HomePageResult {
         calls += query.feed to page
+        queries += query
         return results.getOrElse(index++) { results.last() }
+    }
+
+    override suspend fun loadByIds(topicIds: List<Long>): HomePageResult {
+        byIdsCalls += topicIds
+        return HomePageResult.Success(HomePage(byIds, page = 0, hasMore = false))
     }
 }
 
@@ -146,5 +251,17 @@ private class BlockingHomeRepository : FakeHomeRepository(
     override suspend fun load(query: HomeQuery, page: Int): HomePageResult {
         callCount += 1
         return super.load(query, page)
+    }
+}
+
+private class DeferredHomeRepository : HomeRepository {
+    val initial = kotlinx.coroutines.CompletableDeferred<HomePageResult>()
+    val byIdsCalls = mutableListOf<Long>()
+
+    override suspend fun load(query: HomeQuery, page: Int): HomePageResult = initial.await()
+
+    override suspend fun loadByIds(topicIds: List<Long>): HomePageResult {
+        byIdsCalls += topicIds
+        return HomePageResult.Success(HomePage(listOf(topic(2)), page = 0, hasMore = false))
     }
 }

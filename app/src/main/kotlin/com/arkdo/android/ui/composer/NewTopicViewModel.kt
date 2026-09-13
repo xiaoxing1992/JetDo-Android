@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.arkdo.android.services.network.NetworkResult
-import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.services.topic.TopicService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -250,7 +249,7 @@ class NewTopicViewModel @Inject constructor(
     }
 
     /** 已登录检查(首页点发帖前已拦过一次;防浮层悬挂期间登出)。 */
-    fun ensureLoggedIn(): Boolean = LoginGate.ensureLoggedIn(appContext)
+    fun ensureLoggedIn(): Boolean = ensureComposerAccess(appContext)
 
     /**
      * 提交发帖。直接发布 → done(true, topicId, message) 由 UI 跳详情;

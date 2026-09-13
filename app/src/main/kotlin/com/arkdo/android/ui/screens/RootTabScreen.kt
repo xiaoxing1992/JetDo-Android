@@ -31,6 +31,11 @@ import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeScreen
 import com.arkdo.android.ui.home.HomeViewModel
+import com.arkdo.android.ui.home.HomeFeatureScreen
+import com.arkdo.android.ui.home.toHomeCategory
+import com.arkdo.android.ui.home.toHomeQuery
+import com.arkdo.android.ui.home.toHomeUser
+import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.ui.notification.NotificationScreen
 
 /**
@@ -54,6 +59,10 @@ fun RootTabScreen(
     // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和 HomeScreen 共用同一个实例。
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
     val homeViewModel: HomeViewModel = hiltViewModel()
+    val legacyHomeState by homeViewModel.uiState.collectAsState()
+    LaunchedEffect(isWebViewReady) {
+        homeViewModel.loadSiteMetadataIfNeeded(isWebViewReady)
+    }
 
     // 启动会话检查(对齐鸿蒙 RootTabPage handleArkWebReady:宿主就绪后才发 session 请求;
     // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录。之后 WebView 就绪、
@@ -95,7 +104,7 @@ fun RootTabScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
-                TabItem.entries.forEach { tab ->
+                rootTabDestinations.forEach { tab ->
                     val isSelected = currentDestination?.hierarchy?.any {
                         it.route == tab.route
                     } == true
@@ -166,8 +175,9 @@ fun RootTabScreen(
                     isCheckingSession = false,
                     accountUser = currentUser,
                     onComposeClick = {
-                        // 发帖前登录闸门:未登录弹登录页,回来后用户自己再点发帖(对齐鸿蒙 openComposer)。
-                        if (LoginGate.ensureLoggedIn(context)) {
+                        // 同时检查内存中的当前用户，避免持久化的旧登录标记在会话失效后
+                        // 仍然放行发帖页。登录成功后由用户再次点击发帖。
+                        if (ensureComposerAccess(context)) {
                             val categoryId = state.listQuery.category?.id?.takeIf { it > 0 }
                             val arg = categoryId?.let { "?categoryId=$it" } ?: ""
                             navController.navigate("${Routes.NEW_TOPIC}$arg")
@@ -177,6 +187,43 @@ fun RootTabScreen(
                         // 顶栏虫形图标 → 调试日志页(排障用,无需登录,可分享/复制日志文件)。
                         navController.navigate(Routes.DEBUG_LOG)
                     }
+                )
+            }
+            composable(Routes.NEW_HOME) {
+                val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val featureQuery = legacyHomeState.listQuery.toHomeQuery()
+                HomeFeatureScreen(
+                    query = featureQuery,
+                    isWebViewReady = isWebViewReady,
+                    isLoggedIn = currentUser != null,
+                    isCheckingSession = false,
+                    accountUser = currentUser?.toHomeUser(),
+                    categories = legacyHomeState.categories.map { it.toHomeCategory() },
+                    onTopicClick = { topicId, targetPostNumber ->
+                        val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
+                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
+                    },
+                    onProfileClick = {
+                        navController.navigate(Routes.PROFILE) { launchSingleTop = true }
+                    },
+                    onNotificationsClick = {
+                        tabNavController.navigate(Routes.NOTIFICATION) {
+                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onSearchClick = {},
+                    onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
+                    onComposeClick = {
+                        // 新首页与旧首页使用同一条会话闸门，未拿到当前用户时不得进入编辑页。
+                        if (ensureComposerAccess(context)) {
+                            val arg = featureQuery.categoryId?.let { "?categoryId=$it" } ?: ""
+                            navController.navigate("${Routes.NEW_TOPIC}$arg")
+                        }
+                    },
+                    onMenuClick = { homeViewModel.openDrawer() }
                 )
             }
             composable(Routes.NOTIFICATION) {
@@ -223,15 +270,21 @@ fun RootTabScreen(
 /**
  * Tab 项定义
  */
-private enum class TabItem(
+internal enum class RootTabDestination(
     val route: String,
     val label: String,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    HOME(
+    LEGACY_HOME(
         route = Routes.HOME,
         label = "首页",
+        selectedIcon = Icons.Filled.Home,
+        unselectedIcon = Icons.Outlined.Home
+    ),
+    NEW_HOME(
+        route = Routes.NEW_HOME,
+        label = "新首页",
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home
     ),
@@ -248,3 +301,10 @@ private enum class TabItem(
         unselectedIcon = Icons.Outlined.Person
     )
 }
+
+internal val rootTabDestinations = listOf(
+    RootTabDestination.LEGACY_HOME,
+    RootTabDestination.NEW_HOME,
+    RootTabDestination.NOTIFICATION,
+    RootTabDestination.PROFILE
+)

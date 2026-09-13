@@ -23,12 +23,14 @@ class DefaultHomeRepositoryTest {
                 statusCode = 200,
                 challengeState = ChallengeState.NONE,
                 data = """
-                    {"users":[{"id":7,"username":"ada","name":"Ada","avatar_template":"/u/ada/{size}/x.png"}],
+                    {"users":[{"id":7,"username":"ada","name":"Ada","avatar_template":"/u/ada/{size}/x.png",
+                        "animated_avatar":"/u/ada/animated.gif","flair_url":"award.svg","flair_bg_color":"112233"}],
                      "topic_list":{"more_topics_url":"/latest.json?page=1","topics":[
                        {"id":11,"title":"Hello","slug":"hello","category_id":3,"reply_count":4,
                         "last_posted_at":"2026-09-12T10:00:00.000Z","unread_posts":2,
                         "last_read_post_number":8,"highest_post_number":10,
-                        "category":{"id":3,"name":"开发","color":"112233","text_color":"FFFFFF"},
+                        "excerpt":"summary","created_at":"2026-09-11T10:00:00.000Z",
+                        "category":{"id":3,"name":"开发","slug":"dev","color":"112233","text_color":"FFFFFF","icon":"code","read_restricted":true},
                         "posters":[{"user_id":7}],
                         "tags":["kotlin"]}]}}
                 """.trimIndent()
@@ -41,8 +43,13 @@ class DefaultHomeRepositoryTest {
         val item = (result as HomePageResult.Success).page.items.single()
         assertEquals(11L, item.id)
         assertEquals("Ada", item.author?.name)
+        assertEquals("/u/ada/animated.gif", item.author?.animatedAvatar)
+        assertEquals("award.svg", item.author?.flairUrl)
         assertEquals("kotlin", item.tags.single().name)
         assertEquals("开发", item.category?.name)
+        assertEquals("summary", item.searchBlurb)
+        assertEquals("code", item.category?.icon)
+        assertTrue(item.category?.readRestricted == true)
         assertEquals(9, item.firstUnreadPostNumber())
         assertTrue((result as HomePageResult.Success).page.hasMore)
         assertEquals("/latest.json", client.lastPath)
@@ -60,6 +67,27 @@ class DefaultHomeRepositoryTest {
     }
 
     @Test
+    fun load_preserves_legacy_created_category_and_tag_path() = runTest {
+        val client = FakeHomeNetworkClient(
+            response = NetworkResult(true, 200, ChallengeState.NONE, data = "{\"topic_list\":{\"topics\":[]}}")
+        )
+
+        DefaultHomeRepository(client).load(
+            HomeQuery(
+                feed = HomeFeed.CREATED,
+                categoryId = 42L,
+                categorySlug = "android",
+                tag = "kotlin",
+                tagId = 7L,
+                tagSlug = "kotlin"
+            ),
+            2
+        )
+
+        assertEquals("/tags/c/android/42/kotlin/7/l/latest.json?order=created&page=2", client.lastPath)
+    }
+
+    @Test
     fun load_returns_stable_failure_for_network_error() = runTest {
         val client = FakeHomeNetworkClient(
             response = NetworkResult(
@@ -71,6 +99,17 @@ class DefaultHomeRepositoryTest {
         val result = DefaultHomeRepository(client).load(HomeQuery(), 0)
 
         assertEquals(HomePageResult.Failure("challenge", true), result)
+    }
+
+    @Test
+    fun loadByIds_requests_latest_topics_without_duplicate_ids() = runTest {
+        val client = FakeHomeNetworkClient(
+            response = NetworkResult(true, 200, ChallengeState.NONE, data = "{\"topic_list\":{\"topics\":[]}}")
+        )
+
+        DefaultHomeRepository(client).loadByIds(listOf(8L, 8L, 3L))
+
+        assertEquals("/latest.json?topic_ids=8,3", client.lastPath)
     }
 }
 

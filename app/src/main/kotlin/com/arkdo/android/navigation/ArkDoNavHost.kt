@@ -3,6 +3,8 @@ package com.arkdo.android.navigation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,7 +18,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.arkdo.android.services.session.LoginGate
+import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.ui.composer.NewTopicScreen
+import com.arkdo.android.ui.composer.canUseComposer
+import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.ProfileScreen
@@ -274,18 +279,27 @@ fun ArkDoNavHost(
             )
         ) { entry ->
             val seedCategory = entry.arguments?.getLong("categoryId")?.takeIf { it > 0 }
-            NewTopicScreen(
-                seedCategoryId = seedCategory,
-                onBack = { navController.popBackStack() },
-                onPublished = { topicId ->
-                    // 发帖成功:广播会话变化让首页列表刷新,弹掉发帖页再进新帖详情,
-                    // 使从详情返回时回到首页(而不是一张已发出的发帖页)。
-                    com.arkdo.android.services.session.SessionEventBus.notifySessionChanged()
-                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId") {
-                        popUpTo(Routes.NEW_TOPIC) { inclusive = true }
+            val currentUser by CurrentUserHolder.currentUser.collectAsState()
+            val context = androidx.compose.ui.platform.LocalContext.current
+            if (canUseComposer(currentUser, LoginGate.isLoggedIn(context))) {
+                NewTopicScreen(
+                    seedCategoryId = seedCategory,
+                    onBack = { navController.popBackStack() },
+                    onPublished = { topicId ->
+                        // 发帖成功:广播会话变化让首页列表刷新,弹掉发帖页再进新帖详情,
+                        // 使从详情返回时回到首页(而不是一张已发出的发帖页)。
+                        com.arkdo.android.services.session.SessionEventBus.notifySessionChanged()
+                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId") {
+                            popUpTo(Routes.NEW_TOPIC) { inclusive = true }
+                        }
                     }
+                )
+            } else {
+                LaunchedEffect(Unit) {
+                    ensureComposerAccess(context)
+                    navController.popBackStack()
                 }
-            )
+            }
         }
 
         // 通用 WebView 页(对齐鸿蒙 AppRouteName.WEB:私信 / 外站 / 站内非帖子页)。
@@ -327,6 +341,7 @@ fun ArkDoNavHost(
 object Routes {
     const val ROOT = "root"
     const val HOME = "home"
+    const val NEW_HOME = "new_home"
     const val NOTIFICATION = "notification"
     const val PROFILE = "profile"
 
