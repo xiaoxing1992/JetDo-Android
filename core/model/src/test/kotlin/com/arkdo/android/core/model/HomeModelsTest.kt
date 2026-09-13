@@ -7,11 +7,29 @@ import org.junit.Test
 class HomeModelsTest {
     @Test
     fun query_preserves_selected_feed_and_scope() {
-        val query = HomeQuery(feed = HomeFeed.HOT, categoryId = 42L, tag = "kotlin")
+        val query = HomeQuery(
+            feed = HomeFeed.HOT,
+            categoryId = 42L,
+            categorySlug = "android",
+            tag = "kotlin",
+            tagId = 7L,
+            tagSlug = "kotlin"
+        )
 
         assertEquals(HomeFeed.HOT, query.feed)
         assertEquals(42L, query.categoryId)
         assertEquals("kotlin", query.tag)
+        assertEquals("android", query.categorySlug)
+        assertEquals(7L, query.tagId)
+        assertEquals("kotlin", query.tagSlug)
+    }
+
+    @Test
+    fun feed_covers_all_legacy_home_filters() {
+        assertEquals(
+            listOf("latest", "created", "top", "hot", "unread", "new"),
+            HomeFeed.entries.map(HomeFeed::apiValue)
+        )
     }
 
     @Test

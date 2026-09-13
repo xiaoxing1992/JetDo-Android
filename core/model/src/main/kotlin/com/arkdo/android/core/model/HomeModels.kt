@@ -2,15 +2,21 @@ package com.arkdo.android.core.model
 
 enum class HomeFeed(val apiValue: String, val label: String) {
     LATEST("latest", "最新"),
+    CREATED("created", "最新发布"),
+    TOP("top", "排行榜"),
     HOT("hot", "热门"),
-    UNREAD("unread", "未读")
+    UNREAD("unread", "未读"),
+    NEW("new", "未读新帖")
 }
 
 data class HomeQuery(
     val feed: HomeFeed = HomeFeed.LATEST,
     val categoryId: Long? = null,
     val categorySlug: String? = null,
-    val tag: String? = null
+    val categoryName: String? = null,
+    val tag: String? = null,
+    val tagId: Long? = null,
+    val tagSlug: String? = null
 )
 
 data class HomeTag(
@@ -23,7 +29,12 @@ data class HomeUser(
     val id: Long,
     val username: String,
     val name: String? = null,
-    val avatarTemplate: String? = null
+    val avatarTemplate: String? = null,
+    val animatedAvatar: String? = null,
+    val flairUrl: String? = null,
+    val flairBgColor: String? = null,
+    val flairColor: String? = null,
+    val flairName: String? = null
 )
 
 data class HomeCategory(
@@ -31,7 +42,11 @@ data class HomeCategory(
     val name: String,
     val color: String = "6B7280",
     val textColor: String = "FFFFFF",
-    val parentCategoryId: Long? = null
+    val parentCategoryId: Long? = null,
+    val slug: String? = null,
+    val uploadedLogo: String? = null,
+    val icon: String? = null,
+    val readRestricted: Boolean = false
 )
 
 data class HomeTopic(
@@ -40,6 +55,7 @@ data class HomeTopic(
     val slug: String? = null,
     val categoryId: Long? = null,
     val tags: List<HomeTag> = emptyList(),
+    val createdAt: String? = null,
     val replyCount: Int? = null,
     val views: Int? = null,
     val lastPostedAt: String? = null,
@@ -49,6 +65,7 @@ data class HomeTopic(
     val highestPostNumber: Int? = null,
     val bookmarked: Boolean = false,
     val hasAcceptedAnswer: Boolean = false,
+    val searchBlurb: String? = null,
     val category: HomeCategory? = null,
     val author: HomeUser? = null
 ) {

@@ -24,7 +24,11 @@ data class HomeUiState(
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val error: String? = null,
-    val showBackToTopFab: Boolean = false
+    val showBackToTopFab: Boolean = false,
+    val incomingTopicIds: List<Long> = emptyList(),
+    val isLoadingIncoming: Boolean = false,
+    val pendingIncomingRefresh: Boolean = false,
+    val incomingPromptVisible: Boolean = false
 )
 
 @HiltViewModel
@@ -37,6 +41,7 @@ class HomeViewModel @Inject constructor(
     private var requestInFlight = false
     private var pendingLoad = false
     private var generation = 0
+    private var incomingRequestEpoch = 0
 
     fun loadInitial() {
         val state = _uiState.value
@@ -46,6 +51,7 @@ class HomeViewModel @Inject constructor(
 
     fun refresh() {
         if (requestInFlight) return
+        clearIncomingTopicsState()
         request(reset = true, page = 0)
     }
 
@@ -72,11 +78,16 @@ class HomeViewModel @Inject constructor(
     }
 
     fun selectFeed(feed: HomeFeed) {
-        if (_uiState.value.query.feed == feed) return
+        setQuery(_uiState.value.query.copy(feed = feed))
+    }
+
+    fun setQuery(query: HomeQuery) {
+        if (_uiState.value.query == query) return
         generation += 1
+        clearIncomingTopicsState()
         _uiState.update {
             it.copy(
-                query = it.query.copy(feed = feed),
+                query = query,
                 topics = emptyList(),
                 page = 0,
                 hasMore = true,
@@ -88,6 +99,80 @@ class HomeViewModel @Inject constructor(
         } else {
             loadInitial()
         }
+    }
+
+    /** Called by the host when MessageBus reports activity on a topic channel. */
+    fun addIncomingTopic(topicId: Long) {
+        if (topicId <= 0) return
+        _uiState.update { state ->
+            if (topicId in state.incomingTopicIds) {
+                state
+            } else {
+                state.copy(
+                    incomingTopicIds = state.incomingTopicIds + topicId,
+                    incomingPromptVisible = true
+                )
+            }
+        }
+    }
+
+    /** Loads pending realtime topics and prepends only topics not already visible. */
+    fun loadIncomingTopics() {
+        val state = _uiState.value
+        if (state.incomingTopicIds.isEmpty()) return
+        if (requestInFlight || state.isLoadingIncoming) {
+            _uiState.update { it.copy(pendingIncomingRefresh = true) }
+            return
+        }
+        _uiState.update { it.copy(pendingIncomingRefresh = false, isLoadingIncoming = true) }
+        val requestedIds = state.incomingTopicIds
+        val requestEpoch = ++incomingRequestEpoch
+        viewModelScope.launch {
+            val result = runCatching { repository.loadByIds(requestedIds) }
+                .getOrElse { HomePageResult.Failure(it.message ?: "加载失败，请重试") }
+            if (requestEpoch != incomingRequestEpoch) return@launch
+            when (result) {
+                is HomePageResult.Success -> {
+                    _uiState.update { current ->
+                        val existing = current.topics.mapTo(HashSet(), HomeTopic::id)
+                        val incoming = result.page.items.filter { it.id !in existing }
+                        current.copy(
+                            topics = incoming + current.topics,
+                            isLoadingIncoming = false,
+                            incomingTopicIds = emptyList(),
+                            incomingPromptVisible = false
+                        )
+                    }
+                }
+                is HomePageResult.Failure -> _uiState.update {
+                    it.copy(
+                        isLoadingIncoming = false,
+                        incomingTopicIds = emptyList(),
+                        incomingPromptVisible = false
+                    )
+                }
+            }
+            runPendingIncomingRefresh()
+        }
+    }
+
+    private fun clearIncomingTopicsState() {
+        incomingRequestEpoch++
+        _uiState.update {
+            it.copy(
+                isLoadingIncoming = false,
+                pendingIncomingRefresh = false,
+                incomingTopicIds = emptyList(),
+                incomingPromptVisible = false
+            )
+        }
+    }
+
+    private fun runPendingIncomingRefresh() {
+        val state = _uiState.value
+        if (!state.pendingIncomingRefresh || requestInFlight || state.incomingTopicIds.isEmpty()) return
+        _uiState.update { it.copy(pendingIncomingRefresh = false) }
+        loadIncomingTopics()
     }
 
     private fun request(reset: Boolean, page: Int) {
@@ -152,6 +237,7 @@ class HomeViewModel @Inject constructor(
                 pendingLoad = false
                 loadInitial()
             }
+            runPendingIncomingRefresh()
         }
     }
 

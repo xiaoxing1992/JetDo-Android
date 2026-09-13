@@ -59,6 +59,7 @@ typealias MessageBusListener = (MessageBusEvent) -> Unit
 /** 从 /topic/<id> 频道事件里取话题 id。 */
 fun extractMessageBusTopicId(event: MessageBusEvent?): Long? {
     if (event?.type != "message" || event.data == null) return null
+    if (!event.channel.orEmpty().startsWith("/topic/")) return null
     val topicId = event.data?.topicId ?: return null
     if (topicId <= 0) return null
     return topicId

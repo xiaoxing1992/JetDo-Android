@@ -4,6 +4,7 @@ import com.arkdo.android.core.model.HomePage
 import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeCategory
+import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
@@ -23,7 +24,22 @@ class DefaultHomeRepository(
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun load(query: HomeQuery, page: Int): HomePageResult {
-        val response = client.getJson(buildPath(query, page))
+        return loadPath(buildPath(query, page), page)
+    }
+
+    override suspend fun loadByIds(topicIds: List<Long>): HomePageResult {
+        val normalizedIds = topicIds.filter { it > 0 }.distinct()
+        if (normalizedIds.isEmpty()) {
+            return HomePageResult.Success(HomePage(emptyList(), page = 0, hasMore = false))
+        }
+        return loadPath(
+            path = "/latest.json?topic_ids=${normalizedIds.joinToString(",")}",
+            page = 0
+        )
+    }
+
+    private suspend fun loadPath(path: String, page: Int): HomePageResult {
+        val response = client.getJson(path)
         if (!response.success) {
             val error = response.error
             return HomePageResult.Failure(
@@ -57,7 +73,17 @@ class DefaultHomeRepository(
         val obj = element.jsonObject
         val id = obj.long("id") ?: return null
         val username = obj.string("username") ?: return null
-        return HomeUser(id, username, obj.string("name"), obj.string("avatar_template"))
+        return HomeUser(
+            id = id,
+            username = username,
+            name = obj.string("name"),
+            avatarTemplate = obj.string("avatar_template"),
+            animatedAvatar = obj.string("animated_avatar"),
+            flairUrl = obj.string("flair_url"),
+            flairBgColor = obj.string("flair_bg_color"),
+            flairColor = obj.string("flair_color"),
+            flairName = obj.string("flair_name")
+        )
     }
 
     private fun parseTopic(obj: JsonObject, users: Map<Long, HomeUser>): HomeTopic? {
@@ -70,6 +96,7 @@ class DefaultHomeRepository(
             slug = obj.string("slug"),
             categoryId = obj.long("category_id"),
             tags = parseTags(obj["tags"]),
+            createdAt = obj.string("created_at"),
             replyCount = obj.int("reply_count"),
             views = obj.int("views"),
             lastPostedAt = obj.string("last_posted_at"),
@@ -79,6 +106,7 @@ class DefaultHomeRepository(
             highestPostNumber = obj.int("highest_post_number"),
             bookmarked = obj.boolean("bookmarked"),
             hasAcceptedAnswer = obj.boolean("has_accepted_answer"),
+            searchBlurb = obj.string("excerpt"),
             category = obj["category"]?.jsonObject?.let(::parseCategory),
             author = authorId?.let(users::get)
         )
@@ -92,7 +120,11 @@ class DefaultHomeRepository(
             name = name,
             color = obj.string("color") ?: "6B7280",
             textColor = obj.string("text_color") ?: "FFFFFF",
-            parentCategoryId = obj.long("parent_category_id")
+            parentCategoryId = obj.long("parent_category_id"),
+            slug = obj.string("slug"),
+            uploadedLogo = obj.string("uploaded_logo"),
+            icon = obj.string("icon"),
+            readRestricted = obj.boolean("read_restricted")
         )
     }
 
@@ -108,21 +140,30 @@ class DefaultHomeRepository(
         }
 
     private fun buildPath(query: HomeQuery, page: Int): String {
-        val segment = query.feed.apiValue
-        val pageSuffix = if (page > 0) "?page=$page" else ""
-        val encodedTag = query.tag?.let { encode(it) }
+        val segment = if (query.feed == HomeFeed.CREATED) HomeFeed.LATEST.apiValue else query.feed.apiValue
+        val params = buildList {
+            if (query.feed == HomeFeed.CREATED) add("order=created")
+            if (page > 0) add("page=$page")
+        }
+        val suffix = if (params.isEmpty()) "" else "?${params.joinToString("&")}"
+        val encodedTag = query.tag?.let { query.tagSlug?.takeIf(String::isNotBlank) ?: it }
+            ?.let(::encode)
         val scope = when {
-            query.categoryId != null && encodedTag != null -> "/tags/c/${categorySegment(query)}/$encodedTag/l/$segment.json"
+            query.categoryId != null && encodedTag != null -> "/tags/c/${categorySegment(query)}/${tagSegment(query)}/l/$segment.json"
             query.categoryId != null -> "/c/${categorySegment(query)}/l/$segment.json"
-            encodedTag != null -> "/tag/$encodedTag/l/$segment.json"
+            encodedTag != null -> "/tag/${tagSegment(query)}/l/$segment.json"
             else -> "/$segment.json"
         }
-        return scope + pageSuffix
+        return scope + suffix
     }
 
     private fun categorySegment(query: HomeQuery): String =
         query.categorySlug?.takeIf(String::isNotBlank)?.let { "${encode(it)}/${query.categoryId}" }
             ?: query.categoryId.toString()
+
+    private fun tagSegment(query: HomeQuery): String =
+        query.tagId?.takeIf { it > 0 }?.let { "${encode(query.tagSlug ?: query.tag.orEmpty())}/$it" }
+            ?: encode(query.tag.orEmpty())
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
 
