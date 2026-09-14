@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.arkdo.android.data.models.TopicCategory
@@ -46,7 +46,7 @@ import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.utils.RelativeTime
+import com.arkdo.android.core.common.RelativeTime
 
 // ==========================================================================
 // 个人动态列表(对齐鸿蒙 ActivityListPage.ets)。

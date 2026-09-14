@@ -1,11 +1,11 @@
 package com.arkdo.android.ui.home
 
+import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeUser
-import com.arkdo.android.core.model.HomeCategory
-import com.arkdo.android.data.models.User
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.data.models.User
 import com.arkdo.android.services.topic.TopicListQuery
 
 /** Maps legacy app-owned home state into the stable feature contract. */

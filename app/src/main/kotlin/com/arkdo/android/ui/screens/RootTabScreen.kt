@@ -25,14 +25,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.navigation.Routes
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.home.HomeDrawerHost
+import com.arkdo.android.ui.home.HomeFeatureScreen
 import com.arkdo.android.ui.home.HomeScreen
 import com.arkdo.android.ui.home.HomeViewModel
-import com.arkdo.android.ui.home.HomeFeatureScreen
-import com.arkdo.android.ui.home.toHomeCategory
 import com.arkdo.android.ui.home.toHomeQuery
 import com.arkdo.android.ui.home.toHomeUser
 import com.arkdo.android.ui.composer.ensureComposerAccess
@@ -145,7 +144,7 @@ fun RootTabScreen(
                 // 登录态/当前用户镜像:会话检查成功后写入;首页右上角账号入口据此渲染。
                 val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
                 val loggedIn = currentUser != null
-                HomeScreen(
+HomeScreen(
                     isWebViewReady = isWebViewReady,
                     viewModel = homeViewModel,
                     onTopicClick = { topicId, targetPostNumber ->
@@ -175,7 +174,7 @@ fun RootTabScreen(
                     isCheckingSession = false,
                     accountUser = currentUser,
                     onComposeClick = {
-                        // 同时检查内存中的当前用户，避免持久化的旧登录标记在会话失效后
+                        // 同时检查内存中的当前用户,避免持久化的旧登录标记在会话失效后
                         // 仍然放行发帖页。登录成功后由用户再次点击发帖。
                         if (ensureComposerAccess(context)) {
                             val categoryId = state.listQuery.category?.id?.takeIf { it > 0 }
@@ -190,6 +189,8 @@ fun RootTabScreen(
                 )
             }
             composable(Routes.NEW_HOME) {
+                // 模块化首页(feature:home)过渡 tab:与旧首页并存对照,
+                // 等视觉/交互对齐后再删掉旧首页。版块索引由 feature 内部自取。
                 val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val featureQuery = legacyHomeState.listQuery.toHomeQuery()
@@ -199,7 +200,6 @@ fun RootTabScreen(
                     isLoggedIn = currentUser != null,
                     isCheckingSession = false,
                     accountUser = currentUser?.toHomeUser(),
-                    categories = legacyHomeState.categories.map { it.toHomeCategory() },
                     onTopicClick = { topicId, targetPostNumber ->
                         val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
@@ -217,7 +217,7 @@ fun RootTabScreen(
                     onSearchClick = {},
                     onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
                     onComposeClick = {
-                        // 新首页与旧首页使用同一条会话闸门，未拿到当前用户时不得进入编辑页。
+                        // 与旧首页同一条会话闸门,未拿到当前用户时不得进入编辑页。
                         if (ensureComposerAccess(context)) {
                             val arg = featureQuery.categoryId?.let { "?categoryId=$it" } ?: ""
                             navController.navigate("${Routes.NEW_TOPIC}$arg")

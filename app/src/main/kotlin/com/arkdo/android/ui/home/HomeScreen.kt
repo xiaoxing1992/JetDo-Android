@@ -53,14 +53,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.data.models.Topic
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.isDefault
 import com.arkdo.android.services.topic.topicListPrimaryTitle
-import com.arkdo.android.ui.components.FaIcon
+import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.TopicListItem as EnhancedTopicListItem
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.ArkdoFixedColors

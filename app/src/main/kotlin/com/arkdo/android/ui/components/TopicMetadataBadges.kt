@@ -31,6 +31,8 @@ import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.core.designsystem.FaIconSet
 
 // ==========================================================================
 // 对齐鸿蒙版 TopicBadges.ets / TopicCategoryBadge.ets / TopicTagBadge.ets。

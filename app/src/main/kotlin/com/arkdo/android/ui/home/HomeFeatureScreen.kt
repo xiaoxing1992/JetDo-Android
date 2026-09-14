@@ -3,19 +3,26 @@ package com.arkdo.android.ui.home
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeUser
-import com.arkdo.android.core.model.HomeCategory
-import com.arkdo.android.feature.home.HomeVisualTokens
-import com.arkdo.android.feature.home.HomeRoute
 import com.arkdo.android.feature.home.HomeIncomingTopicEvent
-import com.arkdo.android.common.constants.AppConstants
-import com.arkdo.android.ui.theme.ArkdoFixedColors
-import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.feature.home.HomeRoute
+import com.arkdo.android.feature.home.HomeVisualTokens
 import com.arkdo.android.services.message.MessageBusEventBus
 import com.arkdo.android.services.message.extractMessageBusTopicId
+import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.arkdoColors
 
-/** Compatibility entry point for the modular home feature. */
+/**
+ * 模块化首页(feature:home)的兼容入口。
+ *
+ * 新首页作为底部导航的独立 tab 使用(future 替换 app/ui/home/HomeScreen 的过渡入口):
+ * - 版块索引由 feature 内部 `CategoryRepository` 自行加载,无需再从这里传 categories。
+ * - colors / avatarBaseUrl 是 app 主题到 feature `HomeVisualTokens` 的桥接,
+ *   保持 feature 层不依赖 app 主题。
+ * - MessageBus 实时新话题订阅在这里做,subscribe 生命周期跟随组合。
+ */
 @Composable
 fun HomeFeatureScreen(
     query: HomeQuery,
@@ -23,7 +30,6 @@ fun HomeFeatureScreen(
     isLoggedIn: Boolean,
     isCheckingSession: Boolean,
     accountUser: HomeUser?,
-    categories: List<HomeCategory> = emptyList(),
     onTopicClick: (Long, Int?) -> Unit,
     onProfileClick: () -> Unit,
     onNotificationsClick: () -> Unit,
@@ -52,7 +58,6 @@ fun HomeFeatureScreen(
         isLoggedIn = isLoggedIn,
         isCheckingSession = isCheckingSession,
         accountUser = accountUser,
-        categories = categories,
         colors = HomeVisualTokens(
             pageBg = arkdoColors.pageBg,
             textPrimary = arkdoColors.textPrimary,

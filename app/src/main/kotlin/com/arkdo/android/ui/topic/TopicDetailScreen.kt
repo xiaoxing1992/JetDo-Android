@@ -77,7 +77,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.R
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.AcceptedAnswer
@@ -90,7 +90,7 @@ import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.CommentInputOverlay
-import com.arkdo.android.ui.components.FaIcon
+import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.ImageViewer
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope

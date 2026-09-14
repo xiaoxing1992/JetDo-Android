@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.data.models.AcceptedAnswer
 import com.arkdo.android.data.models.User
-import com.arkdo.android.ui.utils.RelativeTime
+import com.arkdo.android.core.common.RelativeTime
 
 // ==========================================================================
 // discourse-solved 采纳答案面板（对齐鸿蒙 AcceptedAnswerPanel.ets + Card）。

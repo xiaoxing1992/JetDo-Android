@@ -69,6 +69,7 @@ import com.arkdo.android.services.topic.filterRequiresLogin
 import com.arkdo.android.services.topic.isDefault
 import com.arkdo.android.services.topic.sameTopicListQuery
 import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.core.designsystem.FaIcon
 
 // ==========================================================================
 // 对齐鸿蒙版 views/components/CategoryDrawer.ets。

@@ -41,7 +41,8 @@ import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.utils.RelativeTime
+import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.designsystem.FaIconRaw
 
 // ==========================================================================
 // 对齐鸿蒙版 views/components/TopicListItem.ets。
