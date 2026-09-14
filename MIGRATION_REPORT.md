@@ -8,10 +8,10 @@
 ## 最近完成：首页垂直切片
 
 - `core:model`：新增 `HomeFeed`、`HomeQuery`、`HomeTopic`、`HomePage`。
-- `core:data`：新增 `HomeRepository` 和 `DefaultHomeRepository`，支持 `/latest.json`、`/hot.json`、`/unread.json`、分类/标签路径、错误映射和用户/标签解析。
-- `feature/home`：新增单一 `HomeUiState`、feed 切换、首次加载、刷新、分页、请求互斥、话题 ID 去重和 Compose 列表。
-- app：新增 `HomeModule` 与 `HomeFeatureScreen` 作为兼容入口，但 RootTab 暂不切换，继续使用原首页 UI；旧首页抽屉和高级 ViewModel 保留为当前实现，待完成视觉对齐后再替换。
-- 测试：Repository 覆盖映射、分页路径和网络失败；ViewModel 覆盖首载、刷新、分页去重和重复请求。
+- `core:data`:新增 `HomeRepository` / `DefaultHomeRepository`,支持 `/latest.json`、`/hot.json`、`/unread.json`、分类/标签路径、错误映射和用户/标签解析;并新增 `CategoryRepository` / `DefaultCategoryRepository` 承接 `/site.json` 版块索引。
+- `feature/home`:新增单一 `HomeUiState`、feed 切换、首次加载、刷新、分页、请求互斥、话题 ID 去重和 Compose 列表;版块索引由 `HomeViewModel` 经 `CategoryRepository` 自行加载,不再依赖 app 层旧首页 ViewModel。
+- app:`HomeModule` 提供两个 Repository 的 Hilt 绑定;`RootTabScreen` 仍使用旧首页 UI,旧首页抽屉和高级 ViewModel 保留为当前实现,待完成视觉对齐后再替换。
+- 测试:Repository 覆盖映射、分页路径、网络失败和分类索引解析;ViewModel 覆盖首载、刷新、分页去重和重复请求。
 
 ## 已完成模块
 

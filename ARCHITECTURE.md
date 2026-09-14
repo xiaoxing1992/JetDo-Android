@@ -12,7 +12,7 @@ ArkDO Android 是 LINUX DO 社区的第三方 Android 原生客户端，基于 H
 - **图片加载**：Coil
 - **持久化**：DataStore + Room
 
-首页核心列表已按 Now in Android 风格拆为垂直切片：`feature:home` 只依赖稳定的 `core:model`、`core:data` 和 `core:designsystem`；app 通过 Hilt 提供 WebView 网络桥接适配器。旧首页 ViewModel 和抽屉实现暂时保留，供后续分类筛选迁移使用。
+首页核心列表已按 Now in Android 风格拆为垂直切片:`feature:home` 依赖稳定的 `core:model`、`core:data` 和 `core:designsystem`,并经 `CategoryRepository` 自行加载 `/site.json` 版块索引;app 通过 Hilt 提供 WebView 网络桥接适配器。旧首页 ViewModel 和抽屉实现暂时保留,供后续分类筛选迁移使用。
 
 ## 目录结构
 
@@ -112,18 +112,18 @@ app/src/main/kotlin/com/arkdo/android/
         ├── ImageViewer.kt              # 图片预览（缩放、下拉关闭）
         ├── SearchBar.kt                # 搜索栏
         ├── CategoryDrawer.kt           # 版块抽屉
-        ├── FaIcon.kt                   # FontAwesome 图标
         ├── EmojiIcon.kt                # Emoji 图标
         └── ...                         # 其他 30+ 组件
 ```
 
 ### 模块化核心目录
-
 ```
 core/model/       # 跨模块稳定业务模型
 core/network/     # JsonNetworkClient 与网络结果契约
-core/data/        # Repository 实现（首页、通知）
-core/designsystem/# 可复用 Compose 组件
+core/common/      # 平台无关的共享工具(相对时间等)
+core/data/        # Repository 实现(首页、通知、站点版块)
+core/designsystem/# 可复用 Compose 组件与 FA 图标资产
+core/datastore/   # 偏好持久化(尚未启用)
 feature/home/     # 首页 feed、状态、分页和列表 UI
 feature/notification/ # 通知垂直切片
 ```
@@ -180,7 +180,7 @@ UI (Compose)
 - [x] 通知垂直切片：`core:model`、`core:network`、`core:data`、`feature:notification`
 - [x] app 网络桥接与通知未读事件总线适配
 - [x] 通知 Repository、ViewModel、Compose 页面及单元测试
-- [x] 首页核心列表垂直切片：`core:model`、`core:data`、`feature:home`
+- [x] 首页核心列表垂直切片:`core:model`、`core:data`、`core:designsystem`、`feature:home`(含 `/site.json` 版块索引)
 - [x] 首页最新/热门/未读 feed、刷新、分页、去重和基础错误态
 - [ ] RootTab 接入 `HomeRoute`（待完成视觉与交互对齐；当前继续使用旧首页入口）
 

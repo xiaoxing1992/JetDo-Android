@@ -1,6 +1,9 @@
 package com.arkdo.android.feature.home
 
 import com.arkdo.android.core.data.home.HomeRepository
+import com.arkdo.android.core.data.site.CategoryLoadResult
+import com.arkdo.android.core.data.site.CategoryRepository
+import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomePage
 import com.arkdo.android.core.model.HomePageResult
@@ -35,6 +38,11 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private fun viewModel(
+        repository: HomeRepository = FakeHomeRepository(),
+        categories: CategoryRepository = FakeCategoryRepository()
+    ): HomeViewModel = HomeViewModel(repository, categories)
+
     @Test
     fun loadInitial_publishesTopicsAndPaginationState() = runTest {
         val repository = FakeHomeRepository(
@@ -42,7 +50,7 @@ class HomeViewModelTest {
                 HomePage(listOf(topic(1), topic(2)), page = 0, hasMore = true)
             )
         )
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         advanceUntilIdle()
@@ -59,7 +67,7 @@ class HomeViewModelTest {
             HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = false)),
             HomePageResult.Success(HomePage(listOf(topic(3)), page = 0, hasMore = false))
         )
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         advanceUntilIdle()
@@ -76,7 +84,7 @@ class HomeViewModelTest {
             HomePageResult.Success(HomePage(listOf(topic(1), topic(2)), page = 0, hasMore = true)),
             HomePageResult.Success(HomePage(listOf(topic(2), topic(3)), page = 1, hasMore = false))
         )
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         advanceUntilIdle()
@@ -91,7 +99,7 @@ class HomeViewModelTest {
     @Test
     fun loadInitial_ignoresDuplicateRequestsWhileLoading() = runTest {
         val repository = BlockingHomeRepository()
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         viewModel.loadInitial()
@@ -102,7 +110,7 @@ class HomeViewModelTest {
 
     @Test
     fun scroll_past_one_and_a_half_viewports_shows_back_to_top_fab() = runTest {
-        val viewModel = HomeViewModel(FakeHomeRepository())
+        val viewModel = viewModel(repository = FakeHomeRepository())
 
         viewModel.updateFabMode(scrollOffset = 1_501f, viewportHeight = 1_000f)
 
@@ -111,7 +119,7 @@ class HomeViewModelTest {
 
     @Test
     fun scrolling_back_inside_hysteresis_hides_back_to_top_fab() = runTest {
-        val viewModel = HomeViewModel(FakeHomeRepository())
+        val viewModel = viewModel(repository = FakeHomeRepository())
 
         viewModel.updateFabMode(scrollOffset = 1_501f, viewportHeight = 1_000f)
         viewModel.updateFabMode(scrollOffset = 1_199f, viewportHeight = 1_000f)
@@ -125,7 +133,7 @@ class HomeViewModelTest {
             HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = false)),
             HomePageResult.Success(HomePage(listOf(topic(2)), page = 0, hasMore = false))
         )
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         advanceUntilIdle()
@@ -149,7 +157,7 @@ class HomeViewModelTest {
 
     @Test
     fun incomingTopics_are_deduplicated_and_show_prompt() = runTest {
-        val viewModel = HomeViewModel(FakeHomeRepository())
+        val viewModel = viewModel(repository = FakeHomeRepository())
 
         viewModel.addIncomingTopic(11L)
         viewModel.addIncomingTopic(11L)
@@ -165,7 +173,7 @@ class HomeViewModelTest {
             HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = true)),
             byIds = listOf(topic(1), topic(2))
         )
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         advanceUntilIdle()
@@ -183,7 +191,7 @@ class HomeViewModelTest {
     @Test
     fun incomingTopics_wait_for_current_list_request_to_finish() = runTest {
         val repository = DeferredHomeRepository()
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         viewModel.addIncomingTopic(2L)
@@ -204,7 +212,7 @@ class HomeViewModelTest {
             HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = true)),
             HomePageResult.Success(HomePage(listOf(topic(3)), page = 0, hasMore = false))
         )
-        val viewModel = HomeViewModel(repository)
+        val viewModel = viewModel(repository=repository)
 
         viewModel.loadInitial()
         advanceUntilIdle()
@@ -263,5 +271,17 @@ private class DeferredHomeRepository : HomeRepository {
     override suspend fun loadByIds(topicIds: List<Long>): HomePageResult {
         byIdsCalls += topicIds
         return HomePageResult.Success(HomePage(listOf(topic(2)), page = 0, hasMore = false))
+    }
+}
+
+private class FakeCategoryRepository(
+    private val result: CategoryLoadResult = CategoryLoadResult.Success(
+        listOf(HomeCategory(id = 42L, name = "Android", parentCategoryId = null))
+    )
+) : CategoryRepository {
+    var callCount = 0
+    override suspend fun load(): CategoryLoadResult {
+        callCount += 1
+        return result
     }
 }

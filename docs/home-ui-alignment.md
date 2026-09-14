@@ -95,3 +95,4 @@
 
 - 全部改动通过 `./gradlew :app:assembleDebug`。
 - 未做实机验证（本机无连接设备），像素级差异需要真机对比截图确认。
+- `feature:home` 已自带版块索引:`HomeViewModel` 经 `core:data` 的 `CategoryRepository` 加载 `/site.json`(解析含 `uploaded_logo` 的 string/object 双形态),不再从 app 层旧首页 ViewModel 取 categories。

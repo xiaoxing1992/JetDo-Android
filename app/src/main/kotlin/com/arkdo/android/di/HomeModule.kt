@@ -2,6 +2,8 @@ package com.arkdo.android.di
 
 import com.arkdo.android.core.data.home.DefaultHomeRepository
 import com.arkdo.android.core.data.home.HomeRepository
+import com.arkdo.android.core.data.site.CategoryRepository
+import com.arkdo.android.core.data.site.DefaultCategoryRepository
 import com.arkdo.android.core.network.JsonNetworkClient
 import dagger.Module
 import dagger.Provides
@@ -16,4 +18,9 @@ object HomeModule {
     @Singleton
     fun provideHomeRepository(client: JsonNetworkClient): HomeRepository =
         DefaultHomeRepository(client)
+
+    @Provides
+    @Singleton
+    fun provideCategoryRepository(client: JsonNetworkClient): CategoryRepository =
+        DefaultCategoryRepository(client)
 }

@@ -33,6 +33,8 @@ import com.arkdo.android.ui.theme.arkdoColors
 import timber.log.Timber
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.core.designsystem.FaIconSet
 
 // ==========================================================================
 // 对齐鸿蒙版 views/components/UserAvatar.ets。

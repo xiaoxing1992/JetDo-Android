@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.TopicCategory
+import com.arkdo.android.core.designsystem.FaIconSet
 
 /**
  * 徽章图标 / 颜色解析，逐函数对齐鸿蒙版 views/components/TopicBadgeUtils.ets。

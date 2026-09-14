@@ -4,9 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.core.model.HomeQuery
-import com.arkdo.android.core.model.HomeCategory
 
 data class HomeIncomingTopicEvent(
     val topicId: Long,
@@ -27,7 +26,6 @@ fun HomeRoute(
     isLoggedIn: Boolean = false,
     isCheckingSession: Boolean = false,
     accountUser: com.arkdo.android.core.model.HomeUser? = null,
-    categories: List<HomeCategory> = emptyList(),
     colors: HomeVisualTokens = HomeVisualTokens.Default,
     avatarBaseUrl: String = "",
     incomingTopicEvent: HomeIncomingTopicEvent? = null,
@@ -38,7 +36,10 @@ fun HomeRoute(
         viewModel.setQuery(query)
     }
     LaunchedEffect(isWebViewReady) {
-        if (isWebViewReady) viewModel.loadInitial()
+        if (isWebViewReady) {
+            viewModel.loadInitial()
+            viewModel.ensureCategoriesLoaded()
+        }
     }
     LaunchedEffect(incomingTopicEvent?.sequence) {
         incomingTopicEvent?.let { viewModel.addIncomingTopic(it.topicId) }
@@ -61,7 +62,6 @@ fun HomeRoute(
         isLoggedIn = isLoggedIn,
         isCheckingSession = isCheckingSession,
         accountUser = accountUser,
-        categories = categories,
         colors = colors,
         avatarBaseUrl = avatarBaseUrl,
         onFabScroll = viewModel::updateFabMode

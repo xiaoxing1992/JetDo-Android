@@ -114,13 +114,13 @@ fun HomeScreen(
     isLoggedIn: Boolean = false,
     isCheckingSession: Boolean = false,
     accountUser: HomeUser? = null,
-    categories: List<HomeCategory> = emptyList(),
     onFabScroll: (Float, Float) -> Unit = { _, _ -> },
     colors: HomeVisualTokens = HomeVisualTokens.Default,
     avatarBaseUrl: String = ""
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val categories = state.categories
 
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
         val layoutInfo = listState.layoutInfo

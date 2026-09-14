@@ -78,6 +78,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
+import com.arkdo.android.core.designsystem.FaIcon
 
 // ==========================================================================
 // 全屏图片浏览器，1:1 对齐鸿蒙 ImageViewer.ets 的行为与细节。

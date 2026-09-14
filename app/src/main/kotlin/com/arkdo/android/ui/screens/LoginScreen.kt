@@ -53,7 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.LOGIN_GATE_LOG_TAG

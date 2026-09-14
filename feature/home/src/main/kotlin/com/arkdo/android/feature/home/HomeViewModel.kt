@@ -3,6 +3,9 @@ package com.arkdo.android.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.core.data.home.HomeRepository
+import com.arkdo.android.core.data.site.CategoryLoadResult
+import com.arkdo.android.core.data.site.CategoryRepository
+import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
@@ -28,12 +31,15 @@ data class HomeUiState(
     val incomingTopicIds: List<Long> = emptyList(),
     val isLoadingIncoming: Boolean = false,
     val pendingIncomingRefresh: Boolean = false,
-    val incomingPromptVisible: Boolean = false
+    val incomingPromptVisible: Boolean = false,
+    val categories: List<HomeCategory> = emptyList(),
+    val isCategoriesLoading: Boolean = false
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repository: HomeRepository
+    private val repository: HomeRepository,
+    private val categoryRepository: CategoryRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -42,6 +48,25 @@ class HomeViewModel @Inject constructor(
     private var pendingLoad = false
     private var generation = 0
     private var incomingRequestEpoch = 0
+    private var categoriesRequested = false
+
+    /** Loads the site category index once; failures are silently swallowed (the list keeps working). */
+    fun ensureCategoriesLoaded() {
+        if (categoriesRequested) return
+        categoriesRequested = true
+        if (_uiState.value.categories.isNotEmpty()) return
+        _uiState.update { it.copy(isCategoriesLoading = true) }
+        viewModelScope.launch {
+            val result = runCatching { categoryRepository.load() }
+                .getOrElse { CategoryLoadResult.Failure(it.message ?: "版块加载失败") }
+            when (result) {
+                is CategoryLoadResult.Success -> _uiState.update {
+                    it.copy(categories = result.categories, isCategoriesLoading = false)
+                }
+                is CategoryLoadResult.Failure -> _uiState.update { it.copy(isCategoriesLoading = false) }
+            }
+        }
+    }
 
     fun loadInitial() {
         val state = _uiState.value
@@ -63,6 +88,12 @@ class HomeViewModel @Inject constructor(
 
     fun retry() {
         if (_uiState.value.topics.isEmpty()) loadInitial() else refresh()
+    }
+
+    /** Reloads the category index on demand (e.g. after a retry from the drawer). */
+    fun reloadCategories() {
+        categoriesRequested = false
+        ensureCategoriesLoaded()
     }
 
     fun updateFabMode(scrollOffset: Float, viewportHeight: Float) {

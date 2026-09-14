@@ -57,7 +57,8 @@ import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.utils.RelativeTime
+import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.designsystem.FaIcon
 
 // ==========================================================================
 // 楼层卡片，1:1 对齐鸿蒙 views/components/TopicPostItem.ets 的结构与几何。

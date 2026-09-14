@@ -6,7 +6,7 @@ import org.junit.Test
 
 class RootTabDestinationTest {
     @Test
-    fun `首页 tab 顺序先旧首页再新首页`() {
+    fun `底部 tab 顺序为 首页-新首页-通知-我的`() {
         assertEquals(
             listOf(
                 RootTabDestination.LEGACY_HOME to Routes.HOME,

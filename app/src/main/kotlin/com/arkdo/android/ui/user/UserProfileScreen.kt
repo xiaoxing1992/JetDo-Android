@@ -56,19 +56,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.data.models.UserInteraction
 import com.arkdo.android.data.models.UserTopReply
 import com.arkdo.android.data.models.UserTopTopic
 import com.arkdo.android.services.content.parseInlines
-import com.arkdo.android.ui.components.FaIcon
+import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.InlineText
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.utils.RelativeTime
+import com.arkdo.android.core.common.RelativeTime
 import com.arkdo.android.ui.utils.formatCount
 import com.arkdo.android.ui.utils.formatJoinDate
 import com.arkdo.android.ui.utils.formatTimeRead
@@ -1014,7 +1014,7 @@ private fun TopTopicRow(
 private fun LikeBadge(count: Int) {
     // 实心 heart(与帖子详情同款 FA 图标 + 红)+ 数字(对齐鸿蒙 LikeBadge:icon 12 红,字 12 text_faint)。
     Row(verticalAlignment = Alignment.CenterVertically) {
-        com.arkdo.android.ui.components.FaIcon("heart", Color(0xFFEF4444), 12.dp)
+        com.arkdo.android.core.designsystem.FaIcon("heart", Color(0xFFEF4444), 12.dp)
         Text(
             text = com.arkdo.android.ui.utils.formatCount(count),
             fontSize = 12.sp,
@@ -1040,7 +1040,7 @@ private fun TopReplyRow(
             .padding(start = CardPadding, end = CardPadding, top = 12.dp, bottom = 11.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            com.arkdo.android.ui.components.FaIcon("reply", arkdoColors.textFaint, 13.dp, Modifier.padding(top = 3.dp))
+            com.arkdo.android.core.designsystem.FaIcon("reply", arkdoColors.textFaint, 13.dp, Modifier.padding(top = 3.dp))
             Text(
                 text = item.topicTitle,
                 fontSize = 15.sp,
@@ -1100,7 +1100,7 @@ private fun ActivityRow(
     ) {
         Row(verticalAlignment = Alignment.Top) {
             if (item.actionType == 5) {
-                com.arkdo.android.ui.components.FaIcon("reply", colors.textFaint, 13.dp, Modifier.padding(top = 3.dp))
+                com.arkdo.android.core.designsystem.FaIcon("reply", colors.textFaint, 13.dp, Modifier.padding(top = 3.dp))
                 Spacer(modifier = Modifier.width(6.dp))
             }
             Text(

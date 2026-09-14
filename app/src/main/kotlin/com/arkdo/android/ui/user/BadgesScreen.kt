@@ -45,10 +45,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.data.models.UserBadgeGroup
 import com.arkdo.android.data.models.UserBadgeItem
-import com.arkdo.android.ui.components.FaIcon
+import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.theme.arkdoColors
 
 // ==========================================================================
@@ -268,7 +268,7 @@ private fun BadgeLarge(badge: UserBadgeItem) {
 private fun badgeDetailMeta(badge: UserBadgeItem): String {
     val parts = mutableListOf<String>()
     if ((badge.grantCount ?: 0) > 1) parts.add("获得 ${badge.grantCount} 次")
-    com.arkdo.android.ui.utils.RelativeTime.fromNow(badge.grantedAt)
+    com.arkdo.android.core.common.RelativeTime.fromNow(badge.grantedAt)
         .takeIf { it.isNotEmpty() }?.let { parts.add("授予于 $it") }
     return parts.joinToString(" · ")
 }
