@@ -94,6 +94,30 @@ fun ArkDoNavHost(
                 onOpenLogin = {
                     // 未登录「立即登录」→ 请求根层弹登录半窗。
                     LoginGate.requestLogin()
+                },
+                // 「全部 ›」/快捷入口/互动圈等点击目标。不接的话这些 entry 会走
+                // ProfileScreen 的默认空回调,表现成「点了没反应」。
+                onOpenBadges = { uname, count ->
+                    if (uname.isNotEmpty()) {
+                        navController.navigate("${Routes.BADGES}/$uname?badgeCount=$count")
+                    }
+                },
+                onOpenActivity = { uname, filter, title ->
+                    if (uname.isNotEmpty()) {
+                        navController.navigate(
+                            "${Routes.ACTIVITY_LIST}/$uname" +
+                                "?filter=${java.net.URLEncoder.encode(filter, "UTF-8")}" +
+                                "&title=${java.net.URLEncoder.encode(title, "UTF-8")}"
+                        )
+                    }
+                },
+                onOpenWeb = { url, title ->
+                    if (url.isNotEmpty()) {
+                        val q = title?.takeIf { it.isNotEmpty() }
+                            ?.let { "?title=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+                            .orEmpty()
+                        navController.navigate("${Routes.WEBVIEW}/${java.net.URLEncoder.encode(url, "UTF-8")}$q")
+                    }
                 }
             )
         }

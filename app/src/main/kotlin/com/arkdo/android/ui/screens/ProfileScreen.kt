@@ -153,36 +153,48 @@ fun ProfileScreen(
                 }
             )
     ) {
-        if (showTopBar) {
-            ProfileTopBar(onNavigateBack = onNavigateBack, onOpenSettings = onOpenSettings)
-            HorizontalDivider(color = arkdoColors.border, thickness = 0.5.dp)
-        } else if (immersive) {
-            // 内容与状态栏条同灰:直接顶到屏幕顶,状态栏透明并透出本 Box 的灰底。
-            Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars))
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = PageMargin)
-        ) {
-            Spacer(modifier = Modifier.height(CardGap))
-            if (isLoggedIn && accountUser.username.isNotEmpty()) {
-                LoggedInContent(
-                    state = state,
-                    accountUser = accountUser,
-                    onOpenWeb = onOpenWeb,
-                    onOpenActivity = onOpenActivity,
-                    onOpenBadges = onOpenBadges,
-                    onRequestLogout = { showLogoutDialog = true }
-                )
-            } else {
-                AnonymousContent(
-                    username = accountUser.username,
-                    onLoginClick = onOpenLogin
-                )
+        // 顶栏与内容必须竖向排列:同处一个 Box 时,fillMaxSize 的内容层会叠在顶栏之上
+        // (Box 内后声明的子节点画在上层),独立页(push 进来)的返回栏会被第一张卡片整个盖住,
+        // 表现成「没有标题栏」。改用外层 Column,内容从顶栏下方开始排。
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (showTopBar) {
+                ProfileTopBar(onNavigateBack = onNavigateBack, onOpenSettings = onOpenSettings)
+                HorizontalDivider(color = arkdoColors.border, thickness = 0.5.dp)
+            } else if (immersive) {
+                // 内容与状态栏条同灰:直接顶到屏幕顶,状态栏透明并透出本 Box 的灰底。
+                Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars))
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = PageMargin)
+            ) {
+                Spacer(modifier = Modifier.height(CardGap))
+                if (isLoggedIn && accountUser.username.isNotEmpty()) {
+                    LoggedInContent(
+                        state = state,
+                        accountUser = accountUser,
+                        onOpenWeb = onOpenWeb,
+                        onOpenActivity = onOpenActivity,
+                        onOpenBadges = onOpenBadges,
+                        onRequestLogout = { showLogoutDialog = true }
+                    )
+                } else {
+                    // 未登录占位:沉浸态下只垫了状态栏高度,没有额外垂直 padding,
+                    // 第一条内容的圆角/边框会顶到状态栏区,这里再补一段状态栏高度 + 留白。
+                    Spacer(
+                        modifier = Modifier
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(top = 8.dp)
+                    )
+                    AnonymousContent(
+                        username = accountUser.username,
+                        onLoginClick = onOpenLogin
+                    )
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
         }
     }
 
