@@ -140,6 +140,11 @@ fun CfChallengeScreen(
                         // 应用统一 User-Agent
                         WebSessionManager.applyUserAgent(this, "CfChallengeScreen")
 
+                        // 第三方 cookie：Turnstile 控件跑在 challenges.cloudflare.com
+                        // 的 iframe 里，验证态 cookie 对主站是第三方；API21+ 默认拒绝，
+                        // 不开启则验证控件存不下状态（WebViewPage/Login 页均已配置）。
+                        WebSessionManager.configureCookieAccess(this, "CfChallengeScreen")
+
                         webViewClient = object : android.webkit.WebViewClient() {
                             /**
                              * 过盾页本身是 linux.do，同样要走 DoH 才解析得到。
@@ -238,7 +243,32 @@ fun CfChallengeScreen(
                             }
                         }
 
-                        loadUrl(CHALLENGE_URL)
+                        // 关键：loadUrl 必须在 WebView 附着到窗口后执行。
+                        // factory 执行时 View 刚创建、未附着且尺寸为 0，此时 loadUrl
+                        // 在部分 WebView 版本上请求会被丢弃，页面空白不渲染。
+                        var hasLoaded = false
+                        fun tryLoadUrl() {
+                            if (!hasLoaded) {
+                                hasLoaded = true
+                                Timber.i("$LOG_TAG loadUrl after attach")
+                                loadUrl(CHALLENGE_URL)
+                            }
+                        }
+
+                        addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                            override fun onViewAttachedToWindow(v: android.view.View) {
+                                tryLoadUrl()
+                            }
+
+                            override fun onViewDetachedFromWindow(v: android.view.View) {
+                                // 验证页关闭即销毁，无需处理
+                            }
+                        })
+
+                        // 已附着时 onViewAttachedToWindow 不会再触发，走下一帧兜底。
+                        if (isAttachedToWindow) {
+                            post { tryLoadUrl() }
+                        }
                     }
                 },
                 modifier = Modifier
