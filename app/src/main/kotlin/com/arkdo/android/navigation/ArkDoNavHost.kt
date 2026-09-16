@@ -17,6 +17,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.arkdo.android.navigation.slideEnterTransition
+import com.arkdo.android.navigation.slideExitTransition
+import com.arkdo.android.navigation.slidePopEnterTransition
+import com.arkdo.android.navigation.slidePopExitTransition
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.ui.composer.NewTopicScreen
@@ -72,7 +76,11 @@ fun ArkDoNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        modifier = modifier
+        modifier = modifier.fillMaxSize(),
+        enterTransition = slideEnterTransition,
+        exitTransition = slideExitTransition,
+        popEnterTransition = slidePopEnterTransition,
+        popExitTransition = slidePopExitTransition
     ) {
         // Root Tab 容器（首页、通知、个人中心）
         composable(Routes.ROOT) {

@@ -27,6 +27,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.navigation.Routes
+import com.arkdo.android.navigation.tabEnterTransition
+import com.arkdo.android.navigation.tabExitTransition
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeFeatureScreen
@@ -136,7 +138,11 @@ fun RootTabScreen(
         NavHost(
             navController = tabNavController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = tabEnterTransition,
+            exitTransition = tabExitTransition,
+            popEnterTransition = tabEnterTransition,
+            popExitTransition = tabExitTransition
         ) {
             composable(Routes.HOME) {
                 val state by homeViewModel.uiState.collectAsState()
