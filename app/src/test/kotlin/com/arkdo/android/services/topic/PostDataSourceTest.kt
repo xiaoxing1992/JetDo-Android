@@ -25,6 +25,24 @@ class PostDataSourceTest {
         assertEquals(listOf(1L, 2L), ds.posts.map { it.id })
     }
 
+    // 回归:详情页「上拉加载更多」拉回的新楼不显示。appendPosts 的快路径
+    // (整批落在同一插入点)直接 return,漏了 republish() —— snapshotPosts 仍是旧引用,
+    // UiState.copy(posts = dataSource.snapshotPosts) 前后引用相同,Compose 按状态对象
+    // 比对判定"没变",新楼整批不渲染。每次真实插入都必须刷新快照。
+    @Test
+    fun `append 快路径插入后快照引用必须刷新`() {
+        val ds = PostDataSource()
+        ds.reset((1L..5L).map { post(it, (it - 1).toInt()) })
+        val before = ds.snapshotPosts
+
+        ds.appendPosts((6L..10L).map { post(it, (it - 1).toInt()) })
+
+        val after = ds.snapshotPosts
+        org.junit.Assert.assertNotSame(before, after)
+        assertEquals(10, after.size)
+        assertEquals(10L, after.last().id)
+    }
+
     @Test
     fun `append 按 id 去重并落到尾部`() {
         val ds = PostDataSource()
