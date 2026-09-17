@@ -15,6 +15,7 @@ import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.PostStreamPager
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.site.CategoryIndex
+import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -250,6 +251,70 @@ class TopicDetailViewModel @Inject constructor(
             }
             done(result.success)
         }
+    }
+
+    /**
+     * discourse-poll:投票(对齐鸿蒙 PollView.doVote 的乐观更新流程)。
+     *
+     * 顺序:先本地乐观改(立即重渲染)→ 发请求 → 成功用服务端真值校正(吸收他人
+     * 并发投票的偏差)、失败回滚。本地改动走 dataSource.replacePost,它会重建快照,
+     * 保证 UiState.posts 引用变化被 Compose 感知。
+     */
+    fun votePoll(post: TopicPost, pollName: String, optionIds: List<String>) {
+        val topicId = currentTopicId ?: return
+        val poll = post.polls?.firstOrNull { it.name == pollName } ?: return
+        val snapshot = PollMutation.snapshot(poll)
+
+        // 乐观:先改本地。
+        replacePollLocally(post.id, pollName) { PollMutation.applyVote(it, optionIds) }
+
+        viewModelScope.launch {
+            val result = topicService.votePoll(post.id, topicId, pollName, optionIds)
+            val server = result.data
+            if (result.success && server != null) {
+                replacePollLocally(post.id, pollName) { PollMutation.applyServerResult(it, server) }
+            } else {
+                // 回滚。
+                replacePollLocally(post.id, pollName) { PollMutation.restore(it, snapshot) }
+                _uiState.update { it.copy(actionMessage = "投票失败，请稍后重试") }
+            }
+        }
+    }
+
+    /** discourse-poll:撤销投票(同样乐观更新 + 失败回滚)。 */
+    fun removePollVote(post: TopicPost, pollName: String) {
+        val topicId = currentTopicId ?: return
+        val poll = post.polls?.firstOrNull { it.name == pollName } ?: return
+        val snapshot = PollMutation.snapshot(poll)
+
+        replacePollLocally(post.id, pollName) { PollMutation.applyRemove(it) }
+
+        viewModelScope.launch {
+            val result = topicService.removePollVote(post.id, topicId, pollName)
+            val server = result.data
+            if (result.success && server != null) {
+                replacePollLocally(post.id, pollName) { PollMutation.applyServerResult(it, server) }
+            } else {
+                replacePollLocally(post.id, pollName) { PollMutation.restore(it, snapshot) }
+                _uiState.update { it.copy(actionMessage = "撤销投票失败，请稍后重试") }
+            }
+        }
+    }
+
+    /** 就地替换某楼的某个投票,并重发快照(Compose 按引用比对,必须换新 List)。 */
+    private fun replacePollLocally(
+        postId: Long,
+        pollName: String,
+        transform: (com.arkdo.android.data.models.Poll) -> com.arkdo.android.data.models.Poll
+    ) {
+        val target = dataSource.findById(postId) ?: return
+        val polls = target.polls ?: return
+        val index = polls.indexOfFirst { it.name == pollName }
+        if (index < 0) return
+        val next = polls.toMutableList()
+        next[index] = transform(next[index])
+        dataSource.replacePost(target.copy(polls = next.toList()))
+        _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
     }
 
     private fun loadPostReplies(post: TopicPost, done: (List<TopicPost>?) -> Unit) {

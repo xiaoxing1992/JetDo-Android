@@ -117,6 +117,9 @@ fun TopicPostItem(
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
     onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {},
+    // discourse-poll:投票与撤销投票。这里收「用户意图」,乐观更新与失败回滚由 ViewModel 负责。
+    onVotePoll: (TopicPost, String, List<String>) -> Unit = { _, _, _ -> },
+    onRemovePollVote: (TopicPost, String) -> Unit = { _, _ -> },
     // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除/新增回调。
     boostDeleteTargetId: Long = 0,
     boostDeleteLoadingId: Long = 0L,
@@ -173,6 +176,17 @@ fun TopicPostItem(
                 onLinkClick = onOpenLink,
                 modifier = Modifier.padding(top = 12.dp)
             )
+
+            // discourse-poll:该楼的投票卡片(正文之后)。
+            // 对齐鸿蒙 TopicPostItem 里 PollView 的位置;一个楼层可能挂多个投票(polls 是数组)。
+            post.polls.orEmpty().forEach { poll ->
+                PollView(
+                    poll = poll,
+                    onVote = { optionIds -> onVotePoll(post, poll.name, optionIds) },
+                    onRemoveVote = { onRemovePollVote(post, poll.name) },
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
 
             // 采纳答案面板:仅一楼渲染(对齐鸿蒙 AcceptedAnswerPanel 位置:正文后、楼主标记前)。
             if (acceptedAnswers.isNotEmpty()) {
@@ -435,6 +449,9 @@ private fun PostFooter(
     sharedIssueCount: Int = 0,
     sharedIssueCanCreate: Boolean = false,
     onToggleSharedIssue: (onDone: (SharedIssueResult?) -> Unit) -> Unit = {},
+    // discourse-poll:投票与撤销投票。这里收「用户意图」,乐观更新与失败回滚由 ViewModel 负责。
+    onVotePoll: (TopicPost, String, List<String>) -> Unit = { _, _, _ -> },
+    onRemovePollVote: (TopicPost, String) -> Unit = { _, _ -> },
     // discourse-boosts：火箭入口 + 气泡行。按楼传入：本楼 deleteTarget + 删除/新增回调。
     boostDeleteTargetId: Long = 0,
     boostDeleteLoadingId: Long = 0L,
