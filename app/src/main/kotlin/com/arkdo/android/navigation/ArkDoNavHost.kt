@@ -129,6 +129,23 @@ fun ArkDoNavHost(
                 }
             )
         }
+        // 搜索页:首页顶栏放大镜进入(对齐鸿蒙 SearchOverlay 全屏覆盖)。
+        // 压在 ROOT(含底部导航)之上,返回 pop 回原页面。
+        composable(Routes.SEARCH) {
+            com.arkdo.android.ui.search.SearchFeatureScreen(
+                onBack = { navController.popBackStack() },
+                onOpenTopic = { topicId, targetPostNumber ->
+                    val q = targetPostNumber?.let { "?target=$it" } ?: ""
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
+                },
+                onOpenUser = { username ->
+                    if (username.isNotEmpty()) {
+                        navController.navigate("${Routes.USER_PROFILE}/$username")
+                    }
+                }
+            )
+        }
+
         // 话题详情页
         composable(
             route = Routes.TOPIC_DETAIL + "/{topicId}?slug={slug}&title={title}&target={target}",
@@ -374,6 +391,7 @@ object Routes {
     const val ROOT = "root"
     const val HOME = "home"
     const val NEW_HOME = "new_home"
+    const val SEARCH = "search"
     const val NOTIFICATION = "notification"
     const val PROFILE = "profile"
 

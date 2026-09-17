@@ -3,6 +3,8 @@ package com.arkdo.android.di
 import com.arkdo.android.core.data.home.DefaultHomeRepository
 import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.site.CategoryRepository
+import com.arkdo.android.core.data.search.DefaultSearchRepository
+import com.arkdo.android.core.data.search.SearchRepository
 import com.arkdo.android.core.data.site.DefaultCategoryRepository
 import com.arkdo.android.core.network.JsonNetworkClient
 import dagger.Module
@@ -23,4 +25,9 @@ object HomeModule {
     @Singleton
     fun provideCategoryRepository(client: JsonNetworkClient): CategoryRepository =
         DefaultCategoryRepository(client)
+
+    @Provides
+    @Singleton
+    fun provideSearchRepository(client: JsonNetworkClient): SearchRepository =
+        DefaultSearchRepository(client)
 }

@@ -188,6 +188,10 @@ HomeScreen(
                             navController.navigate("${Routes.NEW_TOPIC}$arg")
                         }
                     },
+                    onSearchClick = {
+                        // 顶栏放大镜 → 搜索页(对齐鸿蒙 HomePage 的 openSearch)。
+                        navController.navigate(Routes.SEARCH)
+                    },
                     onDebugClick = {
                         // 顶栏虫形图标 → 调试日志页(排障用,无需登录,可分享/复制日志文件)。
                         navController.navigate(Routes.DEBUG_LOG)
@@ -220,7 +224,7 @@ HomeScreen(
                             restoreState = true
                         }
                     },
-                    onSearchClick = {},
+                    onSearchClick = { navController.navigate(Routes.SEARCH) },
                     onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
                     onComposeClick = {
                         // 与旧首页同一条会话闸门,未拿到当前用户时不得进入编辑页。

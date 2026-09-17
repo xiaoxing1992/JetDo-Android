@@ -8,6 +8,7 @@ import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
+import com.arkdo.android.core.data.json.DiscourseJson
 import com.arkdo.android.core.network.JsonNetworkClient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -53,11 +54,9 @@ class DefaultHomeRepository(
             val root = json.parseToJsonElement(data).jsonObject
             val topicList = root["topic_list"]?.jsonObject
                 ?: return HomePageResult.Failure("响应缺少 topic_list")
-            val users = root["users"]?.jsonArray.orEmpty()
-                .mapNotNull(::parseUser)
-                .associateBy { it.id }
+            val users = DiscourseJson.parseUsers(root["users"])
             val items = topicList["topics"]?.jsonArray.orEmpty().mapNotNull { element ->
-                parseTopic(element.jsonObject, users)
+                runCatching { DiscourseJson.parseTopic(element.jsonObject, users) }.getOrNull()
             }
             HomePageResult.Success(
                 HomePage(
@@ -68,76 +67,6 @@ class DefaultHomeRepository(
             )
         }.getOrElse { HomePageResult.Failure("响应不是有效 JSON") }
     }
-
-    private fun parseUser(element: kotlinx.serialization.json.JsonElement): HomeUser? {
-        val obj = element.jsonObject
-        val id = obj.long("id") ?: return null
-        val username = obj.string("username") ?: return null
-        return HomeUser(
-            id = id,
-            username = username,
-            name = obj.string("name"),
-            avatarTemplate = obj.string("avatar_template"),
-            animatedAvatar = obj.string("animated_avatar"),
-            flairUrl = obj.string("flair_url"),
-            flairBgColor = obj.string("flair_bg_color"),
-            flairColor = obj.string("flair_color"),
-            flairName = obj.string("flair_name")
-        )
-    }
-
-    private fun parseTopic(obj: JsonObject, users: Map<Long, HomeUser>): HomeTopic? {
-        val id = obj.long("id") ?: return null
-        val title = obj.string("title") ?: return null
-        val authorId = obj["posters"]?.jsonArray?.firstOrNull()?.jsonObject?.long("user_id")
-        return HomeTopic(
-            id = id,
-            title = title,
-            slug = obj.string("slug"),
-            categoryId = obj.long("category_id"),
-            tags = parseTags(obj["tags"]),
-            createdAt = obj.string("created_at"),
-            replyCount = obj.int("reply_count"),
-            views = obj.int("views"),
-            lastPostedAt = obj.string("last_posted_at"),
-            unseen = obj.boolean("unseen"),
-            unreadPosts = obj.int("unread_posts") ?: 0,
-            lastReadPostNumber = obj.int("last_read_post_number"),
-            highestPostNumber = obj.int("highest_post_number"),
-            bookmarked = obj.boolean("bookmarked"),
-            hasAcceptedAnswer = obj.boolean("has_accepted_answer"),
-            searchBlurb = obj.string("excerpt"),
-            category = obj["category"]?.jsonObject?.let(::parseCategory),
-            author = authorId?.let(users::get)
-        )
-    }
-
-    private fun parseCategory(obj: JsonObject): HomeCategory? {
-        val id = obj.long("id") ?: return null
-        val name = obj.string("name") ?: return null
-        return HomeCategory(
-            id = id,
-            name = name,
-            color = obj.string("color") ?: "6B7280",
-            textColor = obj.string("text_color") ?: "FFFFFF",
-            parentCategoryId = obj.long("parent_category_id"),
-            slug = obj.string("slug"),
-            uploadedLogo = obj.string("uploaded_logo"),
-            icon = obj.string("icon"),
-            readRestricted = obj.boolean("read_restricted")
-        )
-    }
-
-    private fun parseTags(element: kotlinx.serialization.json.JsonElement?): List<HomeTag> =
-        element?.jsonArray.orEmpty().mapNotNull { tag ->
-            when (tag) {
-                is JsonPrimitive -> tag.contentOrNull?.takeIf(String::isNotBlank)?.let(::HomeTag)
-                is JsonObject -> tag.string("name")?.takeIf(String::isNotBlank)?.let {
-                    HomeTag(it, tag.long("id"), tag.string("slug"))
-                }
-                else -> null
-            }
-        }
 
     private fun buildPath(query: HomeQuery, page: Int): String {
         val segment = if (query.feed == HomeFeed.CREATED) HomeFeed.LATEST.apiValue else query.feed.apiValue
@@ -166,14 +95,4 @@ class DefaultHomeRepository(
             ?: encode(query.tag.orEmpty())
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
-
-    private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
-    private fun JsonObject.long(key: String): Long? =
-        this[key]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-
-    private fun JsonObject.int(key: String): Int? =
-        this[key]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-
-    private fun JsonObject.boolean(key: String): Boolean =
-        this[key]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true
 }
