@@ -168,6 +168,16 @@ data class PollVoteResult(
     @SerialName("voters") val voters: Int
 )
 
+/**
+ * `PUT/DELETE /polls/vote` 的响应外壳。
+ * 撤销投票时响应**不带** `vote` 字段(即已投项为空),故它可空。
+ */
+@Serializable
+internal data class DiscoursePollVoteResponse(
+    @SerialName("poll") val poll: Poll? = null,
+    @SerialName("vote") val vote: List<String>? = null
+)
+
 /** discourse-poll：一个投票的完整状态。 */
 @Serializable
 data class Poll(

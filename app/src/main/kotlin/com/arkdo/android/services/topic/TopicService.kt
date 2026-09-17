@@ -567,6 +567,96 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
+     * discourse-poll：给某楼的投票投票。
+     * `PUT /polls/vote`，form body：post_id、poll_name、options[]。
+     * 响应 200 返回 `{ poll: {更新后}, vote: [已投项] }`。
+     * （对齐鸿蒙 votePoll。）
+     */
+    suspend fun votePoll(
+        postId: Long,
+        topicId: Long,
+        pollName: String,
+        optionIds: List<String>
+    ): NetworkResult<PollVoteResult> {
+        val parts = mutableListOf("post_id=$postId", "poll_name=${encode(pollName)}")
+        optionIds.forEach { parts.add("options%5B%5D=${encode(it)}") }
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.putForm(
+            "/polls/vote",
+            parts.joinToString("&"),
+            JsonRequestOptions(notifyChallenge = false, referrer = referrer)
+        )
+        return parsePollVoteResponse(response)
+    }
+
+    /**
+     * discourse-poll：撤销某楼投票。
+     * `DELETE /polls/vote`，form body：post_id、poll_name。
+     * 响应无 `vote` 字段，即已投项为空。
+     */
+    suspend fun removePollVote(
+        postId: Long,
+        topicId: Long,
+        pollName: String
+    ): NetworkResult<PollVoteResult> {
+        val body = "post_id=$postId&poll_name=${encode(pollName)}"
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.deleteForm(
+            "/polls/vote",
+            body,
+            JsonRequestOptions(notifyChallenge = false, referrer = referrer)
+        )
+        return parsePollVoteResponse(response)
+    }
+
+    /**
+     * 投票响应的公共解析。
+     *
+     * `vote` 字段在撤销时缺省，`PollVoteResult.chosenOptionIds` 的默认值正好是空列表，
+     * 所以直接反序列化即可覆盖两种情况。
+     */
+    private fun parsePollVoteResponse(response: NetworkResult<String>): NetworkResult<PollVoteResult> {
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点投票响应为空。"
+            )
+        return try {
+            val payload = json.decodeFromString<DiscoursePollVoteResponse>(data)
+            val poll = payload.poll
+                ?: return NetworkResults.unexpectedResponse(
+                    response.statusCode,
+                    response.challengeState,
+                    "站点投票响应缺少 poll。"
+                )
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = PollVoteResult(
+                    options = poll.options,
+                    chosenOptionIds = payload.vote.orEmpty(),
+                    voters = poll.voters
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][TopicService] poll vote parse failed length=${data.length}")
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点投票响应不是有效 JSON。"
+            )
+        }
+    }
+
+    private fun encode(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8")
+
+    /**
      * 阅读上报（后台 POST，不触发 Challenge 弹窗）
      */
     suspend fun reportTimings(
