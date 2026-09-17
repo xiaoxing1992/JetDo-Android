@@ -17,6 +17,7 @@ import android.webkit.WebSettings
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -361,30 +362,46 @@ fun signalLoginSuccess(source: String, url: String) {
         }
     }
 
+    // 系统返回键:登录页是盖在根容器上的**覆盖层**,不是导航路由 —— 不在这里消费返回键,
+    // 它会一路穿透到 Activity 被系统当成"退到桌面"。与 WebViewPage 同序:网页内能回退先退
+    // 一级(登录流程常见 表单页→hCaptcha→站点首页 多级跳转),退无可退才关掉登录页、
+    // 回到进入前的那个页面。
+    BackHandler {
+        val web = webViewRef
+        val canGoBack = web != null && runCatching { web.canGoBack() }.getOrDefault(false)
+        if (canGoBack) {
+            web?.goBack()
+        } else {
+            onNavigateBack()
+        }
+    }
+
     
     // 弹层呈现:全屏页面盖在根容器上(替换原底部 88% 半弹窗)。全屏让登录 WebView 与其后的
     // Cloudflare Turnstile 人机验证框拿到完整可视区,不再被弹窗裁掉一截导致空白/无法交互。
     // 键盘避让:Edge-to-Edge 下窗口不再自动 resize,WebView 得靠 imePadding 缩高,
     // Chromium 才会把聚焦的输入框滚进可视区(否则键盘直接盖住表单)。背景先铺满再 padding,
     // 导航栏/键盘后面仍是页面底色,不露出底下的首页。
-    Box(
+    // 层级:根 Column 直接承载顶栏 + WebView,顶部 inset 只由顶栏消费一次。
+    // 之前外面多包了一层 Box 并在其上挂 navigationBarsPadding/imePadding,inset 先在父层
+    // 被吃掉一次、顶栏再 windowInsetsPadding(statusBars) 吃一次,Column 却仍是父层全高,
+    // top 的归属就出现歧义 —— WebView 会从顶栏区域内开始铺、上半截被顶栏盖住,与挑战页
+    // 是同一种结构性问题。这里与 CfChallengeScreen/WebViewPage 统一成同一套骨架。
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.pageBg)
-            .navigationBarsPadding()
             .imePadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // 顶栏:标题「登录」居中 + 右上角关闭。状态栏 inset 由这里垫(根 Scaffold 已关掉
-            // 系统栏排布,内容顶到屏幕顶,与首页 HomeTitleBar 同一套处理)。
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .height(60.dp)
-                    .background(colors.pageBg)
-                    .padding(horizontal = 16.dp)
-            ) {
+        // 顶栏:标题「登录」居中 + 右上角关闭。状态栏 inset 由这里垫,内容顶到屏幕顶。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(60.dp)
+                .background(colors.pageBg)
+                .padding(horizontal = 16.dp)
+        ) {
                 Text(
                     text = "登录",
                     fontSize = 20.sp,
@@ -441,6 +458,5 @@ fun signalLoginSuccess(source: String, url: String) {
                     wv
                 }
             )
-        }
     }
 }

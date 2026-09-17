@@ -63,6 +63,9 @@ class PostDataSource {
         val insertAt = insertIndexForPostNumber(fresh.last().postNumber)
         if (insertIndexForPostNumber(fresh.first().postNumber) == insertAt) {
             mutablePosts.addAll(insertAt, fresh)
+            // 「上拉加载更多」常走这条快路径,插入后必须 republish:快照是唯一对外发布口,
+            // 漏掉会让 UiState.posts 引用不变 → Compose 判定无变化 → 新楼整批不渲染。
+            republish()
             return fresh.size
         }
 

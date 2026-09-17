@@ -4,6 +4,8 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -11,7 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.web.WebSessionManager
@@ -22,7 +26,7 @@ import timber.log.Timber
 private const val LOG_TAG = "[ArkDO][ChallengeScreen]"
 private const val CHALLENGE_POLL_INTERVAL_MS = 1000L
 private const val MAX_CHALLENGE_POLL_COUNT = 90
-private const val CHALLENGE_URL = "https://linux.do/session/csrf.json"
+private const val CHALLENGE_URL = "https://linux.do/challenge"
 private const val CHALLENGE_RESOURCE_FAIL_HINT_THRESHOLD = 8
 
 /**
@@ -78,55 +82,71 @@ fun CfChallengeScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Cloudflare 验证",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "关闭")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(
+    // 系统返回键:本页是盖在根容器上的覆盖层,不是导航路由。不在这里消费返回键,
+    // 它会穿透到 Activity 被系统当成"退到桌面"。语义与关闭键一致:关掉验证页、留在原地。
+    BackHandler { onClose() }
+
+    // 顶栏与 WebView 必须竖向排列,且 WebView 用 weight(1f) 吃掉剩余高度。
+    // 之前用 Scaffold(topBar=...) 时内容区从顶栏下方开始排,但 Material3 的 TopAppBar
+    // 会把状态栏 inset 也吃进自身高度,且 Scaffold 的 contentWindowInsets 在
+    // Edge-to-Edge 下与 WebView 的渲染高度容易算不到一起,挑战页内容(尤其是
+    // Turnstile 控件)会被顶栏盖住。这里改成自己拼 Row/Column,inset 显式处理,
+    // 与 WebViewPage 同一套做法,父子高度关系一目了然。
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .imePadding()
+    ) {
+        // 顶栏:标题居中 + 右上角关闭。状态栏 inset 由这里垫,内容顶到屏幕顶。
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                // Scaffold 只垫系统栏,键盘 inset 另补:验证页偶有输入(如短信/邮箱验证码)。
-                .imePadding()
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(56.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            // 连接失败提示条
-            if (showConnectivityHint) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    tonalElevation = 2.dp
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "验证服务连不上",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Cloudflare 验证脚本多次无法加载,当前网络下验证可能无法完成。挂上代理后重新打开通常可解决。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-                HorizontalDivider()
+            Text(
+                text = "Cloudflare 验证",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.align(Alignment.Center)
+            )
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "关闭")
             }
+        }
+        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+        // 连接失败提示条
+        if (showConnectivityHint) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.errorContainer,
+                tonalElevation = 2.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "验证服务连不上",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = "Cloudflare 验证脚本多次无法加载,当前网络下验证可能无法完成。挂上代理后重新打开通常可解决。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+            HorizontalDivider()
+        }
 
             // WebView 显示挑战页面
             AndroidView(
@@ -275,7 +295,6 @@ fun CfChallengeScreen(
                     .fillMaxWidth()
                     .weight(1f)
             )
-        }
     }
 }
 

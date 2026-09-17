@@ -509,8 +509,10 @@ private fun TopicDetailContent(
                 }
             }
         } else if (hasMore) {
-            item {
-                LaunchedEffect(Unit) {
+            item(key = "load_more_trigger") {
+                // key 用 posts.size:每成功并入一批新楼就换 key,LaunchedEffect 重启,
+                // 底部加载器仍在视口内时会继续拉下一页(长列表连续上拉不断流)。
+                LaunchedEffect(posts.size) {
                     onLoadMore()
                 }
             }
