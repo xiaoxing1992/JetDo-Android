@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -95,6 +97,12 @@ fun PostRichContent(
     // 链接点击数（随 post JSON 变动的动态数据，不参与块缓存）。
     // 交互状态（剧透已揭示/折叠已展开）按块 key 记录，内容变化时随 remember 重建。
     val expandedKeys = remember(html) { mutableStateListOf<String>() }
+    // 有公式才挂离屏 MathJax 引擎(对应鸿蒙 MATH_HOST_ACTIVE_KEY 门控):
+    // 无公式的楼不该白挂一个 WebView。
+    val hasMath = remember(blocks) { blocks.any(::containsMath) }
+
+    // 离屏引擎按楼门控;渲染请求由 MathBlock/行内公式各自异步发起,产物走全局缓存。
+    MathHostGate(hasMath = hasMath)
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
         blocks.forEachIndexed { index, block ->
@@ -197,16 +205,8 @@ private fun BlockView(
 
         RichBlockType.ONEBOX -> OneboxBlock(block, onLinkClick)
 
-        RichBlockType.MATH -> Text(
-            text = block.text.orEmpty(),
-            fontFamily = FontFamily.Monospace,
-            fontStyle = FontStyle.Italic,
-            fontSize = 14.sp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
-                .padding(8.dp)
-        )
+        // discourse-math 块级公式:离屏 MathJax 出图后居中;未就绪/失败退回裸 LaTeX。
+        RichBlockType.MATH -> MathBlock(latex = block.text.orEmpty())
 
         RichBlockType.AUDIO, RichBlockType.VIDEO -> Text(
             text = (if (block.type == RichBlockType.VIDEO) "视频" else "音频") + "：" + block.src.orEmpty(),
@@ -759,13 +759,44 @@ internal fun InlineText(
                     append(plainNodeText(token.text))
                 }
 
-                RichInlineType.MATH -> withStyle(
-                    SpanStyle(
-                        fontFamily = FontFamily.Monospace,
-                        color = colors.textSecondary,
-                        fontSize = 14.sp
-                    )
-                ) { append(token.text) }
+                // discourse-math 行内公式:出图后用 InlineTextContent 内嵌,基线按 depth 下沉;
+                // 未就绪/失败退回等宽裸文本(与块级同一取舍:宁可显示源码也不留白)。
+                RichInlineType.MATH -> {
+                    // 出图后用 InlineTextContent 内嵌,未就绪/失败退回等宽裸文本
+                    // (与块级同一取舍:宁可显示源码也不留白)。
+                    val mathState = inlineMathPlaceholder(token.text)
+                    if (mathState is MathState.Ready) {
+                        val image = mathState.image
+                        val placeholderId = "math-$index"
+                        imageContents[placeholderId] = InlineTextContent(
+                            androidx.compose.ui.text.Placeholder(
+                                width = image.cssWidth.sp,
+                                height = image.cssHeight.sp,
+                                // 行内公式按基线对齐:depth 是基线以下的下沉量,
+                                // TextBottom 让下缘贴住文本基线(近似官方 inline math 观感)。
+                                placeholderVerticalAlign = androidx.compose.ui.text.PlaceholderVerticalAlign.TextBottom
+                            )
+                        ) {
+                            Image(
+                                bitmap = image.bitmap.asImageBitmap(),
+                                contentDescription = token.text,
+                                modifier = Modifier
+                                    .width(image.cssWidth.dp)
+                                    .height(image.cssHeight.dp),
+                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(colors.textPrimary)
+                            )
+                        }
+                        appendInlineContent(placeholderId, token.text)
+                    } else {
+                        withStyle(
+                            SpanStyle(
+                                fontFamily = FontFamily.Monospace,
+                                color = colors.textSecondary,
+                                fontSize = 14.sp
+                            )
+                        ) { append(token.text) }
+                    }
+                }
 
                 RichInlineType.LINE_BREAK -> append(if (token.paragraphBreak) "\n\n" else token.text)
 
@@ -819,4 +850,26 @@ private fun collectViewerImages(blocks: List<RichBlock>): List<ViewerImage> {
     }
     walk(blocks)
     return out
+}
+
+/**
+ * 递归检测块树里是否含公式(块级 [RichBlockType.MATH] 或任意层级的行内 MATH token)。
+ *
+ * 遍历口径必须与渲染侧一致 —— 漏检会导致「有公式却不挂引擎」,公式永远停在裸 LaTeX。
+ */
+private fun containsMath(block: RichBlock): Boolean {
+    if (block.type == RichBlockType.MATH) return true
+    // inlines/titleInlines/items/tableRows/blocks 都是可空字段(不同类型块只填各自那几项)。
+    if (block.inlines.orEmpty().any { it.type == RichInlineType.MATH }) return true
+    if (block.titleInlines.orEmpty().any { it.type == RichInlineType.MATH }) return true
+    if (block.items.orEmpty().any { item ->
+            item.inlines.orEmpty().any { it.type == RichInlineType.MATH } ||
+                item.blocks.orEmpty().any(::containsMath)
+        }
+    ) return true
+    if (block.tableRows.orEmpty().any { row ->
+            row.cells.any { cell -> cell.inlines.orEmpty().any { it.type == RichInlineType.MATH } }
+        }
+    ) return true
+    return block.blocks.orEmpty().any(::containsMath)
 }
