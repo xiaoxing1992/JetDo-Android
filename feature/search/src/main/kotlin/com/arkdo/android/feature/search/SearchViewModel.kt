@@ -8,6 +8,7 @@ import com.arkdo.android.core.model.SearchFilters
 import com.arkdo.android.core.model.SearchHit
 import com.arkdo.android.core.model.SearchPageResult
 import com.arkdo.android.core.model.SearchType
+import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.core.model.buildSearchQuery
 import com.arkdo.android.core.model.parseSearchHighlights
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,6 +36,9 @@ internal const val MAX_SEARCH_PAGE = 10
 /** WebView 宿主未就绪时的提示(对齐鸿蒙 runSearch 的 isArkWebReady 前置门)。 */
 internal const val HOST_NOT_READY_MESSAGE = "正在准备请求环境，请稍后重试"
 
+/** 标签联想防抖(对齐鸿蒙 TAG_DEBOUNCE_MS,与搜索框同一量级)。 */
+internal const val TAG_DEBOUNCE_MS = 300L
+
 data class SearchUiState(
     val query: String = "",
     val searchType: SearchType = SearchType.TOPICS,
@@ -55,6 +59,11 @@ data class SearchUiState(
     val showFilterPanel: Boolean = false,
     /** WebView 宿主(注入式 fetch 桥)是否就绪;未就绪时不发请求,由宿主页面注入。 */
     val isHostReady: Boolean = false,
+    /** 标签联想:面板搜索框的输入词(空 = 热门标签)。 */
+    val tagQuery: String = "",
+    /** 标签联想候选(已剔除本次筛选里选中的标签)。 */
+    val tagSuggestions: List<TagSuggestion> = emptyList(),
+    val isTagLoading: Boolean = false,
     /** 分类树由宿主注入(结果项渲染分类徽标用),feature 层不自己拉站点元数据。 */
     val categories: List<com.arkdo.android.core.model.HomeCategory> = emptyList()
 ) {
@@ -90,6 +99,9 @@ class SearchViewModel @Inject constructor(
     private var debounceJob: Job? = null
     /** 请求序号:边打字边搜时丢弃过期响应(只认最后一次)。 */
     private var searchSeq = 0
+    /** 标签联想的请求序号与防抖,与主搜索相互独立。 */
+    private var tagSeq = 0
+    private var tagDebounceJob: Job? = null
     private var currentPage = 1
     private val seenTopicIds = HashSet<Long>()
 
@@ -118,7 +130,11 @@ class SearchViewModel @Inject constructor(
         }
         currentPage = 1
         seenTopicIds.clear()
-        scheduleSearch(reset = true)
+        // 对齐鸿蒙 switchSearchType:取消防抖、立即按新类型重搜(不是再等 350ms)。
+        debounceJob?.cancel()
+        if (_uiState.value.canSearch) {
+            runSearch(reset = true)
+        }
     }
 
     /**
@@ -148,6 +164,13 @@ class SearchViewModel @Inject constructor(
 
     fun openFilterPanel() {
         _uiState.update { it.copy(showFilterPanel = true) }
+        // 面板一打开就有候选可点(对齐鸿蒙 aboutToAppear → loadTagSuggestions(''));
+        // 按当前词刷新,顺带把刚选中的标签从候选里剔除。
+        if (_uiState.value.tagQuery.isBlank()) {
+            loadTagSuggestions("")
+        } else {
+            loadTagSuggestions(_uiState.value.tagQuery)
+        }
     }
 
     fun dismissFilterPanel() {
@@ -159,6 +182,7 @@ class SearchViewModel @Inject constructor(
         // 只有帖子搜索分页;用户搜索是一次性返回。
         if (state.searchType != SearchType.TOPICS) return
         if (state.isSearching || state.isLoadingMore || !state.hasMore) return
+        if (state.hits.isEmpty()) return
         runSearch(reset = false)
     }
 
@@ -199,11 +223,53 @@ class SearchViewModel @Inject constructor(
         }
     }
 
+    // ---------- 标签联想(对齐鸿蒙 SearchFilterPanel 的 /tags/filter/search 联想) ----------
+
+    /**
+     * 面板标签搜索框输入:防抖 300ms 后联想;清空输入不是「没有候选」,
+     * 而是回到默认的热门标签列表(对齐鸿蒙 handleTagQueryChanged)。
+     */
+    fun onTagQueryChange(query: String) {
+        _uiState.update { it.copy(tagQuery = query) }
+        tagDebounceJob?.cancel()
+        tagDebounceJob = viewModelScope.launch {
+            delay(TAG_DEBOUNCE_MS)
+            loadTagSuggestions(query)
+        }
+    }
+
+    /** 重置标签搜索:清词并回到热门标签(对齐鸿蒙 addTag 后与「重置」后的行为)。 */
+    fun resetTagSuggestions() {
+        tagDebounceJob?.cancel()
+        _uiState.update { it.copy(tagQuery = "") }
+        loadTagSuggestions("")
+    }
+
+    private fun loadTagSuggestions(query: String) {
+        if (!_uiState.value.isHostReady) return
+        val seq = ++tagSeq
+        _uiState.update { it.copy(isTagLoading = true) }
+        viewModelScope.launch {
+            val suggestions = repository.suggestTags(query.trim(), SearchRepository.TAG_SUGGEST_LIMIT)
+            if (seq != tagSeq) return@launch
+            val selected = _uiState.value.filters.tags
+            _uiState.update {
+                it.copy(
+                    isTagLoading = false,
+                    // 已选中的标签不再出现在候选里(对齐鸿蒙)。
+                    tagSuggestions = suggestions.filter { tag -> tag.name !in selected }
+                )
+            }
+        }
+    }
+
     private fun scheduleSearch(reset: Boolean) {
         debounceJob?.cancel()
         if (!_uiState.value.canSearch) {
-            // 输入被清空:直接回空态,不残留上次结果。
+            // 输入被清空:直接回空态,不残留上次结果(对齐鸿蒙 resetResults)。
             searchSeq++
+            currentPage = 1
+            seenTopicIds.clear()
             _uiState.update {
                 it.copy(
                     hits = emptyList(),
@@ -337,10 +403,11 @@ class SearchViewModel @Inject constructor(
 
                 is SearchPageResult.Failure -> _uiState.update {
                     if (reset) {
+                        // 对齐鸿蒙:失败不清已有结果(错误提示只在结果为空时上屏);
+                        // hasMore 收掉,避免底部"上拉加载更多"对着一次失败的搜索续翻。
                         it.copy(
                             isSearching = false,
                             isLoadingMore = false,
-                            hits = emptyList(),
                             hasMore = false,
                             requiresChallenge = result.requiresChallenge,
                             // 过盾给统一文案;其余原样透传仓储层带回来的具体原因

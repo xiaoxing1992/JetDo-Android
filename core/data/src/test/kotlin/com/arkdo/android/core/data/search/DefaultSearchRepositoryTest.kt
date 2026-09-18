@@ -67,6 +67,31 @@ class DefaultSearchRepositoryTest {
     }
 
     @Test
+    fun `topics 没给作者时用命中楼作者兜底出头像`() = runTest {
+        // 真实 /search.json 的 topics 常缺可用的 posters(或 posters 在 users 里查不到),
+        // 此时作者取命中楼层的 username/avatar_template —— 对齐鸿蒙 mapSearch 的兜底。
+        val repo = DefaultSearchRepository(
+            client(
+                """
+                {"users":[],
+                 "posts":[{"id":101,"topic_id":11,"user_id":42,"username":"bob",
+                           "name":"Bob","avatar_template":"/user_avatar/linux.do/bob/{size}/2_3.png"}],
+                 "topics":[{"id":11,"title":"没有 posters 的主题"}],
+                 "grouped_search_result":{"post_ids":[101]}}
+                """.trimIndent()
+            )
+        )
+
+        val page = (repo.searchTopics("x", 1) as com.arkdo.android.core.model.SearchPageResult.Success).page
+
+        val author = page.hits.single().topic.author
+        assertEquals("bob", author?.username)
+        assertEquals(42L, author?.id)
+        assertEquals("Bob", author?.name)
+        assertEquals("/user_avatar/linux.do/bob/{size}/2_3.png", author?.avatarTemplate)
+    }
+
+    @Test
     fun `无 post_ids 时按 topics 原序兜底`() = runTest {
         val repo = DefaultSearchRepository(
             client(

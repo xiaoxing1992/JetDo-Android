@@ -9,12 +9,14 @@ import com.arkdo.android.core.model.SearchPage
 import com.arkdo.android.core.model.SearchPageResult
 import com.arkdo.android.core.model.SearchType
 import com.arkdo.android.core.model.SearchUsersResult
+import com.arkdo.android.core.model.TagSuggestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -376,6 +378,64 @@ class SearchViewModelTest {
 
         assertTrue(vm.uiState.value.isEmpty)
     }
+
+    @Test
+    fun `切换类型立即重搜不走防抖`() = runTest {
+        val repo = FakeSearchRepository(SearchPageResult.Success(SearchPage(emptyList(), 1, false)))
+        repo.userResult = SearchUsersResult(emptyList())
+        val vm = viewModel(repository = repo)
+
+        vm.setQuery("ada")
+        advanceUntilIdle()
+
+        vm.setSearchType(SearchType.USERS)
+        // 只跑当前虚拟时刻的任务、不推进时间:鸿蒙 switchSearchType 立即发请求,不等 350ms。
+        runCurrent()
+        assertEquals(1, repo.userTerms.size)
+    }
+
+    @Test
+    fun `重搜失败保留已有结果仅收加载态`() = runTest {
+        val repo = FakeSearchRepository(
+            SearchPageResult.Success(SearchPage(listOf(SearchHit(topic(1))), 1, false)),
+            SearchPageResult.Failure("boom", requiresChallenge = false)
+        )
+        val vm = viewModel(repository = repo)
+
+        vm.setQuery("good")
+        advanceUntilIdle()
+        assertEquals(listOf(1L), vm.uiState.value.hits.map { it.topic.id })
+
+        // 换词重搜失败:旧结果不清空(错误只在结果为空时才上屏,对齐鸿蒙)。
+        vm.setQuery("bad")
+        advanceUntilIdle()
+
+        assertEquals(listOf(1L), vm.uiState.value.hits.map { it.topic.id })
+        assertEquals("boom", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `标签联想防抖并剔除已选标签`() = runTest {
+        val repo = FakeSearchRepository(SearchPageResult.Success(SearchPage(emptyList(), 1, false)))
+        repo.tagSuggestions = listOf(
+            TagSuggestion(1, "kotlin", count = 5),
+            TagSuggestion(2, "android", count = 3)
+        )
+        val vm = viewModel(repository = repo)
+        vm.applyFilters(SearchFilters(tags = listOf("android")))
+
+        vm.openFilterPanel()
+        advanceUntilIdle()
+        // 面板打开即有热门候选,已选中的 android 被剔除。
+        assertEquals(listOf("kotlin"), vm.uiState.value.tagSuggestions.map { it.name })
+
+        vm.onTagQueryChange("ko")
+        advanceTimeBy(TAG_DEBOUNCE_MS - 1)
+        // 防抖未到点:只有面板打开时那条热门标签请求。
+        assertEquals(1, repo.tagQueries.size)
+        advanceUntilIdle()
+        assertTrue(repo.tagQueries.contains("ko"))
+    }
 }
 
 private class FakeSearchRepository(
@@ -383,7 +443,9 @@ private class FakeSearchRepository(
 ) : SearchRepository {
     val queries = mutableListOf<String>()
     val userTerms = mutableListOf<String>()
+    val tagQueries = mutableListOf<String>()
     var userResult: SearchUsersResult = SearchUsersResult(emptyList())
+    var tagSuggestions: List<TagSuggestion> = emptyList()
     private var index = 0
 
     override suspend fun searchTopics(query: String, page: Int): SearchPageResult {
@@ -394,6 +456,11 @@ private class FakeSearchRepository(
     override suspend fun searchUsers(term: String, limit: Int): SearchUsersResult {
         userTerms += term
         return userResult
+    }
+
+    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> {
+        tagQueries += query
+        return tagSuggestions
     }
 }
 
@@ -409,4 +476,7 @@ private class DeferredSearchRepository : SearchRepository {
 
     override suspend fun searchUsers(term: String, limit: Int): SearchUsersResult =
         SearchUsersResult(emptyList())
+
+    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> =
+        emptyList()
 }

@@ -118,7 +118,11 @@ fun SearchScreen(
                 onSubmit()
             },
             onSearchTypeChange = onSearchTypeChange,
-            onOpenFilterPanel = onOpenFilterPanel,
+            onOpenFilterPanel = {
+                // 进面板前收起键盘(对齐鸿蒙漏斗点击里的 hideKeyboard)。
+                keyboard?.hide()
+                onOpenFilterPanel()
+            },
             onBack = {
                 keyboard?.hide()
                 onBack()
@@ -127,20 +131,12 @@ fun SearchScreen(
         HorizontalDivider(thickness = 0.5.dp, color = tokens.border)
 
         Box(modifier = Modifier.fillMaxSize()) {
+            // 与鸿蒙 ResultsView 同一套互斥与遮挡规则:错误/加载/空态只在**没有结果**时
+            // 盖在列表上;有结果时失败不清结果,仅收加载态。历史页只在没输入时出现。
+            val resultCount =
+                if (state.searchType == SearchType.USERS) state.users.size else state.hits.size
             when {
-                state.isSearching && state.hits.isEmpty() && state.users.isEmpty() -> {
-                    LoadingState(tokens)
-                }
-
-                state.error != null -> {
-                    ErrorState(message = state.error, tokens = tokens)
-                }
-
-                state.isEmpty -> {
-                    EmptyState(searchType = state.searchType, tokens = tokens)
-                }
-
-                !state.hasSearched -> {
+                !state.canSearch -> {
                     HistoryAndHints(
                         history = state.history,
                         tokens = tokens,
@@ -148,6 +144,18 @@ fun SearchScreen(
                         onRemove = onRemoveHistory,
                         onClearAll = onClearHistory
                     )
+                }
+
+                resultCount == 0 && state.isSearching -> {
+                    LoadingState(tokens)
+                }
+
+                resultCount == 0 && state.error != null -> {
+                    ErrorState(message = state.error, tokens = tokens)
+                }
+
+                state.isEmpty -> {
+                    EmptyState(searchType = state.searchType, tokens = tokens)
                 }
 
                 state.searchType == SearchType.USERS -> {
@@ -257,9 +265,10 @@ private fun SearchBar(
                     }
                 }
 
-                // 竖线分隔输入区与功能热区(对齐鸿蒙 Divider.vertical height=18)。
+                // 竖线分隔输入区与功能热区(对齐鸿蒙 Divider.vertical height=18 margin 2)。
                 Box(
                     modifier = Modifier
+                        .padding(horizontal = 2.dp)
                         .width(1.dp)
                         .height(18.dp)
                         .background(tokens.border)
@@ -328,7 +337,7 @@ private fun SearchBar(
                                     Text(
                                         text = option.label,
                                         fontSize = 14.sp,
-                                        color = if (option == searchType) tokens.ldAccent else tokens.textPrimary
+                                        color = tokens.textPrimary
                                     )
                                 },
                                 trailingIcon = if (option == searchType) {
@@ -373,8 +382,10 @@ private fun TopicResults(
         modifier = Modifier.fillMaxSize()
     ) {
         // TopicListItem 自带底部分隔线,这里不再另画(画了就是双线)。
+        // 点击走行组件自己的 onClick/onUnreadBadgeClick(其根部 clickable 会吃掉
+        // 外层包装的点击)。鸿蒙搜索结果列表自带水平留白 16,行组件内已是 12,外层补 4。
         items(state.hits, key = { it.topic.id }) { hit ->
-            Box(modifier = Modifier.clickable { onOpenTopic(hit) }) {
+            Box(modifier = Modifier.padding(horizontal = 4.dp)) {
                 topicRow(hit, state.categories, state.highlights)
             }
         }
@@ -514,7 +525,11 @@ private fun HistoryAndHints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(46.dp)
-                    .clickable { onTermClick(term) }
+                    .clickable {
+                        // 点历史词已选定目标,收起键盘让位给结果(对齐鸿蒙 applyHistoryTerm)。
+                        keyboard?.hide()
+                        onTermClick(term)
+                    }
                     .padding(horizontal = 16.dp)
             ) {
                 FaIcon("magnifying-glass", tokens.textFaint, 14.dp)
@@ -567,7 +582,8 @@ private fun EmptyState(searchType: SearchType, tokens: SearchVisualTokens) {
 }
 
 /**
- * 错误态:只给一句警示色文案(对齐鸿蒙;重搜由改词/重提交/就绪自动补发兜底)。
+ * 错误态:一句警示色文案,居中(对齐鸿蒙 errorMessage 用 warning 色,无重试按钮;
+ * 重搜由改词/重提交/就绪自动补发兜底)。
  */
 @Composable
 private fun ErrorState(message: String, tokens: SearchVisualTokens) {
@@ -575,7 +591,7 @@ private fun ErrorState(message: String, tokens: SearchVisualTokens) {
         Text(
             text = message,
             fontSize = 15.sp,
-            color = tokens.danger,
+            color = tokens.warning,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 24.dp)
         )

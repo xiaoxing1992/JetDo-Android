@@ -259,3 +259,14 @@ data class SearchUsersResult(
 ) {
     val isSuccess: Boolean get() = error == null
 }
+
+/**
+ * 标签联想项(/tags/filter/search 的 results[])。高级筛选面板的标签搜索框用,
+ * 空 q 即热门标签前几个 —— 与发帖页标签选择器同一接口。
+ */
+data class TagSuggestion(
+    val id: Long,
+    val name: String,
+    val text: String? = null,
+    val count: Int = 0
+)
