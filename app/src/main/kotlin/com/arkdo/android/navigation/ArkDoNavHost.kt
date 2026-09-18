@@ -133,6 +133,7 @@ fun ArkDoNavHost(
         // 压在 ROOT(含底部导航)之上,返回 pop 回原页面。
         composable(Routes.SEARCH) {
             com.arkdo.android.ui.search.SearchFeatureScreen(
+                isWebViewReady = isWebViewReady,
                 onBack = { navController.popBackStack() },
                 onOpenTopic = { topicId, targetPostNumber ->
                     val q = targetPostNumber?.let { "?target=$it" } ?: ""

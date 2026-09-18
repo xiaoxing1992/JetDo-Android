@@ -43,8 +43,13 @@ class SearchViewModelTest {
 
     private fun viewModel(
         repository: SearchRepository = FakeSearchRepository(),
-        history: SearchHistoryStore = InMemorySearchHistoryStore()
-    ) = SearchViewModel(repository, history)
+        history: SearchHistoryStore = InMemorySearchHistoryStore(),
+        hostReady: Boolean = true
+    ): SearchViewModel = SearchViewModel(repository, history).apply {
+        // 绝大多数用例只关心搜索逻辑本身,默认注入「宿主已就绪」;
+        // 前置门用例显式传 hostReady = false。
+        if (hostReady) setHostReady(true)
+    }
 
     @Test
     fun `输入后先 debounce 再发请求`() = runTest {
@@ -232,7 +237,7 @@ class SearchViewModelTest {
     }
 
     @Test
-    fun `搜索失败给出提示且不残留结果`() = runTest {
+    fun `搜索失败透传仓储层的具体错误原因`() = runTest {
         val repo = FakeSearchRepository(
             SearchPageResult.Failure("boom", requiresChallenge = false)
         )
@@ -241,8 +246,30 @@ class SearchViewModelTest {
         vm.setQuery("kotlin")
         advanceUntilIdle()
 
-        assertEquals("搜索失败，请检查网络后重试", vm.uiState.value.error)
+        // 具体原因(HTTP 状态码/宿主未就绪/超时)原样上屏,不再吞成一句通用文案。
+        assertEquals("boom", vm.uiState.value.error)
         assertTrue(vm.uiState.value.hits.isEmpty())
+    }
+
+    @Test
+    fun `宿主未就绪时拦下发请求并给准备中提示`() = runTest {
+        val repo = FakeSearchRepository(SearchPageResult.Success(SearchPage(listOf(SearchHit(topic(1))), 1, false)))
+        val vm = viewModel(repository = repo, hostReady = false)
+
+        vm.setQuery("kotlin")
+        advanceUntilIdle()
+
+        // 未就绪:不发请求,提示准备中。
+        assertTrue(repo.queries.isEmpty())
+        assertEquals(HOST_NOT_READY_MESSAGE, vm.uiState.value.error)
+
+        // 就绪后自动补发被拦下的搜索。
+        vm.setHostReady(true)
+        advanceUntilIdle()
+
+        assertEquals(1, repo.queries.size)
+        assertEquals(listOf(1L), vm.uiState.value.hits.map { it.topic.id })
+        assertEquals(null, vm.uiState.value.error)
     }
 
     @Test
