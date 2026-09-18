@@ -58,7 +58,8 @@ fun SearchRoute(
         onBack = onBack,
         onOpenTopic = { hit ->
             viewModel.onResultOpened()
-            onOpenTopic(hit.topic.id, firstUnreadOrNull(hit))
+            // 从顶部打开详情,不带跳楼目标(对齐鸿蒙 SearchFlow.openTopic)。
+            onOpenTopic(hit.topic.id, null)
         },
         onOpenUser = { user ->
             viewModel.onResultOpened()
@@ -70,8 +71,7 @@ fun SearchRoute(
         onLoadMore = viewModel::loadMore
     )
 
-    if (state.showFilterPanel) {
-        ModalBottomSheet(
+    if (state.showFilterPanel) {        ModalBottomSheet(
             onDismissRequest = viewModel::dismissFilterPanel,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
@@ -79,16 +79,14 @@ fun SearchRoute(
                 initial = state.filters,
                 categories = state.categories,
                 tokens = tokens,
+                tagQuery = state.tagQuery,
+                tagSuggestions = state.tagSuggestions,
+                isTagLoading = state.isTagLoading,
+                onTagQueryChange = viewModel::onTagQueryChange,
+                onResetTags = viewModel::resetTagSuggestions,
                 onApply = viewModel::applyFilters,
                 onDismiss = viewModel::dismissFilterPanel
             )
         }
     }
 }
-
-/**
- * 点开搜索结果时的跳楼目标:未读行带楼层号就滚到那儿,否则落在顶部(一楼)。
- * 与首页列表点击的语义一致。
- */
-private fun firstUnreadOrNull(hit: SearchHit): Int? =
-    hit.topic.unreadPosts.takeIf { it > 0 }?.let { hit.topic.firstUnreadPostNumber() }

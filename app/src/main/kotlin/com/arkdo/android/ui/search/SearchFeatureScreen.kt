@@ -6,10 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeTopic
+import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.core.model.SearchHit
 import com.arkdo.android.data.models.Topic
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
+import com.arkdo.android.data.models.User
 import com.arkdo.android.feature.search.SearchRoute
 import com.arkdo.android.feature.search.SearchVisualTokens
 import com.arkdo.android.services.site.CategoryIndex
@@ -43,7 +45,12 @@ fun SearchFeatureScreen(
         onOpenTopic = onOpenTopic,
         onOpenUser = onOpenUser,
         topicRow = { hit, hitCategories, highlights ->
-            SearchTopicRow(hit = hit, categories = hitCategories, highlights = highlights)
+            SearchTopicRow(
+                hit = hit,
+                categories = hitCategories,
+                highlights = highlights,
+                onOpen = { onOpenTopic(hit.topic.id, null) }
+            )
         }
     )
 }
@@ -67,12 +74,21 @@ private fun rememberCategories(): List<HomeCategory> {
 }
 
 @Composable
-private fun SearchTopicRow(hit: SearchHit, categories: List<HomeCategory>, highlights: List<String>) {
+private fun SearchTopicRow(
+    hit: SearchHit,
+    categories: List<HomeCategory>,
+    highlights: List<String>,
+    onOpen: () -> Unit
+) {
     TopicListItem(
         topic = hit.topic.toLegacyTopic(),
         category = categoryFor(hit.topic, categories),
         parentCategory = parentCategoryFor(hit.topic, categories),
-        onClick = {},
+        // 点击必须走 TopicListItem 自己的回调:它根部的 clickable 会吃掉外层包装的
+        // 点击,外面再包一层 clickable 是收不到的。未读行(onUnreadBadgeClick)与普通行
+        // 都进同一个 handler,对齐鸿蒙 handleResultClick。
+        onClick = onOpen,
+        onUnreadBadgeClick = onOpen,
         // 高亮词用本次搜索词的解析结果(对齐鸿蒙:highlights 定格在搜索发起时),
         // TopicListItem 内部自带「标题/摘要包含才染色」的判断,多传的词不会误染。
         searchHighlights = highlights
@@ -90,23 +106,40 @@ private fun parentCategoryFor(topic: HomeTopic, categories: List<HomeCategory>):
     }
 
 /** feature 稳定模型 → app 旧模型(只为复用既有 TopicListItem)。 */
-private fun HomeTopic.toLegacyTopic(): Topic = Topic(
+private fun HomeTopic.toLegacyTopic(): Topic {
+    val legacy = Topic(
+        id = id,
+        title = title,
+        slug = slug,
+        categoryId = categoryId,
+        tags = tags.map { TopicTag(id = it.id, name = it.name, slug = it.slug) },
+        createdAt = createdAt,
+        replyCount = replyCount,
+        views = views,
+        lastPostedAt = lastPostedAt,
+        unseen = unseen,
+        unreadPosts = unreadPosts,
+        lastReadPostNumber = lastReadPostNumber,
+        highestPostNumber = highestPostNumber,
+        bookmarked = bookmarked,
+        hasAcceptedAnswer = hasAcceptedAnswer,
+        excerpt = searchBlurb ?: searchBlurb
+    )
+    // author 是类体属性(非构造参数);不带上 UserAvatar 只能画首字母占位。
+    legacy.author = author?.toLegacyUser()
+    return legacy
+}
+
+private fun HomeUser.toLegacyUser(): User = User(
     id = id,
-    title = title,
-    slug = slug,
-    categoryId = categoryId,
-    tags = tags.map { TopicTag(id = it.id, name = it.name, slug = it.slug) },
-    createdAt = createdAt,
-    replyCount = replyCount,
-    views = views,
-    lastPostedAt = lastPostedAt,
-    unseen = unseen,
-    unreadPosts = unreadPosts,
-    lastReadPostNumber = lastReadPostNumber,
-    highestPostNumber = highestPostNumber,
-    bookmarked = bookmarked,
-    hasAcceptedAnswer = hasAcceptedAnswer,
-    excerpt = searchBlurb ?: searchBlurb
+    username = username,
+    name = name,
+    avatarTemplate = avatarTemplate,
+    animatedAvatar = animatedAvatar,
+    flairUrl = flairUrl,
+    flairBgColor = flairBgColor,
+    flairColor = flairColor,
+    flairName = flairName
 )
 
 private fun HomeCategory.toLegacyCategory(): TopicCategory = TopicCategory(
@@ -146,6 +179,8 @@ private fun arkdoSearchTokens(): SearchVisualTokens {
         fillSubtle = colors.fillSubtle,
         surfaceMuted = colors.surfaceMuted,
         danger = colors.ldDanger,
-        highlightBg = ArkdoFixedColors.Amber
+        highlightBg = ArkdoFixedColors.Amber,
+        infoSoftBg = colors.infoSoftBg,
+        warning = colors.warning
     )
 }

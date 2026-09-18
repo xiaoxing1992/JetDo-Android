@@ -2,10 +2,12 @@ package com.arkdo.android.core.data.search
 
 import com.arkdo.android.core.data.json.DiscourseJson
 import com.arkdo.android.core.model.HomeTopic
+import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.core.model.SearchHit
 import com.arkdo.android.core.model.SearchPage
 import com.arkdo.android.core.model.SearchPageResult
 import com.arkdo.android.core.model.SearchUsersResult
+import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.core.network.JsonNetworkClient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -87,7 +89,18 @@ class DefaultSearchRepository(
             // 命中摘要同时带给 SearchHit.blurb(搜索页高亮渲染用)与 topic.searchBlurb
             // (复用首页那条渲染链路时的兜底),两者同源。
             val blurb = blurbOf(post) ?: topic.searchBlurb
-            ordered.add(SearchHit(topic = topic.copy(searchBlurb = blurb), blurb = blurb))
+            // topics 没给作者(或 posters 在 users 里查不到)时,用命中楼作者兜底出头像 —— 对齐鸿蒙 mapSearch。
+            val author = topic.author ?: DiscourseJson.string(post, "username")
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { username ->
+                    HomeUser(
+                        id = DiscourseJson.long(post, "user_id") ?: 0L,
+                        username = username,
+                        name = DiscourseJson.string(post, "name"),
+                        avatarTemplate = DiscourseJson.string(post, "avatar_template")
+                    )
+                }
+            ordered.add(SearchHit(topic = topic.copy(searchBlurb = blurb, author = author), blurb = blurb))
         }
 
         // 兜底:某些响应只给 topics 不给 post_ids(如按标题命中),按 topics 原序补齐,避免结果空白。
@@ -150,6 +163,35 @@ class DefaultSearchRepository(
         }.getOrElse {
             SearchUsersResult(users = emptyList(), error = "站点搜索响应不是有效 JSON")
         }
+    }
+
+    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> {
+        // 与鸿蒙 fetchTagSuggestions 同一路径:categoryId 省略即全站候选,
+        // filterForInput=true 让服务端按输入过滤(pm_only 等不可选标签由前端再滤)。
+        val path = "/tags/filter/search?q=${encode(query.trim())}&limit=$limit&filterForInput=true"
+
+        val response = client.getJson(path)
+        if (!response.success) return emptyList()
+        val data = response.data ?: return emptyList()
+
+        return runCatching {
+            val root = json.parseToJsonElement(data).jsonObject
+            root["results"]?.jsonArray.orEmpty().mapNotNull { element ->
+                runCatching {
+                    val obj = element.jsonObject
+                    // pm_only(私信专属)标签不可选,跳过;id/name 缺失同样跳过。
+                    if (obj["pm_only"]?.jsonPrimitive?.contentOrNull == "true") return@runCatching null
+                    val id = DiscourseJson.long(obj, "id") ?: return@runCatching null
+                    val name = DiscourseJson.string(obj, "name") ?: return@runCatching null
+                    TagSuggestion(
+                        id = id,
+                        name = name,
+                        text = DiscourseJson.string(obj, "text") ?: name,
+                        count = DiscourseJson.int(obj, "count") ?: 0
+                    )
+                }.getOrNull()
+            }
+        }.getOrElse { emptyList() }
     }
 
     private fun encode(value: String): String =

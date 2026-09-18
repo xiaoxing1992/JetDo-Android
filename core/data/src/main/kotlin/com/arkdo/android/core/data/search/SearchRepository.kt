@@ -2,6 +2,7 @@ package com.arkdo.android.core.data.search
 
 import com.arkdo.android.core.model.SearchPageResult
 import com.arkdo.android.core.model.SearchUsersResult
+import com.arkdo.android.core.model.TagSuggestion
 
 /**
  * 搜索数据源。
@@ -20,7 +21,16 @@ interface SearchRepository {
     /** 用户搜索。官方整页搜索用的也是 20 条上限。 */
     suspend fun searchUsers(term: String, limit: Int = USER_SEARCH_LIMIT): SearchUsersResult
 
+    /**
+     * 标签联想:`GET /tags/filter/search?q=&limit=5&filterForInput=true`。
+     * 空 q 即热门标签前几个;失败返回空列表(联想是锦上添花,不值得报错打断筛选)。
+     */
+    suspend fun suggestTags(query: String, limit: Int = TAG_SUGGEST_LIMIT): List<TagSuggestion>
+
     companion object {
         const val USER_SEARCH_LIMIT = 20
+
+        /** 与鸿蒙 TAG_SEARCH_LIMIT 一致:联想只给 5 个候选。 */
+        const val TAG_SUGGEST_LIMIT = 5
     }
 }

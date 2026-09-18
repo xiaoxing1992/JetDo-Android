@@ -18,7 +18,11 @@ data class SearchVisualTokens(
     val fillSubtle: Color,
     val surfaceMuted: Color,
     val danger: Color,
-    val highlightBg: Color
+    val highlightBg: Color,
+    /** 选中 chip 的浅品牌底(对齐鸿蒙 info_soft_bg:brand 字色压在它上面)。 */
+    val infoSoftBg: Color = Color(0xFFE8F1FE),
+    /** 警示文案色(对齐鸿蒙 app.color.warning,错误提示用)。 */
+    val warning: Color = Color(0xFFB45309)
 ) {
     companion object {
         val Default = SearchVisualTokens(
