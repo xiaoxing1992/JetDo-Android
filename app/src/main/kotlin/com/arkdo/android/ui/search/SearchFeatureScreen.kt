@@ -27,6 +27,7 @@ import com.arkdo.android.ui.theme.arkdoColors
  */
 @Composable
 fun SearchFeatureScreen(
+    isWebViewReady: Boolean,
     onBack: () -> Unit,
     onOpenTopic: (topicId: Long, targetPostNumber: Int?) -> Unit,
     onOpenUser: (username: String) -> Unit
@@ -35,13 +36,14 @@ fun SearchFeatureScreen(
     val categories = rememberCategories()
 
     SearchRoute(
+        isWebViewReady = isWebViewReady,
         tokens = arkdoSearchTokens(),
         categories = categories,
         onBack = onBack,
         onOpenTopic = onOpenTopic,
         onOpenUser = onOpenUser,
-        topicRow = { hit, hitCategories ->
-            SearchTopicRow(hit = hit, categories = hitCategories)
+        topicRow = { hit, hitCategories, highlights ->
+            SearchTopicRow(hit = hit, categories = hitCategories, highlights = highlights)
         }
     )
 }
@@ -65,42 +67,17 @@ private fun rememberCategories(): List<HomeCategory> {
 }
 
 @Composable
-private fun SearchTopicRow(hit: SearchHit, categories: List<HomeCategory>) {
-    val highlights = rememberSearchHighlights(hit)
+private fun SearchTopicRow(hit: SearchHit, categories: List<HomeCategory>, highlights: List<String>) {
     TopicListItem(
         topic = hit.topic.toLegacyTopic(),
         category = categoryFor(hit.topic, categories),
         parentCategory = parentCategoryFor(hit.topic, categories),
         onClick = {},
+        // 高亮词用本次搜索词的解析结果(对齐鸿蒙:highlights 定格在搜索发起时),
+        // TopicListItem 内部自带「标题/摘要包含才染色」的判断,多传的词不会误染。
         searchHighlights = highlights
     )
 }
-
-/**
- * 高亮词:只取「该主题标题里真正出现过的词」。
- *
- * 搜索页把本次搜索词定格在 ViewModel 里(见 SearchViewModel.highlights),但那只在
- * 页面层可见;行组件这层按标题过滤一次反而更准 —— 全量词传下去会把标题里根本没出现
- * 的词也交给染色逻辑,`TopicListItem` 内部虽有包含判断,但提前收窄既省算也表达了意图。
- */
-@Composable
-private fun rememberSearchHighlights(hit: SearchHit): List<String> =
-    remember(hit) {
-        hit.blurb
-            ?.let { blurb -> extractHighlightedTerms(blurb) }
-            .orEmpty()
-            .filter { it.isNotEmpty() && hit.topic.title.contains(it, ignoreCase = true) }
-    }
-
-/**
- * 搜索命中摘要里被 `<em>` / `<span class="search-highlight">` 包起来的词,就是服务端
- * 认定的命中词。这里注册表读成纯文本时标签已剥掉,故改用「标题包含」这一层判断,
- * 摘要本身只作为"有命中"的信号。
- */
-private fun extractHighlightedTerms(blurb: String): List<String> =
-    blurb.split(Regex("[\\s,，。;；:：]+"))
-        .map { it.trim() }
-        .filter { it.length >= 1 }
 
 private fun categoryFor(topic: HomeTopic, categories: List<HomeCategory>): TopicCategory? {
     val category = topic.category ?: categories.firstOrNull { it.id == topic.categoryId }

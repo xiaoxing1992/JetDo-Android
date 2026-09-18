@@ -32,6 +32,9 @@ internal const val MIN_TERM_LEN = 1
 /** Discourse 整页搜索分页硬上限。 */
 internal const val MAX_SEARCH_PAGE = 10
 
+/** WebView 宿主未就绪时的提示(对齐鸿蒙 runSearch 的 isArkWebReady 前置门)。 */
+internal const val HOST_NOT_READY_MESSAGE = "正在准备请求环境，请稍后重试"
+
 data class SearchUiState(
     val query: String = "",
     val searchType: SearchType = SearchType.TOPICS,
@@ -50,6 +53,8 @@ data class SearchUiState(
     val error: String? = null,
     val requiresChallenge: Boolean = false,
     val showFilterPanel: Boolean = false,
+    /** WebView 宿主(注入式 fetch 桥)是否就绪;未就绪时不发请求,由宿主页面注入。 */
+    val isHostReady: Boolean = false,
     /** 分类树由宿主注入(结果项渲染分类徽标用),feature 层不自己拉站点元数据。 */
     val categories: List<com.arkdo.android.core.model.HomeCategory> = emptyList()
 ) {
@@ -116,9 +121,14 @@ class SearchViewModel @Inject constructor(
         scheduleSearch(reset = true)
     }
 
-    /** 提交当前输入(软键盘搜索键 / 点历史词)。立即搜,不等 debounce。 */
+    /**
+     * 提交当前输入(软键盘搜索键 / 点历史词)。立即搜,不等 debounce;
+     * 主动提交记入历史(对齐鸿蒙 handleSubmit:回车即留痕,边打字边搜不写)。
+     */
     fun submit() {
         debounceJob?.cancel()
+        if (!_uiState.value.canSearch) return
+        onResultOpened()
         runSearch(reset = true)
     }
 
@@ -127,10 +137,13 @@ class SearchViewModel @Inject constructor(
         submit()
     }
 
-    /** 筛选面板点「应用」:整体换成新条件并立即重搜。 */
+    /** 筛选面板点「应用」:整体换成新条件并立即重搜(不记历史;没关键词就不搜,对齐鸿蒙 applyFilters)。 */
     fun applyFilters(filters: SearchFilters) {
         _uiState.update { it.copy(filters = filters, showFilterPanel = false) }
-        submit()
+        if (_uiState.value.canSearch) {
+            debounceJob?.cancel()
+            runSearch(reset = true)
+        }
     }
 
     fun openFilterPanel() {
@@ -174,6 +187,18 @@ class SearchViewModel @Inject constructor(
         _uiState.update { it.copy(categories = categories) }
     }
 
+    /**
+     * 宿主注入 WebView 就绪状态(对齐鸿蒙 isArkWebReady)。
+     * 就绪瞬间若停在「正在准备请求环境」的错误态,自动补发一次被拦下的搜索。
+     */
+    fun setHostReady(ready: Boolean) {
+        val wasReady = _uiState.value.isHostReady
+        _uiState.update { it.copy(isHostReady = ready) }
+        if (ready && !wasReady && _uiState.value.error == HOST_NOT_READY_MESSAGE) {
+            submit()
+        }
+    }
+
     private fun scheduleSearch(reset: Boolean) {
         debounceJob?.cancel()
         if (!_uiState.value.canSearch) {
@@ -201,7 +226,19 @@ class SearchViewModel @Inject constructor(
     private fun runSearch(reset: Boolean) {
         val state = _uiState.value
         if (!state.canSearch) return
-
+        // 对齐鸿蒙 runSearch 的 isArkWebReady 前置门:宿主 WebView 没挂好之前
+        // fetch 桥必失败,先把话说明白,别让用户看到一句含糊的「网络错误」。
+        if (!state.isHostReady) {
+            _uiState.update {
+                it.copy(
+                    isSearching = false,
+                    isLoadingMore = false,
+                    hasSearched = true,
+                    error = HOST_NOT_READY_MESSAGE
+                )
+            }
+            return
+        }
         if (state.searchType == SearchType.USERS) {
             runUserSearch()
             return
@@ -216,7 +253,8 @@ class SearchViewModel @Inject constructor(
             it.copy(isSearching = true, error = null, hasSearched = true, requiresChallenge = false)
         }
         viewModelScope.launch {
-            val result = repository.searchUsers(term)
+            // 显式带上限 20(对齐鸿蒙 USER_SEARCH_LIMIT;官方整页搜索也是 20)。
+            val result = repository.searchUsers(term, SearchRepository.USER_SEARCH_LIMIT)
             if (seq != searchSeq) return@launch
             _uiState.update {
                 if (result.isSuccess) {
@@ -232,7 +270,8 @@ class SearchViewModel @Inject constructor(
                         isSearching = false,
                         users = emptyList(),
                         requiresChallenge = result.requiresChallenge,
-                        error = if (result.requiresChallenge) "搜索遇到访问验证，请稍后重试" else "搜索失败，请检查网络后重试"
+                        // 与帖子搜索同理:过盾统一文案,其余透传具体原因。
+                        error = if (result.requiresChallenge) "搜索遇到访问验证，请稍后重试" else result.error
                     )
                 }
             }
@@ -304,7 +343,9 @@ class SearchViewModel @Inject constructor(
                             hits = emptyList(),
                             hasMore = false,
                             requiresChallenge = result.requiresChallenge,
-                            error = if (result.requiresChallenge) "搜索遇到访问验证，请稍后重试" else "搜索失败，请检查网络后重试"
+                            // 过盾给统一文案;其余原样透传仓储层带回来的具体原因
+                            // (HTTP 状态码 / 宿主未就绪 / 超时),不再吞成一句通用文案。
+                            error = if (result.requiresChallenge) "搜索遇到访问验证，请稍后重试" else result.message
                         )
                     } else {
                         // 翻页失败保留已有结果,只把加载态收掉。

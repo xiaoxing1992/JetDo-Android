@@ -26,12 +26,13 @@ import com.arkdo.android.core.model.SearchType
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchRoute(
+    isWebViewReady: Boolean,
     tokens: SearchVisualTokens,
     categories: List<HomeCategory>,
     onBack: () -> Unit,
     onOpenTopic: (topicId: Long, targetPostNumber: Int?) -> Unit,
     onOpenUser: (username: String) -> Unit,
-    topicRow: @Composable (hit: SearchHit, categories: List<HomeCategory>) -> Unit,
+    topicRow: @Composable (hit: SearchHit, categories: List<HomeCategory>, highlights: List<String>) -> Unit,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -39,6 +40,11 @@ fun SearchRoute(
     // 分类树由宿主注入(结果行渲染分类徽标用),feature 层不自己拉站点元数据。
     LaunchedEffect(categories) {
         viewModel.setCategories(categories)
+    }
+
+    // WebView 就绪状态由宿主注入(对齐鸿蒙 isArkWebReady):未就绪时拦下发请求。
+    LaunchedEffect(isWebViewReady) {
+        viewModel.setHostReady(isWebViewReady)
     }
 
     SearchScreen(
@@ -61,8 +67,7 @@ fun SearchRoute(
         onHistoryTermClick = viewModel::applyHistoryTerm,
         onRemoveHistory = viewModel::removeHistory,
         onClearHistory = viewModel::clearHistory,
-        onLoadMore = viewModel::loadMore,
-        onRetry = viewModel::retry
+        onLoadMore = viewModel::loadMore
     )
 
     if (state.showFilterPanel) {
