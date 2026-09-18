@@ -11,10 +11,14 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -30,6 +34,11 @@ import com.arkdo.android.navigation.Routes
 import com.arkdo.android.navigation.tabEnterTransition
 import com.arkdo.android.navigation.tabExitTransition
 import com.arkdo.android.services.session.LoginGate
+import com.arkdo.android.ui.components.ArkDoBottomBar
+import com.arkdo.android.ui.components.ArkDoBottomBarItem
+import com.arkdo.android.ui.components.AvatarTabIcon
+import com.arkdo.android.ui.components.TabVectorIcon
+import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeFeatureScreen
 import com.arkdo.android.ui.home.HomeScreen
@@ -97,39 +106,79 @@ fun RootTabScreen(
 
 
     // 抽屉包在最外层，才能盖住底部标签栏和上下系统栏。
+    // 登录态镜像:标签栏「我的」头像据此渲染。和首页顶栏账号入口、个人中心页共用同一个
+    // CurrentUserHolder,不额外发请求。
+    val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
+
+    // 通知未读数:NotificationEventBus 是服务层(轮询 + MessageBus 实时)写入的唯一真源,
+    // 这里只订阅、不自己拉。首页顶栏的铃铛此前一直没接这个数(全项目只有 NotificationModule
+    // 引用它),所以底栏角标也不另发请求 —— 谁先把铃铛接上,两边就一起活了。
+    var unreadCount by remember { mutableStateOf(0) }
+    DisposableEffect(Unit) {
+        val unsubscribe = com.arkdo.android.services.notification.NotificationEventBus.subscribe { snapshot ->
+            unreadCount = snapshot.unread
+        }
+        onDispose { unsubscribe() }
+    }
+
     HomeDrawerHost(viewModel = homeViewModel) {
     Scaffold(
+        // 底栏是悬浮胶囊,四周留白透出这块区域:容器色必须和页面底色一致,不能露出 Scaffold 的 surface。
+        containerColor = com.arkdo.android.ui.theme.arkdoColors.pageBg,
         // 内容顶到屏幕顶(状态栏后),各 Tab 页自行处理状态栏 inset 与背景:
         // 默认 contentWindowInsets 会把 NavHost 从状态栏下方排起,状态栏条恒为容器白,
         // 「我的」灰页永远够不到状态栏区。关掉后由 HomeTitleBar/ProfileScreen 自己垫 inset。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar {
-                rootTabDestinations.forEach { tab ->
-                    val isSelected = currentDestination?.hierarchy?.any {
-                        it.route == tab.route
-                    } == true
+            // 自定义标签栏(ui/components/ArkDoBottomBar),不用 M3 NavigationBar:
+            // 固定 80dp 容器高度和内置 ripple 都与这套视觉冲突;选中胶囊由容器统一画,
+            // 切换时整枚平移过去(doer 截图实测的系统行为)。
+            val selectedTabIndex = rootTabDestinations.indexOfFirst { tab ->
+                currentDestination?.hierarchy?.any { it.route == tab.route } == true
+            }.let { if (it >= 0) it else 0 }
 
-                    NavigationBarItem(
-                        icon = {
-                            Icon(
-                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.label
-                            )
-                        },
-                        label = { Text(tab.label) },
-                        selected = isSelected,
-                        onClick = {
-                            tabNavController.navigate(tab.route) {
-                                // 回到 Tab 栈的起点
-                                popUpTo(tabNavController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+            ArkDoBottomBar(
+                tabCount = rootTabDestinations.size,
+                selectedIndex = selectedTabIndex
+            ) { index ->
+                val tab = rootTabDestinations[index]
+                val isSelected = index == selectedTabIndex
+
+                ArkDoBottomBarItem(
+                    selected = isSelected,
+                    label = tab.label,
+                    // 角标只挂通知标签;其余标签没有角标来源,恒为 0。
+                    badgeCount = if (tab == RootTabDestination.NOTIFICATION) unreadCount else 0,
+                    onClick = {
+                        tabNavController.navigate(tab.route) {
+                            // 回到 Tab 栈的起点
+                            popUpTo(tabNavController.graph.findStartDestination().id) {
+                                saveState = true
                             }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                    )
+                    }
+                ) { tint ->
+                    if (tab == RootTabDestination.PROFILE) {
+                        // 「我的」用真实头像:与首页顶栏账号入口共用 UserAvatar 和
+                        // CurrentUserHolder,登录/登出/换号自动跟随。
+                        AvatarTabIcon(
+                            selected = isSelected,
+                            tint = tint,
+                            fallbackIcon = if (isSelected) Icons.Filled.Person else Icons.Outlined.Person,
+                            avatar = currentUser?.let { user ->
+                                { size -> UserAvatar(user = user, avatarSize = size, showFlair = false) }
+                            }
+                        )
+                    } else {
+                        TabVectorIcon(
+                            selected = isSelected,
+                            tint = tint,
+                            selectedIcon = tab.selectedIcon,
+                            unselectedIcon = tab.unselectedIcon
+                        )
+                    }
                 }
             }
         },
