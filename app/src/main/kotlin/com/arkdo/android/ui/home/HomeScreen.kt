@@ -13,14 +13,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +40,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -61,6 +65,7 @@ import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.isDefault
 import com.arkdo.android.services.topic.topicListPrimaryTitle
 import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.core.designsystem.bottomBarClearance
 import com.arkdo.android.ui.components.TopicListItem as EnhancedTopicListItem
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.ArkdoFixedColors
@@ -120,6 +125,11 @@ fun HomeScreen(
 
     Scaffold(
         containerColor = colors.pageBg,
+        // 底栏改成悬浮胶囊后,页面内容要能从底栏下方穿过:这里只保留顶/侧 inset,
+        // 底部避让由列表 contentPadding 垫 bottomBarClearance,否则两层 inset 叠加会重复垫。
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Top
+        ),
         topBar = {
             HomeTitleBar(
                 uiState = uiState,
@@ -136,11 +146,14 @@ fun HomeScreen(
         floatingActionButton = {
             // 只在有数据时挂载，与鸿蒙一致（空列表页面不该浮着一个发帖按钮）。
             if (uiState.topics.isNotEmpty()) {
-                HomeFab(
-                    showBackToTop = uiState.showBackToTopFab,
-                    onCompose = onComposeClick,
-                    onBackToTop = { coroutineScope.launch { listState.animateScrollToItem(0) } }
-                )
+                // 底栏是悬浮胶囊:FAB 上移一个避让高度,否则会和底栏叠在一起。
+                Box(modifier = Modifier.padding(bottom = bottomBarClearance)) {
+                    HomeFab(
+                        showBackToTop = uiState.showBackToTopFab,
+                        onCompose = onComposeClick,
+                        onBackToTop = { coroutineScope.launch { listState.animateScrollToItem(0) } }
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -411,7 +424,9 @@ private fun TopicList(
 ) {
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        // 内容从悬浮底栏下穿过:滚到底时最后一条要能滑出底栏区域。
+        contentPadding = PaddingValues(bottom = bottomBarClearance)
     ) {
         items(items = topics, key = { it.id }) { topic ->
             EnhancedTopicListItem(

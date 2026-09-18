@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arkdo.android.core.designsystem.bottomBarClearance
 import com.arkdo.android.core.common.RelativeTime
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.NotificationAvatar
@@ -98,7 +100,12 @@ fun NotificationScreen(
             onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize()
         ) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                // 内容从悬浮底栏下穿过:滚到底时最后一条要能滑出底栏区域。
+                contentPadding = PaddingValues(bottom = bottomBarClearance)
+            ) {
                 itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
                     NotificationRow(item, onMarkRead, onOpenTopic, onOpenUser)
                     if (index < state.items.lastIndex) HorizontalDivider(modifier = Modifier.padding(start = 70.dp))

@@ -56,6 +56,7 @@ import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.data.models.UserBadgeItem
 import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.core.designsystem.bottomBarClearance
 import com.arkdo.android.ui.components.InlineText
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.UserAvatar
@@ -169,6 +170,9 @@ fun ProfileScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = PageMargin)
+                    // 底栏是悬浮胶囊:滚动内容末尾垫一个避让高度,滚到底不被遮。
+                    // 根导航上的独立个人主页没有底栏,LocalBottomBarClearance 默认 0,不多垫。
+                    .padding(bottom = bottomBarClearance)
             ) {
                 Spacer(modifier = Modifier.height(CardGap))
                 if (isLoggedIn && accountUser.username.isNotEmpty()) {
