@@ -1,6 +1,7 @@
 package com.arkdo.android.ui.screens
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -122,6 +123,19 @@ fun RootTabScreen(
     }
 
     HomeDrawerHost(viewModel = homeViewModel) {
+    // 底栏是悬浮胶囊,内容全出血、从底栏下方穿过;各页滚动容器按这个高度垫
+    // contentPadding.bottom,保证滚到底时最后一条不被底栏遮住。
+    // 容器高 + 底部间隙 + 系统手势区,三段合一传给子页面(core:designsystem 的 CompositionLocal)。
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val bottomBarClearance = with(density) {
+        com.arkdo.android.ui.components.BottomBarDefaults.ContainerHeight +
+            com.arkdo.android.ui.components.BottomBarDefaults.ContainerBottomGap +
+            WindowInsets.navigationBars.getBottom(density).toDp()
+    }
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.arkdo.android.core.designsystem.LocalBottomBarClearance provides bottomBarClearance
+    ) {
     Scaffold(
         // 底栏是悬浮胶囊,四周留白透出这块区域:容器色必须和页面底色一致,不能露出 Scaffold 的 surface。
         containerColor = com.arkdo.android.ui.theme.arkdoColors.pageBg,
@@ -187,7 +201,9 @@ fun RootTabScreen(
         NavHost(
             navController = tabNavController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(innerPadding),
+            // 只吃顶部 inset:底部不再让位,内容才能从悬浮底栏下方穿过(沉浸式)。
+            // 底栏遮挡由各页滚动容器垫 bottomBarClearance 解决。
+            modifier = Modifier.padding(top = innerPadding.calculateTopPadding()),
             enterTransition = tabEnterTransition,
             exitTransition = tabExitTransition,
             popEnterTransition = tabEnterTransition,
@@ -346,6 +362,7 @@ HomeScreen(
                 )
             }
         }
+    }
     }
     }
 }
