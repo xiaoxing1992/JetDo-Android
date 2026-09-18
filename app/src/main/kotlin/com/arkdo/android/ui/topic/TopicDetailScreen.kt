@@ -206,6 +206,10 @@ fun TopicDetailScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(arkdoColors.topicDetailPageBg)) {
+        // 离屏公式引擎的唯一挂载点:有含公式的楼层时才会真正挂上 1×1 WebView,
+        // 引用归零后空闲 20s 自行卸载(见 MathRenderService)。
+        com.arkdo.android.ui.components.MathRenderHostSlot()
+
         SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = viewerState,
