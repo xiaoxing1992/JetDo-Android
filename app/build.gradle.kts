@@ -143,6 +143,8 @@ dependencies {
     implementation(libs.androidx.webkit)
     // 标题栏渐进式模糊（对齐鸿蒙 HDS 渐进模糊材质）
     implementation(libs.haze)
+    implementation(libs.backdrop)
+    implementation(libs.capsule)
     implementation(libs.okhttp)
     implementation(libs.okhttp.dnsoverhttps)
 
