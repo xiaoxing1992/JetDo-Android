@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 
@@ -107,16 +109,20 @@ internal object BottomBarDefaults {
 }
 
 /**
- * 底部标签栏容器:悬浮胶囊。
+ * 底部标签栏容器:悬浮玻璃胶囊。
  *
- * 胶囊外壳(圆角、描边、阴影、边距)在这里,选中胶囊也在这里 —— 选中胶囊是**一枚**、
- * 按 [selectedIndex] 平移,而不是每个标签各画一块,这样切换时它才会滑过去。
+ * 外壳 = Haze 玻璃材质(对身后内容高斯模糊 + 半透明底色调子)+ 全圆描边 + 软阴影,
+ * 悬浮在手势区上方;选中胶囊也在这里 —— 选中胶囊是**一枚**、按 [selectedIndex] 平移,
+ * 而不是每个标签各画一块,这样切换时它才会滑过去。
+ * [hazeState] 由调用方持有并标在页面内容上([androidx.compose.runtime.Composable] 层
+ * `hazeSource`),玻璃才能取样到从栏下滚过的内容。
  * [item] 按 index 回调,调用方决定每个标签画什么。
  */
 @Composable
 fun ArkDoBottomBar(
     tabCount: Int,
     selectedIndex: Int,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
     item: @Composable RowScope.(Int) -> Unit
 ) {
@@ -154,10 +160,28 @@ fun ArkDoBottomBar(
                     spotColor = ArkdoFixedColors.ShadowSoft
                 )
                 .clip(capsuleShape)
-                .background(colors.surfaceCard)
-                // 白底胶囊在白页上需要实线描边才能读出边界;深色下 surfaceCard 本身比 pageBg 亮一档。
                 .border(1.dp, colors.border, capsuleShape)
         ) {
+            // 玻璃材质层:对身后滚过的内容做高斯模糊(Haze 从 hazeSource 取样)。
+            // 半径对齐 TopicDetailScreen 顶栏(24dp,API 31 上 Haze 1.6.1 只支持均匀模糊,
+            // 渐进模糊要 AGSL/API 33+,见那边注释);clip 已由外层 capsuleShape 完成,
+            // 防止 RenderEffect 模糊输出溢出栏体。
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .hazeEffect(state = hazeState) {
+                        blurRadius = 24.dp
+                        noiseFactor = 0f
+                    }
+            )
+            // 玻璃调子:半透明 surfaceCard 压一压透出的内容,保证图标/文字可读;
+            // API<31 上 Haze 不模糊时,这一层就是兜底的可读底色。
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(colors.surfaceCard.copy(alpha = 0.6f))
+            )
+
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
