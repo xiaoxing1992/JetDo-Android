@@ -9,6 +9,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -36,8 +38,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.util.lerp
+import kotlin.math.abs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +101,11 @@ import com.kyant.capsule.ContinuousCapsule
 //   - API 26-30:无 RenderEffect,退回实体材质(高不透明度表面 + 描边 +
 //     实色滑动胶囊),不引入 backdrop 采样。
 // ==========================================================================
+
+/**
+ * 按压进度 → tab 内容缩放。玻璃路径 provide,兜底路径读默认 1。
+ */
+internal val LocalBottomTabPressScale = androidx.compose.runtime.staticCompositionLocalOf { { 1f } }
 
 /** 标签栏几何与动效常量,集中在此便于对照调整。 */
 internal object BottomBarDefaults {
@@ -143,6 +161,96 @@ internal object BottomBarDefaults {
 }
 
 /**
+ * 选中胶囊的拖拽/按压状态机。
+ *
+ * 行为规格对齐 AndroidLiquidGlass 1.0.0 demo 的 DampedDragAnimation(与 RiseDiary
+ * 同源):五个动画通道——槽位值、归一化速度、按进度、X/Y 缩放;按压放大到 78/56 倍
+ * (XY 用 0.6/250 与 0.7/250 两档欠阻尼弹簧产生果冻回弹),拖动速度沿 X 拉伸、
+ * 垂直压扁(±20% 钳制)。此处为按公开行为规格的本项目自有实现。
+ */
+private class LiquidCapsuleState(
+    private val scope: CoroutineScope,
+    initialValue: Float,
+    private val valueRange: ClosedFloatingPointRange<Float>,
+) {
+    private val valueSpec = spring(1f, 1000f, 0.001f)
+    private val velocitySpec = spring(0.5f, 300f, 5f)
+    private val pressSpec = spring(1f, 1000f, 0.001f)
+    private val scaleXSpec = spring(0.6f, 250f, 0.001f)
+    private val scaleYSpec = spring(0.7f, 250f, 0.001f)
+
+    private val valueAnim = Animatable(initialValue, 0.001f)
+    private val velocityAnim = Animatable(0f, 5f)
+    private val pressAnim = Animatable(0f, 0.001f)
+    private val scaleXAnim = Animatable(1f, 0.001f)
+    private val scaleYAnim = Animatable(1f, 0.001f)
+
+    private val tracker = VelocityTracker()
+
+    val value: Float get() = valueAnim.value
+    val targetValue: Float get() = valueAnim.targetValue
+    val pressProgress: Float get() = pressAnim.value
+    val scaleX: Float get() = scaleXAnim.value
+    val scaleY: Float get() = scaleYAnim.value
+    val velocity: Float get() = velocityAnim.value
+
+    /** 按下:胶囊放大到 [PRESSED_SCALE]。 */
+    fun press() {
+        tracker.resetTracking()
+        scope.launch {
+            launch { pressAnim.animateTo(1f, pressSpec) }
+            launch { scaleXAnim.animateTo(PRESSED_SCALE, scaleXSpec) }
+            launch { scaleYAnim.animateTo(PRESSED_SCALE, scaleYSpec) }
+        }
+    }
+
+    /** 松手:等槽位值贴近目标后回缩。 */
+    fun release() {
+        scope.launch {
+            awaitFrame()
+            if (valueAnim.value != valueAnim.targetValue) {
+                val threshold = (valueRange.endInclusive - valueRange.start) * 0.025f
+                snapshotFlow { valueAnim.value }
+                    .filter { abs(it - valueAnim.targetValue) < threshold }
+                    .first()
+            }
+            launch { pressAnim.animateTo(0f, pressSpec) }
+            launch { scaleXAnim.animateTo(1f, scaleXSpec) }
+            launch { scaleYAnim.animateTo(1f, scaleYSpec) }
+        }
+    }
+
+    /** 拖动:槽位值用硬弹簧追手指,同时按槽位归一化记录速度。 */
+    fun updateValue(raw: Float) {
+        scope.launch {
+            valueAnim.animateTo(raw.coerceIn(valueRange), valueSpec) {
+                tracker.addPosition(System.currentTimeMillis(), Offset(value, 0f))
+                val normalized = tracker.calculateVelocity().x /
+                    (valueRange.endInclusive - valueRange.start)
+                launch { velocityAnim.animateTo(normalized, velocitySpec) }
+            }
+        }
+    }
+
+    /** 点击/松手后的整段动画:按压-滑动-回缩(mutate 保证互斥)。 */
+    fun animateToIndex(index: Int) {
+        scope.launch {
+            press()
+            valueAnim.animateTo(index.toFloat().coerceIn(valueRange), valueSpec)
+            if (velocityAnim.value != 0f) {
+                launch { velocityAnim.animateTo(0f, velocitySpec) }
+            }
+            release()
+        }
+    }
+
+    companion object {
+        /** 按压态胶囊放大倍率:78dp 按压高 / 56dp 静止高(AndroidLiquidGlass demo 数值)。 */
+        const val PRESSED_SCALE = 78f / 56f
+    }
+}
+
+/**
  * 底部标签栏容器:悬浮液态玻璃胶囊。
  *
  * [backdrop] 由调用方持有并标在页面内容上(`Modifier.layerBackdrop`),
@@ -162,16 +270,17 @@ fun ArkDoBottomBar(
 ) {
     val colors = arkdoColors
     val useGlass = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
-    // 选中胶囊的滑动动画(spring 回弹,RiseDiary 同款观感;拖拽形变依赖其 GPL
-    // 代码未引入,这里只做点击切换的滑动)。
-    val capsulePosition = remember { Animatable(selectedIndex.toFloat()) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(selectedIndex) {
-        capsulePosition.animateTo(
-            selectedIndex.coerceIn(0, tabCount - 1).toFloat(),
-            spring(dampingRatio = 1f, stiffness = 300f)
-        )
+
+    // 选中胶囊的拖拽/按压状态机:按压放大(78/56)+速度果冻+整栏 16dp 按压放大,
+    // 行为规格对齐 AndroidLiquidGlass 1.0.0 demo。
+    val capsule = remember {
+        LiquidCapsuleState(scope, selectedIndex.toFloat(), 0f..(tabCount - 1).toFloat())
+    }
+    LaunchedEffect(Unit) {
+        snapshotFlow { selectedIndex }
+            .drop(1)
+            .collectLatest { capsule.animateToIndex(it) }
     }
 
     if (!useGlass) {
@@ -191,6 +300,10 @@ fun ArkDoBottomBar(
     // 选中胶囊表面的轻压色。
     // 选中胶囊表面偏实:压住底下透过的内容与灰字,选中态才跳得出来
     val capsuleSurface = colors.surfaceCard.copy(alpha = 0.78f)
+    // 按压时 tab 内容放大 1.2 倍(RiseDiary 同参数)。
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalBottomTabPressScale provides { lerp(1f, 1.2f, capsule.pressProgress) }
+    ) {
 
     BoxWithConstraints(
         modifier = modifier
@@ -200,6 +313,38 @@ fun ArkDoBottomBar(
             .navigationBarsPadding()
             .padding(horizontal = BottomBarDefaults.ContainerHorizontalMargin)
             .padding(bottom = BottomBarDefaults.ContainerBottomGap)
+            // 拖拽手势挂在整条栏上:胶囊只有 77dp 宽,手势挂它自身会让"槽位边缘起拖"
+            // 变成无效点击(实测踩过:落到新 tab 后再拖没反应)。挂容器层后,
+            // 槽内任意位置都能起拖;纯点击(未过 slop)仍落到 tab 的 onClick。
+            .pointerInput(tabCount) {
+                // 槽位宽度直接由节点实测尺寸算(pointerInput 链上拿不到内容层的 slotWidth)。
+                val slotWidthPx = size.width.toFloat() / tabCount
+                detectDragGestures(
+                    onDragStart = { capsule.press() },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        capsule.updateValue(capsule.targetValue + dragAmount.x / slotWidthPx)
+                    },
+                    onDragEnd = {
+                        val target = capsule.targetValue.fastRoundToInt().coerceIn(0, tabCount - 1)
+                        if (target != selectedIndex) onTabSelected(target)
+                        capsule.animateToIndex(target)
+                    },
+                    onDragCancel = { capsule.animateToIndex(selectedIndex) }
+                )
+            }
+            // 触底即按压放大(对齐 RiseDiary 的 press-on-down),松手回缩。
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    capsule.press()
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        if (e.changes.all { !it.pressed }) break
+                    }
+                    capsule.release()
+                }
+            }
     ) {
         val slotWidth = maxWidth / tabCount
         val capsuleWidth = minOf(BottomBarDefaults.CapsuleMaxWidth, slotWidth - BottomBarDefaults.ContentPadding * 2)
@@ -225,6 +370,12 @@ fun ArkDoBottomBar(
                             BottomBarDefaults.GlassLensRadius.toPx(),
                             BottomBarDefaults.GlassLensRadius.toPx()
                         )
+                    },
+                    // 按压时整条玻璃沿宽度方向放大 16dp(对齐 RiseDiary layerBlock)。
+                    layerBlock = {
+                        val scale = lerp(1f, 1f + 16.dp.toPx() / size.width, capsule.pressProgress)
+                        scaleX = scale
+                        scaleY = scale
                     },
                     onDrawSurface = { drawRect(glassTint) }
                 )
@@ -255,33 +406,7 @@ fun ArkDoBottomBar(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .graphicsLayer {
-                    translationX = (slotWidth * capsulePosition.value + (slotWidth - capsuleWidth) / 2).toPx()
-                }
-                .pointerInput(tabCount) {
-                    detectDragGestures(
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            barScope.launch {
-                                capsulePosition.snapTo(
-                                    (capsulePosition.value + dragAmount.x / slotWidth.toPx())
-                                        .coerceIn(0f, (tabCount - 1).toFloat())
-                                )
-                            }
-                        },
-                        onDragEnd = {
-                            barScope.launch {
-                                val target = capsulePosition.value.fastRoundToInt()
-                                    .coerceIn(0, tabCount - 1)
-                                capsulePosition.animateTo(target.toFloat(), spring(1f, 300f))
-                                if (target != selectedIndex) onTabSelected(target)
-                            }
-                        },
-                        onDragCancel = {
-                            barScope.launch {
-                                capsulePosition.animateTo(selectedIndex.toFloat(), spring(1f, 300f))
-                            }
-                        }
-                    )
+                    translationX = (slotWidth * capsule.value + (slotWidth - capsuleWidth) / 2).toPx()
                 }
                 .drawBackdrop(
                     backdrop = backdrop,
@@ -296,6 +421,14 @@ fun ArkDoBottomBar(
                     highlight = { Highlight.Default },
                     shadow = { Shadow(alpha = 0.35f) },
                     innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.6f) },
+                    // 按压放大 + 速度果冻:X 随速度拉伸、Y 压扁(±20% 钳制)。
+                    layerBlock = {
+                        scaleX = capsule.scaleX
+                        scaleY = capsule.scaleY
+                        val v = capsule.velocity / 10f
+                        scaleX /= 1f - (v * 0.75f).coerceIn(-0.2f, 0.2f)
+                        scaleY *= 1f - (v * 0.25f).coerceIn(-0.2f, 0.2f)
+                    },
                     onDrawSurface = { drawRect(capsuleSurface) }
                 )
                 .width(capsuleWidth)
@@ -303,11 +436,12 @@ fun ArkDoBottomBar(
         ) {
             Row(modifier = Modifier.fillMaxSize()) {
                 item(
-                    capsulePosition.value.fastRoundToInt().coerceIn(0, tabCount - 1),
+                    capsule.value.fastRoundToInt().coerceIn(0, tabCount - 1),
                     true,
                     true
                 )
             }
+        }
         }
     }
 }
@@ -395,6 +529,8 @@ fun RowScope.ArkDoBottomBarItem(
     val colors = arkdoColors
     val accent = colors.ldAccent
     val idle = colors.textSecondary
+    // 按压缩放在组合期读取(CompositionLocal 不能在 graphicsLayer lambda 里读)
+    val pressScale = LocalBottomTabPressScale.current()
 
     val iconColor by animateColorAsState(
         targetValue = if (selected) accent else idle,
@@ -442,8 +578,9 @@ fun RowScope.ArkDoBottomBarItem(
                 if (iconVisible) {
                     Box(
                         modifier = Modifier.graphicsLayer {
-                            scaleX = iconScale
-                            scaleY = iconScale
+                            val s = iconScale * pressScale
+                            scaleX = s
+                            scaleY = s
                         },
                         contentAlignment = Alignment.Center
                     ) {
