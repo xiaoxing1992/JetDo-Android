@@ -277,10 +277,14 @@ fun ArkDoBottomBar(
     val capsule = remember {
         LiquidCapsuleState(scope, selectedIndex.toFloat(), 0f..(tabCount - 1).toFloat())
     }
-    LaunchedEffect(Unit) {
-        snapshotFlow { selectedIndex }
-            .drop(1)
-            .collectLatest { capsule.animateToIndex(it) }
+    // 以 selectedIndex 作 key:它是普通 Int 参数(按值捕获),不是 State ——
+    // 用 snapshotFlow { selectedIndex } 只会读到首次组合的常量,点击切页时永不发射
+    // (实测:拖拽正常、点击后胶囊不跟随)。改 key 后每次外部选中变化都补一段滑动动画;
+    // 拖拽路径已自己 animateToIndex,这里用目标值判等避免打架。
+    LaunchedEffect(selectedIndex) {
+        if (capsule.targetValue.fastRoundToInt() != selectedIndex) {
+            capsule.animateToIndex(selectedIndex)
+        }
     }
 
     if (!useGlass) {
