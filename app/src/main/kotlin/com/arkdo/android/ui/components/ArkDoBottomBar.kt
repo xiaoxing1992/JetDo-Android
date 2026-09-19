@@ -3,6 +3,7 @@ package com.arkdo.android.ui.components
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -34,39 +35,36 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.util.lerp
-import kotlin.math.abs
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.fastRoundToInt
+import androidx.compose.ui.util.lerp
+import com.arkdo.android.ui.components.liquidglass.DampedDragAnimation
+import com.arkdo.android.ui.components.liquidglass.InteractiveHighlight
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import com.kyant.backdrop.Backdrop
@@ -78,26 +76,32 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
+import kotlin.math.abs
+import kotlin.math.sign
+import kotlinx.coroutines.launch
 
 // ==========================================================================
 // 自定义底部标签栏(不使用 Material3 NavigationBar)。
 //
-// 形态是**悬浮液态玻璃胶囊**(实现原理对齐 RiseDiary / Kyant0 AndroidLiquidGlass,
-// 引擎为同作者的 io.github.kyant0:backdrop):
+// 形态是**悬浮液态玻璃胶囊**,实现对齐 Kyant0/AndroidLiquidGlass 的
+// catalog 组件 LiquidBottomTabs(commit 65ab177),引擎为同作者的
+// io.github.kyant0:backdrop:
 //   1. 玻璃容器:drawBackdrop 对身后内容 vibrancy + blur + 边缘透镜折射,
-//      表面只画 ~14% 的色调,玻璃感来自透出的内容;
+//      表面只画 40% 的色调,玻璃感来自透出的内容;按压时整栏放大 16dp,
+//      并叠一层跟手指走的径向高光(InteractiveHighlight);
 //   2. 可见 tab 行画未选样式,但**选中槽位的图标不画**(避免与胶囊内图标重影),
 //      角标照画;
-//   3. 选中胶囊是一枚独立的"透镜"(lens + 色差 + 高光/阴影),滑动到哪个 tab,
-//      胶囊内部就直接画出那个 tab 的选中态(实心 accent 图标 + accent 文字)。
-//      RiseDiary 原版用"alpha=0 隐藏采样行 + combinedBackdrop 折射"实现同一效果,
+//   3. 选中胶囊**静止时是平的**(只有 10% 压色),按下才"长成"玻璃透镜:
+//      折射/色差/高光/阴影/内阴影全部随 pressProgress 从 0 生长,松手回平。
+//      拖动时胶囊按速度沿 X 拉伸、Y 压扁(果冻),整栏也跟手偏移 ≤4dp。
+//      胶囊内部直接画当前槽位 tab 的选中态(实心 accent 图标 + accent 文字)。
+//      上游用"alpha=0 隐藏采样行 + combinedBackdrop 折射"实现同一效果,
 //      采样捕获对层级时序敏感,这里改为直接绘制,观感一致且稳定。
 // 页面内容侧由 RootTabScreen 标 layerBackdrop 提供 [backdrop]。
 //
-// 版本兼容(三档,对齐 RiseDiary 的降级策略并下探到本应用 minSdk 26):
+// 版本兼容(三档,对齐上游的降级策略并下探到本应用 minSdk 26):
 //   - API 33+:完整液态玻璃(RuntimeShader 折射/色差/高光,库内自动启用);
-//   - API 31/32:RenderEffect 可用,均匀模糊 + vibrancy,折射/高光由库降级
-//     (RiseDiary 称"部分实体降级效果");
+//   - API 31/32:RenderEffect 可用,均匀模糊 + vibrancy,折射/高光由库降级;
 //   - API 26-30:无 RenderEffect,退回实体材质(高不透明度表面 + 描边 +
 //     实色滑动胶囊),不引入 backdrop 采样。
 // ==========================================================================
@@ -105,7 +109,7 @@ import com.kyant.capsule.ContinuousCapsule
 /**
  * 按压进度 → tab 内容缩放。玻璃路径 provide,兜底路径读默认 1。
  */
-internal val LocalBottomTabPressScale = androidx.compose.runtime.staticCompositionLocalOf { { 1f } }
+internal val LocalBottomTabPressScale = staticCompositionLocalOf { { 1f } }
 
 /** 标签栏几何与动效常量,集中在此便于对照调整。 */
 internal object BottomBarDefaults {
@@ -142,112 +146,54 @@ internal object BottomBarDefaults {
     /** 选中/未选切换动效时长,与首页新话题提示条同一量级。 */
     const val SwitchDurationMs = 180
 
-    // 玻璃参数(观感对齐 RiseDiary 的底栏)。
+    // 玻璃参数(数值对齐 AndroidLiquidGlass catalog 的 LiquidBottomTabs)。
     /** 玻璃容器的模糊半径。 */
-    val GlassBlurRadius = 28.dp
+    val GlassBlurRadius = 8.dp
 
     /** 玻璃容器边缘透镜半径。 */
     val GlassLensRadius = 24.dp
 
-    /** 选中透镜的反射/色差半径。 */
+    /** 容器表面色调的不透明度。 */
+    const val GlassTintAlpha = 0.4f
+
+    /** 按压时整栏沿宽度方向放大的量。 */
+    val PressGrow = 16.dp
+
+    /** 按压时 tab 内容放大倍率。 */
+    const val PressContentScale = 1.2f
+
+    /** 拖动时整栏跟手偏移的上限。 */
+    val PanelOffsetMax = 4.dp
+
+    /** 选中透镜按压态的反射/色差半径(静止时为 0,随按压进度生长)。 */
     val SelectionLensRadius = 10.dp
     val SelectionChromaticRadius = 14.dp
 
+    /** 选中透镜按压态的内阴影半径。 */
+    val SelectionInnerShadowRadius = 8.dp
+
+    /** 按压态胶囊放大倍率:78dp 按压高 / 56dp 静止高(上游 demo 数值)。 */
+    const val CapsulePressedScale = 78f / 56f
+
     /**
-     * 选中胶囊宽度:固定尺寸、居中于槽位(RiseDiary 是整槽宽,但 4 tab 时槽宽近 96dp,
+     * 选中胶囊宽度:固定尺寸、居中于槽位(上游是整槽宽,但 4 tab 时槽宽近 96dp,
      * 胶囊拉成 1.76:1 的横条不像胶囊;77×54 ≈ doer 实测比例 1.43,观感更"胶囊")。
      */
     val CapsuleMaxWidth = 77.dp
 }
 
 /**
- * 选中胶囊的拖拽/按压状态机。
- *
- * 行为规格对齐 AndroidLiquidGlass 1.0.0 demo 的 DampedDragAnimation(与 RiseDiary
- * 同源):五个动画通道——槽位值、归一化速度、按进度、X/Y 缩放;按压放大到 78/56 倍
- * (XY 用 0.6/250 与 0.7/250 两档欠阻尼弹簧产生果冻回弹),拖动速度沿 X 拉伸、
- * 垂直压扁(±20% 钳制)。此处为按公开行为规格的本项目自有实现。
+ * 胶囊层的最终缩放 = 按压缩放 × 速度果冻(X 随速度拉伸、Y 压扁,±20% 钳制)。
+ * 上游 LiquidBottomTabs 的 layerBlock 同一算法;抽出来是为了胶囊内容能按同一值反向抵消。
  */
-private class LiquidCapsuleState(
-    private val scope: CoroutineScope,
-    initialValue: Float,
-    private val valueRange: ClosedFloatingPointRange<Float>,
-) {
-    private val valueSpec = spring(1f, 1000f, 0.001f)
-    private val velocitySpec = spring(0.5f, 300f, 5f)
-    private val pressSpec = spring(1f, 1000f, 0.001f)
-    private val scaleXSpec = spring(0.6f, 250f, 0.001f)
-    private val scaleYSpec = spring(0.7f, 250f, 0.001f)
+private fun DampedDragAnimation.jellyScaleX(): Float {
+    val v = velocity / 10f
+    return scaleX / (1f - (v * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+}
 
-    private val valueAnim = Animatable(initialValue, 0.001f)
-    private val velocityAnim = Animatable(0f, 5f)
-    private val pressAnim = Animatable(0f, 0.001f)
-    private val scaleXAnim = Animatable(1f, 0.001f)
-    private val scaleYAnim = Animatable(1f, 0.001f)
-
-    private val tracker = VelocityTracker()
-
-    val value: Float get() = valueAnim.value
-    val targetValue: Float get() = valueAnim.targetValue
-    val pressProgress: Float get() = pressAnim.value
-    val scaleX: Float get() = scaleXAnim.value
-    val scaleY: Float get() = scaleYAnim.value
-    val velocity: Float get() = velocityAnim.value
-
-    /** 按下:胶囊放大到 [PRESSED_SCALE]。 */
-    fun press() {
-        tracker.resetTracking()
-        scope.launch {
-            launch { pressAnim.animateTo(1f, pressSpec) }
-            launch { scaleXAnim.animateTo(PRESSED_SCALE, scaleXSpec) }
-            launch { scaleYAnim.animateTo(PRESSED_SCALE, scaleYSpec) }
-        }
-    }
-
-    /** 松手:等槽位值贴近目标后回缩。 */
-    fun release() {
-        scope.launch {
-            awaitFrame()
-            if (valueAnim.value != valueAnim.targetValue) {
-                val threshold = (valueRange.endInclusive - valueRange.start) * 0.025f
-                snapshotFlow { valueAnim.value }
-                    .filter { abs(it - valueAnim.targetValue) < threshold }
-                    .first()
-            }
-            launch { pressAnim.animateTo(0f, pressSpec) }
-            launch { scaleXAnim.animateTo(1f, scaleXSpec) }
-            launch { scaleYAnim.animateTo(1f, scaleYSpec) }
-        }
-    }
-
-    /** 拖动:槽位值用硬弹簧追手指,同时按槽位归一化记录速度。 */
-    fun updateValue(raw: Float) {
-        scope.launch {
-            valueAnim.animateTo(raw.coerceIn(valueRange), valueSpec) {
-                tracker.addPosition(System.currentTimeMillis(), Offset(value, 0f))
-                val normalized = tracker.calculateVelocity().x /
-                    (valueRange.endInclusive - valueRange.start)
-                launch { velocityAnim.animateTo(normalized, velocitySpec) }
-            }
-        }
-    }
-
-    /** 点击/松手后的整段动画:按压-滑动-回缩(mutate 保证互斥)。 */
-    fun animateToIndex(index: Int) {
-        scope.launch {
-            press()
-            valueAnim.animateTo(index.toFloat().coerceIn(valueRange), valueSpec)
-            if (velocityAnim.value != 0f) {
-                launch { velocityAnim.animateTo(0f, velocitySpec) }
-            }
-            release()
-        }
-    }
-
-    companion object {
-        /** 按压态胶囊放大倍率:78dp 按压高 / 56dp 静止高(AndroidLiquidGlass demo 数值)。 */
-        const val PRESSED_SCALE = 78f / 56f
-    }
+private fun DampedDragAnimation.jellyScaleY(): Float {
+    val v = velocity / 10f
+    return scaleY * (1f - (v * 0.25f).fastCoerceIn(-0.2f, 0.2f))
 }
 
 /**
@@ -256,7 +202,7 @@ private class LiquidCapsuleState(
  * [backdrop] 由调用方持有并标在页面内容上(`Modifier.layerBackdrop`),
  * 玻璃与选中透镜都从它取样身后滚过的内容。
  * [item] 按 (index, selected, iconVisible) 回调:玻璃路径的可见行以 selected=false、
- * 选中槽位 iconVisible=false 调用(图标在胶囊内画);兜底路径以真实选中态调用。
+ * 胶囊所在槽位 iconVisible=false 调用(图标文字在胶囊内画);兜底路径以真实选中态调用。
  * 无障碍的选中态请用 [ArkDoBottomBarItem.semanticSelected] 单独表达。
  */
 @Composable
@@ -270,22 +216,6 @@ fun ArkDoBottomBar(
 ) {
     val colors = arkdoColors
     val useGlass = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val scope = rememberCoroutineScope()
-
-    // 选中胶囊的拖拽/按压状态机:按压放大(78/56)+速度果冻+整栏 16dp 按压放大,
-    // 行为规格对齐 AndroidLiquidGlass 1.0.0 demo。
-    val capsule = remember {
-        LiquidCapsuleState(scope, selectedIndex.toFloat(), 0f..(tabCount - 1).toFloat())
-    }
-    // 以 selectedIndex 作 key:它是普通 Int 参数(按值捕获),不是 State ——
-    // 用 snapshotFlow { selectedIndex } 只会读到首次组合的常量,点击切页时永不发射
-    // (实测:拖拽正常、点击后胶囊不跟随)。改 key 后每次外部选中变化都补一段滑动动画;
-    // 拖拽路径已自己 animateToIndex,这里用目标值判等避免打架。
-    LaunchedEffect(selectedIndex) {
-        if (capsule.targetValue.fastRoundToInt() != selectedIndex) {
-            capsule.animateToIndex(selectedIndex)
-        }
-    }
 
     if (!useGlass) {
         // ---- API 26-30 兜底:无 RenderEffect,实体材质 + 实色滑动胶囊 ----
@@ -299,16 +229,50 @@ fun ArkDoBottomBar(
     }
 
     val isDark = colors.pageBg.luminance() < 0.5f
-    // 玻璃表面色调:只画一层薄色,玻璃感主要来自透出的内容(RiseDiary 同参数量级)。
-    val glassTint = if (isDark) Color(0xFF121212).copy(alpha = 0.45f) else Color(0xFFFAFAFA).copy(alpha = 0.45f)
-    // 选中胶囊表面的轻压色。
-    // 选中胶囊表面偏实:压住底下透过的内容与灰字,选中态才跳得出来
-    val capsuleSurface = colors.surfaceCard.copy(alpha = 0.78f)
-    // 按压时 tab 内容放大 1.2 倍(RiseDiary 同参数)。
-    androidx.compose.runtime.CompositionLocalProvider(
-        LocalBottomTabPressScale provides { lerp(1f, 1.2f, capsule.pressProgress) }
-    ) {
+    // 玻璃表面色调:只画一层薄色,玻璃感主要来自透出的内容(上游同参数)。
+    val glassTint = (if (isDark) Color(0xFF121212) else Color(0xFFFAFAFA))
+        .copy(alpha = BottomBarDefaults.GlassTintAlpha)
+    // 选中胶囊静止态的压色:平的一层 10%,按下时淡出、换成透镜本身的高光/阴影。
+    val capsuleRestTint = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.1f)
 
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+
+    // 整栏跟手偏移:拖动时容器/可见行/胶囊一起随手指位移(EaseOut,≤4dp),松手弹回。
+    val panelOffsetAnim = remember { Animatable(0f) }
+
+    // 选中胶囊的拖拽/按压状态机(上游 DampedDragAnimation):槽位值、归一化速度、
+    // 按压进度、X/Y 欠阻尼缩放。手势不用它自带的 modifier(那是挂在整槽宽胶囊上的),
+    // 而是由下面容器层的 detectDragGestures 驱动,见那里的说明。
+    val capsule = remember(scope) {
+        DampedDragAnimation(
+            animationScope = scope,
+            initialValue = selectedIndex.toFloat(),
+            valueRange = 0f..(tabCount - 1).toFloat(),
+            visibilityThreshold = 0.001f,
+            initialScale = 1f,
+            pressedScale = BottomBarDefaults.CapsulePressedScale,
+            onDragStarted = {},
+            onDragStopped = {},
+            onDrag = { _, _ -> }
+        )
+    }
+    // 以 selectedIndex 作 key:它是普通 Int 参数(按值捕获),不是 State ——
+    // 用 snapshotFlow { selectedIndex } 只会读到首次组合的常量,点击切页时永不发射
+    // (实测:拖拽正常、点击后胶囊不跟随)。改 key 后每次外部选中变化都补一段滑动动画;
+    // 拖拽路径已自己 animateToValue,这里用目标值判等避免打架。
+    LaunchedEffect(selectedIndex) {
+        if (capsule.targetValue.fastRoundToInt() != selectedIndex) {
+            capsule.animateToValue(selectedIndex.toFloat())
+        }
+    }
+
+    // 按压时 tab 内容放大 1.2 倍(上游同参数)。
+    CompositionLocalProvider(
+        LocalBottomTabPressScale provides {
+            lerp(1f, BottomBarDefaults.PressContentScale, capsule.pressProgress)
+        }
+    ) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -317,47 +281,94 @@ fun ArkDoBottomBar(
             .navigationBarsPadding()
             .padding(horizontal = BottomBarDefaults.ContainerHorizontalMargin)
             .padding(bottom = BottomBarDefaults.ContainerBottomGap)
-            // 拖拽手势挂在整条栏上:胶囊只有 77dp 宽,手势挂它自身会让"槽位边缘起拖"
-            // 变成无效点击(实测踩过:落到新 tab 后再拖没反应)。挂容器层后,
-            // 槽内任意位置都能起拖;纯点击(未过 slop)仍落到 tab 的 onClick。
-            .pointerInput(tabCount) {
-                // 槽位宽度直接由节点实测尺寸算(pointerInput 链上拿不到内容层的 slotWidth)。
-                val slotWidthPx = size.width.toFloat() / tabCount
-                detectDragGestures(
-                    onDragStart = { capsule.press() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        capsule.updateValue(capsule.targetValue + dragAmount.x / slotWidthPx)
-                    },
-                    onDragEnd = {
-                        val target = capsule.targetValue.fastRoundToInt().coerceIn(0, tabCount - 1)
-                        if (target != selectedIndex) onTabSelected(target)
-                        capsule.animateToIndex(target)
-                    },
-                    onDragCancel = { capsule.animateToIndex(selectedIndex) }
-                )
-            }
-            // 触底即按压放大(对齐 RiseDiary 的 press-on-down),松手回缩。
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    capsule.press()
-                    while (true) {
-                        val e = awaitPointerEvent()
-                        if (e.changes.all { !it.pressed }) break
-                    }
-                    capsule.release()
-                }
-            }
     ) {
         val slotWidth = maxWidth / tabCount
         val capsuleWidth = minOf(BottomBarDefaults.CapsuleMaxWidth, slotWidth - BottomBarDefaults.ContentPadding * 2)
+        val containerWidthPx = with(density) { maxWidth.toPx() }
+
+        // 胶囊当前压着的槽位:可见行在这个槽位不画图标、胶囊内画它的选中态。
+        // 跟胶囊位置而不是 selectedIndex 走,拖离原槽位时原图标才会立刻回填。
+        // derivedStateOf 把逐帧的 value 收敛成槽位变化,避免拖动时每帧重组整行。
+        val capsuleSlot by remember(tabCount) {
+            derivedStateOf { capsule.value.fastRoundToInt().fastCoerceIn(0, tabCount - 1) }
+        }
+
+        // 拖动位移 → 整栏偏移:按容器宽归一化后 EaseOut,封顶 PanelOffsetMax(上游同算法)。
+        val panelOffset by remember(density, containerWidthPx) {
+            derivedStateOf {
+                val fraction = (panelOffsetAnim.value / containerWidthPx).fastCoerceIn(-1f, 1f)
+                with(density) {
+                    BottomBarDefaults.PanelOffsetMax.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
+                }
+            }
+        }
+
+        // 按压高光:光斑中心钉在胶囊中心(而不是手指落点),随胶囊一起滑。
+        val highlight = remember(scope, tabCount) {
+            InteractiveHighlight(
+                animationScope = scope,
+                position = { size, _ ->
+                    Offset(
+                        size.width / tabCount * (capsule.value + 0.5f) + panelOffset,
+                        size.height / 2f
+                    )
+                }
+            )
+        }
+
+        // 手势宿主:三层(容器 / 可见行 / 胶囊)的共同父节点。
+        // 拖拽手势必须挂在父节点上:胶囊只有 77dp 宽,手势挂它自身会让"槽位边缘起拖"
+        // 变成无效点击(实测踩过:落到新 tab 后再拖没反应);挂在容器层也不行 ——
+        // 容器与 tab 行是兄弟,Compose 命中上层兄弟后不再测试下层兄弟。
+        // 挂父节点后,槽内任意位置都能起拖;纯点击(未过 slop)仍落到 tab 的 onClick。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(BottomBarDefaults.ContainerHeight)
+                .pointerInput(tabCount) {
+                    // 槽位宽度直接由节点实测尺寸算(pointerInput 链上拿不到内容层的 slotWidth)。
+                    val slotWidthPx = size.width.toFloat() / tabCount
+                    detectDragGestures(
+                        onDragStart = { capsule.press() },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            capsule.updateValue(capsule.targetValue + dragAmount.x / slotWidthPx)
+                            scope.launch { panelOffsetAnim.snapTo(panelOffsetAnim.value + dragAmount.x) }
+                        },
+                        onDragEnd = {
+                            val target = capsule.targetValue.fastRoundToInt().fastCoerceIn(0, tabCount - 1)
+                            if (target != selectedIndex) onTabSelected(target)
+                            capsule.animateToValue(target.toFloat())
+                            scope.launch { panelOffsetAnim.animateTo(0f, spring(1f, 300f, 0.5f)) }
+                        },
+                        onDragCancel = {
+                            capsule.animateToValue(selectedIndex.toFloat())
+                            scope.launch { panelOffsetAnim.animateTo(0f, spring(1f, 300f, 0.5f)) }
+                        }
+                    )
+                }
+                // 触底即按压放大(上游 press-on-down),松手回缩。
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        capsule.press()
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            if (e.changes.all { !it.pressed }) break
+                        }
+                        capsule.release()
+                    }
+                }
+                // 高光的按压/位置跟踪(Initial pass 截获,不消费事件,不影响点击与拖拽)。
+                .then(highlight.gestureModifier)
+        ) {
 
         // 1) 玻璃容器
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(BottomBarDefaults.ContainerHeight)
+                .graphicsLayer { translationX = panelOffset }
                 .shadow(
                     elevation = 8.dp,
                     shape = ContinuousCapsule,
@@ -375,79 +386,111 @@ fun ArkDoBottomBar(
                             BottomBarDefaults.GlassLensRadius.toPx()
                         )
                     },
-                    // 按压时整条玻璃沿宽度方向放大 16dp(对齐 RiseDiary layerBlock)。
+                    // 按压时整条玻璃沿宽度方向放大 16dp(上游 layerBlock)。
                     layerBlock = {
-                        val scale = lerp(1f, 1f + 16.dp.toPx() / size.width, capsule.pressProgress)
+                        val scale = lerp(
+                            1f,
+                            1f + BottomBarDefaults.PressGrow.toPx() / size.width,
+                            capsule.pressProgress
+                        )
                         scaleX = scale
                         scaleY = scale
                     },
                     onDrawSurface = { drawRect(glassTint) }
                 )
+                // 按压高光画在玻璃表面之上、tab 内容之下(BlendMode.Plus 提亮)。
+                .then(highlight.modifier)
                 // 白页上玻璃近乎透明,一条细描边保住栏形;深色下同样兜住边界。
                 .border(1.dp, colors.border.copy(alpha = 0.5f), ContinuousCapsule)
         )
 
-        // 2) 可见 tab 行:未选样式;选中槽位不画图标(胶囊内画),角标保留。
+        // 2) 可见 tab 行:未选样式;胶囊压着的槽位不画图标与文字(胶囊内画),角标保留。
         //    高度必须钉死 62dp —— 用 fillMaxSize 会把 BoxWithConstraints 撑成全屏高,
         //    Scaffold 把整个全高节点当 bottomBar 贴底,容器就被顶到屏幕顶部去了。
+        //    两行(可见行 / 胶囊内)都垂直居中:tab 列本身 wrap 高,各自以容器中线为准
+        //    才能严丝合缝;顶对齐时胶囊内容会比可见行低 4dp(胶囊比容器矮的那 4dp)。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(BottomBarDefaults.ContainerHeight)
-                .padding(horizontal = BottomBarDefaults.ContentPadding)
+                .graphicsLayer { translationX = panelOffset }
+                .padding(horizontal = BottomBarDefaults.ContentPadding),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             repeat(tabCount) { index ->
-                item(index, false, index != selectedIndex)
+                item(index, false, index != capsuleSlot)
             }
         }
 
-        // 3) 选中玻璃胶囊:lens 折射身后的页面内容,选中态直接画在胶囊内部,随胶囊滑动。
+        // 3) 选中玻璃胶囊:静止时是平的压色,按下才生长成透镜(折射/色差/高光/阴影/
+        //    内阴影全部 × pressProgress),选中态直接画在胶囊内部,随胶囊滑动。
         //    胶囊可横向拖动换 tab:拖动时实时吸附经过的槽位(内容跟着切换),松手吸附最近 tab。
         //    注意必须 align(CenterStart):默认 TopStart 会让胶囊顶着容器上沿、内部内容
         //    与可见行错位 4dp(实测踩过,"胶囊位置偏上"就是这个)。
-        val barScope = rememberCoroutineScope()
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .graphicsLayer {
-                    translationX = (slotWidth * capsule.value + (slotWidth - capsuleWidth) / 2).toPx()
+                    translationX =
+                        (slotWidth * capsule.value + (slotWidth - capsuleWidth) / 2).toPx() + panelOffset
                 }
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { ContinuousCapsule },
                     effects = {
+                        val progress = capsule.pressProgress
+                        // 与容器同一套磨砂:上游胶囊静止时不模糊(照片背景下是"清窗"),
+                        // 但本应用页面是密集图文,清窗会把头像/标题原样透进胶囊压住 accent 图标。
+                        vibrancy()
+                        blur(BottomBarDefaults.GlassBlurRadius.toPx())
                         lens(
-                            BottomBarDefaults.SelectionLensRadius.toPx(),
-                            BottomBarDefaults.SelectionChromaticRadius.toPx(),
+                            BottomBarDefaults.SelectionLensRadius.toPx() * progress,
+                            BottomBarDefaults.SelectionChromaticRadius.toPx() * progress,
                             chromaticAberration = true
                         )
                     },
-                    highlight = { Highlight.Default },
-                    shadow = { Shadow(alpha = 0.35f) },
-                    innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.6f) },
+                    highlight = { Highlight.Default.copy(alpha = capsule.pressProgress) },
+                    shadow = { Shadow(alpha = capsule.pressProgress) },
+                    innerShadow = {
+                        val progress = capsule.pressProgress
+                        InnerShadow(
+                            radius = BottomBarDefaults.SelectionInnerShadowRadius * progress,
+                            alpha = progress
+                        )
+                    },
                     // 按压放大 + 速度果冻:X 随速度拉伸、Y 压扁(±20% 钳制)。
                     layerBlock = {
-                        scaleX = capsule.scaleX
-                        scaleY = capsule.scaleY
-                        val v = capsule.velocity / 10f
-                        scaleX /= 1f - (v * 0.75f).coerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (v * 0.25f).coerceIn(-0.2f, 0.2f)
+                        scaleX = capsule.jellyScaleX()
+                        scaleY = capsule.jellyScaleY()
                     },
-                    onDrawSurface = { drawRect(capsuleSurface) }
+                    onDrawSurface = {
+                        val progress = capsule.pressProgress
+                        // 静止压色随按压淡出,换成一层极淡的暗调让透镜有"体"。
+                        drawRect(capsuleRestTint, alpha = 1f - progress)
+                        drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                    }
                 )
                 .width(capsuleWidth)
                 .height(BottomBarDefaults.CapsuleHeight)
         ) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                item(
-                    capsule.value.fastRoundToInt().coerceIn(0, tabCount - 1),
-                    true,
-                    true
-                )
+            // 胶囊内容反向抵消 layerBlock 的放大/果冻:上游胶囊里没有子内容(靠折射隐藏行
+            // 显示),玻璃怎么变形都不影响内容;这里内容直接画在胶囊里,不抵消会被连带
+            // 放大到 1.39×1.2 撑出胶囊。抵消后内容只保留 tab 自身的 1.2 倍按压放大。
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1f / capsule.jellyScaleX()
+                        scaleY = 1f / capsule.jellyScaleY()
+                    },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                item(capsuleSlot, true, true)
             }
         }
-        }
+        } // 手势宿主
     }
+    } // CompositionLocalProvider
 }
 
 /**
@@ -517,6 +560,7 @@ private fun SolidFallbackBottomBar(
  *
  * [selected] 驱动视觉(玻璃路径下可见行恒为 false,选中态由透镜呈现);
  * [semanticSelected] 驱动无障碍的选中语义,与视觉解耦。
+ * [iconVisible] 为 false 时图标与文字都不画(只留角标),玻璃路径用它隐藏被胶囊压住的槽位。
  * [icon] 收到的是**已按选中态动画好的颜色**,调用方直接拿去染色即可。
  */
 @Composable
@@ -533,8 +577,9 @@ fun RowScope.ArkDoBottomBarItem(
     val colors = arkdoColors
     val accent = colors.ldAccent
     val idle = colors.textSecondary
-    // 按压缩放在组合期读取(CompositionLocal 不能在 graphicsLayer lambda 里读)
-    val pressScale = LocalBottomTabPressScale.current()
+    // 组合期只取出 lambda,真正读值放到 graphicsLayer 里:按压动画逐帧变化,
+    // 在组合期调用会让每个 tab 每帧重组;在 layer 里读只触发重绘。
+    val pressScale = LocalBottomTabPressScale.current
 
     val iconColor by animateColorAsState(
         targetValue = if (selected) accent else idle,
@@ -570,7 +615,13 @@ fun RowScope.ArkDoBottomBarItem(
                 indication = null,
                 onClick = onClick
             )
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            // 按压时整个 tab(图标+文字)一起放大,与上游 LiquidBottomTab 一致。
+            .graphicsLayer {
+                val s = pressScale()
+                scaleX = s
+                scaleY = s
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -582,9 +633,8 @@ fun RowScope.ArkDoBottomBarItem(
                 if (iconVisible) {
                     Box(
                         modifier = Modifier.graphicsLayer {
-                            val s = iconScale * pressScale
-                            scaleX = s
-                            scaleY = s
+                            scaleX = iconScale
+                            scaleY = iconScale
                         },
                         contentAlignment = Alignment.Center
                     ) {
@@ -610,7 +660,10 @@ fun RowScope.ArkDoBottomBarItem(
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = labelColor,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            // 被胶囊压住时文字也隐掉(只透明、不移除,布局不变):玻璃胶囊只有 10% 压色,
+            // 取样层透明的页面(如通知页)上盖不住底下的灰字,会出现双份标签。
+            modifier = Modifier.graphicsLayer { alpha = if (iconVisible) 1f else 0f }
         )
     }
 }
