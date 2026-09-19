@@ -184,10 +184,10 @@ fun RootTabScreen(
                     label = tab.label,
                     // 角标只挂通知标签;其余标签没有角标来源,恒为 0。
                     badgeCount = if (tab == RootTabDestination.NOTIFICATION) unreadCount else 0,
+                    // 玻璃路径下被胶囊压住的槽位不画图标与文字(选中态画在胶囊内),角标不受影响。
+                    iconVisible = iconVisible,
                     onClick = { selectTab(index) }
                 ) { tint ->
-                    // 玻璃路径下可见行的选中槽位不画图标(选中态画在透镜胶囊内),角标不受影响。
-                    if (!iconVisible) return@ArkDoBottomBarItem
                     if (tab == RootTabDestination.PROFILE) {
                         // 「我的」用真实头像:与首页顶栏账号入口共用 UserAvatar 和
                         // CurrentUserHolder,登录/登出/换号自动跟随。
