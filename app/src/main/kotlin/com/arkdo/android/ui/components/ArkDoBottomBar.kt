@@ -1,11 +1,15 @@
 package com.arkdo.android.ui.components
 
+import android.os.Build
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,41 +32,61 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.unit.sp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
+import com.kyant.capsule.ContinuousCapsule
 
 // ==========================================================================
 // 自定义底部标签栏(不使用 Material3 NavigationBar)。
 //
-// 形态是**悬浮胶囊容器**:左右留边、两端全圆、描边 + 软阴影,悬浮在手势区上方;
-// 选中项外面套一枚固定尺寸的胶囊高亮(几何对齐 doer 截图实测:77×54、W/h≈1.43、
-// 两端全圆,包住图标+文字,切换时平移过去)。
+// 形态是**悬浮液态玻璃胶囊**(实现原理对齐 RiseDiary / Kyant0 AndroidLiquidGlass,
+// 引擎为同作者的 io.github.kyant0:backdrop):
+//   1. 玻璃容器:drawBackdrop 对身后内容 vibrancy + blur + 边缘透镜折射,
+//      表面只画 ~14% 的色调,玻璃感来自透出的内容;
+//   2. 可见 tab 行画未选样式,但**选中槽位的图标不画**(避免与胶囊内图标重影),
+//      角标照画;
+//   3. 选中胶囊是一枚独立的"透镜"(lens + 色差 + 高光/阴影),滑动到哪个 tab,
+//      胶囊内部就直接画出那个 tab 的选中态(实心 accent 图标 + accent 文字)。
+//      RiseDiary 原版用"alpha=0 隐藏采样行 + combinedBackdrop 折射"实现同一效果,
+//      采样捕获对层级时序敏感,这里改为直接绘制,观感一致且稳定。
+// 页面内容侧由 RootTabScreen 标 layerBackdrop 提供 [backdrop]。
 //
-// 两处和 doer 的对应关系,免得再翻一遍:
-// - 选中胶囊:doer 截图实测 #E2E2E2 on #F5F5F6,但**源码里没有画它的代码** —— 那是
-//   iOS 26 系统 Liquid Glass UITabBar 自带的,所以必须自己画;
-// - 外层容器:doer 是通栏贴底直角条(tabBarFrame 用 view.bounds.width,截图底色区
-//   全宽到屏幕底),悬浮胶囊容器是我们自己的设计,别在 doer 源码里找出处。
-//
-// 之所以自己写而不是配 NavigationBar:NavigationBarItem 的固定 80dp 容器高度、内置
-// ripple 和指示器形状都靠 indeterminate 的 token 覆盖去改,M3 换个版本就可能走样。
+// 版本兼容(三档,对齐 RiseDiary 的降级策略并下探到本应用 minSdk 26):
+//   - API 33+:完整液态玻璃(RuntimeShader 折射/色差/高光,库内自动启用);
+//   - API 31/32:RenderEffect 可用,均匀模糊 + vibrancy,折射/高光由库降级
+//     (RiseDiary 称"部分实体降级效果");
+//   - API 26-30:无 RenderEffect,退回实体材质(高不透明度表面 + 描边 +
+//     实色滑动胶囊),不引入 backdrop 采样。
 // ==========================================================================
 
 /** 标签栏几何与动效常量,集中在此便于对照调整。 */
@@ -76,18 +100,11 @@ internal object BottomBarDefaults {
     /** 容器距系统手势区上方的间隙。 */
     val ContainerBottomGap = 10.dp
 
-    /** 选中胶囊高度,对齐 doer 实测 53.7pt。 */
+    /** tab 行内容与容器边缘的内缩(选中胶囊与容器边缘的间隙)。 */
+    val ContentPadding = 4.dp
+
+    /** 选中胶囊高度 = 容器高 - 上下内缩。 */
     val CapsuleHeight = 54.dp
-
-    /**
-     * 选中胶囊最大宽度。doer 实测 76.7×53.7pt(W/h≈1.43),是**固定尺寸**、不随槽位宽度变
-     * —— iOS 26 系统胶囊就是这样。若不设上限跟着槽位撑满,4 个 tab 时槽位宽,
-     * 胶囊会被拉成 1.76:1 的胖横条,看着是圆角矩形而不是胶囊(实测踩过)。
-     */
-    val CapsuleMaxWidth = 77.dp
-
-    /** 胶囊相对槽位的左右内缩;doer 的胶囊略宽于槽位,这里收 4dp 避免相邻相碰。 */
-    val CapsuleInset = 4.dp
 
     /** 图标槽位:图标在其内居中,有没有角标都不会顶动文字基线。 */
     val IconSlotSize = 26.dp
@@ -106,28 +123,74 @@ internal object BottomBarDefaults {
 
     /** 选中/未选切换动效时长,与首页新话题提示条同一量级。 */
     const val SwitchDurationMs = 180
+
+    // 玻璃参数(观感对齐 RiseDiary 的底栏)。
+    /** 玻璃容器的模糊半径。 */
+    val GlassBlurRadius = 28.dp
+
+    /** 玻璃容器边缘透镜半径。 */
+    val GlassLensRadius = 24.dp
+
+    /** 选中透镜的反射/色差半径。 */
+    val SelectionLensRadius = 10.dp
+    val SelectionChromaticRadius = 14.dp
+
+    /**
+     * 选中胶囊宽度:固定尺寸、居中于槽位(RiseDiary 是整槽宽,但 4 tab 时槽宽近 96dp,
+     * 胶囊拉成 1.76:1 的横条不像胶囊;77×54 ≈ doer 实测比例 1.43,观感更"胶囊")。
+     */
+    val CapsuleMaxWidth = 77.dp
 }
 
 /**
- * 底部标签栏容器:悬浮玻璃胶囊。
+ * 底部标签栏容器:悬浮液态玻璃胶囊。
  *
- * 外壳 = Haze 玻璃材质(对身后内容高斯模糊 + 半透明底色调子)+ 全圆描边 + 软阴影,
- * 悬浮在手势区上方;选中胶囊也在这里 —— 选中胶囊是**一枚**、按 [selectedIndex] 平移,
- * 而不是每个标签各画一块,这样切换时它才会滑过去。
- * [hazeState] 由调用方持有并标在页面内容上([androidx.compose.runtime.Composable] 层
- * `hazeSource`),玻璃才能取样到从栏下滚过的内容。
- * [item] 按 index 回调,调用方决定每个标签画什么。
+ * [backdrop] 由调用方持有并标在页面内容上(`Modifier.layerBackdrop`),
+ * 玻璃与选中透镜都从它取样身后滚过的内容。
+ * [item] 按 (index, selected, iconVisible) 回调:玻璃路径的可见行以 selected=false、
+ * 选中槽位 iconVisible=false 调用(图标在胶囊内画);兜底路径以真实选中态调用。
+ * 无障碍的选中态请用 [ArkDoBottomBarItem.semanticSelected] 单独表达。
  */
 @Composable
 fun ArkDoBottomBar(
     tabCount: Int,
     selectedIndex: Int,
-    hazeState: HazeState,
+    backdrop: Backdrop,
+    onTabSelected: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
-    item: @Composable RowScope.(Int) -> Unit
+    item: @Composable RowScope.(index: Int, selected: Boolean, iconVisible: Boolean) -> Unit
 ) {
     val colors = arkdoColors
-    val capsuleShape = RoundedCornerShape(percent = 50)
+    val useGlass = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    // 选中胶囊的滑动动画(spring 回弹,RiseDiary 同款观感;拖拽形变依赖其 GPL
+    // 代码未引入,这里只做点击切换的滑动)。
+    val capsulePosition = remember { Animatable(selectedIndex.toFloat()) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(selectedIndex) {
+        capsulePosition.animateTo(
+            selectedIndex.coerceIn(0, tabCount - 1).toFloat(),
+            spring(dampingRatio = 1f, stiffness = 300f)
+        )
+    }
+
+    if (!useGlass) {
+        // ---- API 26-30 兜底:无 RenderEffect,实体材质 + 实色滑动胶囊 ----
+        SolidFallbackBottomBar(
+            tabCount = tabCount,
+            selectedIndex = selectedIndex,
+            modifier = modifier,
+            item = item
+        )
+        return
+    }
+
+    val isDark = colors.pageBg.luminance() < 0.5f
+    // 玻璃表面色调:只画一层薄色,玻璃感主要来自透出的内容(RiseDiary 同参数量级)。
+    val glassTint = if (isDark) Color(0xFF121212).copy(alpha = 0.45f) else Color(0xFFFAFAFA).copy(alpha = 0.45f)
+    // 选中胶囊表面的轻压色。
+    // 选中胶囊表面偏实:压住底下透过的内容与灰字,选中态才跳得出来
+    val capsuleSurface = colors.surfaceCard.copy(alpha = 0.78f)
 
     BoxWithConstraints(
         modifier = modifier
@@ -139,12 +202,142 @@ fun ArkDoBottomBar(
             .padding(bottom = BottomBarDefaults.ContainerBottomGap)
     ) {
         val slotWidth = maxWidth / tabCount
-        // 胶囊固定尺寸、在选中槽位内居中(对齐 doer:胶囊大小不随槽位/标签数变)。
-        val capsuleWidth = minOf(BottomBarDefaults.CapsuleMaxWidth, slotWidth - BottomBarDefaults.CapsuleInset * 2)
-        // 选中胶囊横向位置:切换 tab 时跟着平移。doer 系统胶囊就是这个行为。
+        val capsuleWidth = minOf(BottomBarDefaults.CapsuleMaxWidth, slotWidth - BottomBarDefaults.ContentPadding * 2)
+
+        // 1) 玻璃容器
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(BottomBarDefaults.ContainerHeight)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = ContinuousCapsule,
+                    ambientColor = ArkdoFixedColors.ShadowSoft,
+                    spotColor = ArkdoFixedColors.ShadowSoft
+                )
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { ContinuousCapsule },
+                    effects = {
+                        vibrancy()
+                        blur(BottomBarDefaults.GlassBlurRadius.toPx())
+                        lens(
+                            BottomBarDefaults.GlassLensRadius.toPx(),
+                            BottomBarDefaults.GlassLensRadius.toPx()
+                        )
+                    },
+                    onDrawSurface = { drawRect(glassTint) }
+                )
+                // 白页上玻璃近乎透明,一条细描边保住栏形;深色下同样兜住边界。
+                .border(1.dp, colors.border.copy(alpha = 0.5f), ContinuousCapsule)
+        )
+
+        // 2) 可见 tab 行:未选样式;选中槽位不画图标(胶囊内画),角标保留。
+        //    高度必须钉死 62dp —— 用 fillMaxSize 会把 BoxWithConstraints 撑成全屏高,
+        //    Scaffold 把整个全高节点当 bottomBar 贴底,容器就被顶到屏幕顶部去了。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(BottomBarDefaults.ContainerHeight)
+                .padding(horizontal = BottomBarDefaults.ContentPadding)
+        ) {
+            repeat(tabCount) { index ->
+                item(index, false, index != selectedIndex)
+            }
+        }
+
+        // 3) 选中玻璃胶囊:lens 折射身后的页面内容,选中态直接画在胶囊内部,随胶囊滑动。
+        //    胶囊可横向拖动换 tab:拖动时实时吸附经过的槽位(内容跟着切换),松手吸附最近 tab。
+        //    注意必须 align(CenterStart):默认 TopStart 会让胶囊顶着容器上沿、内部内容
+        //    与可见行错位 4dp(实测踩过,"胶囊位置偏上"就是这个)。
+        val barScope = rememberCoroutineScope()
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .graphicsLayer {
+                    translationX = (slotWidth * capsulePosition.value + (slotWidth - capsuleWidth) / 2).toPx()
+                }
+                .pointerInput(tabCount) {
+                    detectDragGestures(
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            barScope.launch {
+                                capsulePosition.snapTo(
+                                    (capsulePosition.value + dragAmount.x / slotWidth.toPx())
+                                        .coerceIn(0f, (tabCount - 1).toFloat())
+                                )
+                            }
+                        },
+                        onDragEnd = {
+                            barScope.launch {
+                                val target = capsulePosition.value.fastRoundToInt()
+                                    .coerceIn(0, tabCount - 1)
+                                capsulePosition.animateTo(target.toFloat(), spring(1f, 300f))
+                                if (target != selectedIndex) onTabSelected(target)
+                            }
+                        },
+                        onDragCancel = {
+                            barScope.launch {
+                                capsulePosition.animateTo(selectedIndex.toFloat(), spring(1f, 300f))
+                            }
+                        }
+                    )
+                }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { ContinuousCapsule },
+                    effects = {
+                        lens(
+                            BottomBarDefaults.SelectionLensRadius.toPx(),
+                            BottomBarDefaults.SelectionChromaticRadius.toPx(),
+                            chromaticAberration = true
+                        )
+                    },
+                    highlight = { Highlight.Default },
+                    shadow = { Shadow(alpha = 0.35f) },
+                    innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.6f) },
+                    onDrawSurface = { drawRect(capsuleSurface) }
+                )
+                .width(capsuleWidth)
+                .height(BottomBarDefaults.CapsuleHeight)
+        ) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                item(
+                    capsulePosition.value.fastRoundToInt().coerceIn(0, tabCount - 1),
+                    true,
+                    true
+                )
+            }
+        }
+    }
+}
+
+/**
+ * API 26-30 的实体材质兜底:无 RenderEffect 时退回"实色容器 + 实色滑动胶囊",
+ * 渲染语义与玻璃版一致(可见行即真实选中态),只是没有玻璃取样。
+ */
+@Composable
+private fun SolidFallbackBottomBar(
+    tabCount: Int,
+    selectedIndex: Int,
+    modifier: Modifier = Modifier,
+    item: @Composable RowScope.(index: Int, selected: Boolean, iconVisible: Boolean) -> Unit
+) {
+    val colors = arkdoColors
+    val capsuleShape = RoundedCornerShape(percent = 50)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = BottomBarDefaults.ContainerHorizontalMargin)
+            .padding(bottom = BottomBarDefaults.ContainerBottomGap)
+    ) {
+        val slotWidth = maxWidth / tabCount
+        val capsuleWidth = minOf(77.dp, slotWidth - BottomBarDefaults.ContentPadding * 2)
         val capsuleX by animateDpAsState(
             targetValue = slotWidth * selectedIndex.coerceIn(0, tabCount - 1) + (slotWidth - capsuleWidth) / 2,
-            animationSpec = tween(BottomBarDefaults.SwitchDurationMs),
+            animationSpec = spring(dampingRatio = 1f, stiffness = 300f),
             label = "bottomBarCapsuleX"
         )
 
@@ -152,7 +345,6 @@ fun ArkDoBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(BottomBarDefaults.ContainerHeight)
-                // 阴影让胶囊从页面上"托起";ambient/spot 色 aligned 项目里 FAB 的软阴影。
                 .shadow(
                     elevation = 8.dp,
                     shape = capsuleShape,
@@ -160,28 +352,9 @@ fun ArkDoBottomBar(
                     spotColor = ArkdoFixedColors.ShadowSoft
                 )
                 .clip(capsuleShape)
+                .background(colors.surfaceCard.copy(alpha = 0.92f))
                 .border(1.dp, colors.border, capsuleShape)
         ) {
-            // 玻璃材质层:对身后滚过的内容做高斯模糊(Haze 从 hazeSource 取样)。
-            // 半径对齐 TopicDetailScreen 顶栏(24dp,API 31 上 Haze 1.6.1 只支持均匀模糊,
-            // 渐进模糊要 AGSL/API 33+,见那边注释);clip 已由外层 capsuleShape 完成,
-            // 防止 RenderEffect 模糊输出溢出栏体。
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .hazeEffect(state = hazeState) {
-                        blurRadius = 24.dp
-                        noiseFactor = 0f
-                    }
-            )
-            // 玻璃调子:半透明 surfaceCard 压一压透出的内容,保证图标/文字可读;
-            // API<31 上 Haze 不模糊时,这一层就是兜底的可读底色。
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(colors.surfaceCard.copy(alpha = 0.6f))
-            )
-
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
@@ -194,7 +367,7 @@ fun ArkDoBottomBar(
 
             Row(modifier = Modifier.fillMaxSize()) {
                 repeat(tabCount) { index ->
-                    item(index)
+                    item(index, index == selectedIndex, true)
                 }
             }
         }
@@ -202,10 +375,11 @@ fun ArkDoBottomBar(
 }
 
 /**
- * 单个标签:图标在上、文字在下,选中只改颜色与字重;胶囊背景由容器统一画,这里不再画。
+ * 单个标签:图标在上、文字在下。
  *
- * [icon] 收到的是**已按选中态动画好的颜色**,调用方直接拿去染色即可,不用自己再套一层动画
- * ——否则图标和文字会各自用一条时间线,切换时看着是两拍。
+ * [selected] 驱动视觉(玻璃路径下可见行恒为 false,选中态由透镜呈现);
+ * [semanticSelected] 驱动无障碍的选中语义,与视觉解耦。
+ * [icon] 收到的是**已按选中态动画好的颜色**,调用方直接拿去染色即可。
  */
 @Composable
 fun RowScope.ArkDoBottomBarItem(
@@ -213,7 +387,9 @@ fun RowScope.ArkDoBottomBarItem(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    semanticSelected: Boolean = selected,
     badgeCount: Int = 0,
+    iconVisible: Boolean = true,
     icon: (@Composable (tint: Color) -> Unit)? = null
 ) {
     val colors = arkdoColors
@@ -247,10 +423,10 @@ fun RowScope.ArkDoBottomBarItem(
             .weight(1f)
             .defaultMinSize(minHeight = 48.dp)
             .selectable(
-                selected = selected,
+                selected = semanticSelected,
                 role = Role.Tab,
                 interactionSource = interactionSource,
-                // 不加波纹:M3 的圆形 ripple 会盖在胶囊上面,和这套静态视觉冲突。
+                // 不加波纹:玻璃/胶囊材质上叠圆形 ripple 会破坏形制。
                 indication = null,
                 onClick = onClick
             )
@@ -263,14 +439,16 @@ fun RowScope.ArkDoBottomBarItem(
                 modifier = Modifier.size(BottomBarDefaults.IconSlotSize),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = iconScale
-                        scaleY = iconScale
-                    },
-                    contentAlignment = Alignment.Center
-                ) {
-                    icon(iconColor)
+                if (iconVisible) {
+                    Box(
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = iconScale
+                            scaleY = iconScale
+                        },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        icon(iconColor)
+                    }
                 }
 
                 if (badgeCount > 0) {

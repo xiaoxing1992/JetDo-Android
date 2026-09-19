@@ -34,8 +34,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.navigation.Routes
 import com.arkdo.android.navigation.tabEnterTransition
 import com.arkdo.android.navigation.tabExitTransition
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.components.ArkDoBottomBar
 import com.arkdo.android.ui.components.ArkDoBottomBarItem
@@ -113,8 +113,8 @@ fun RootTabScreen(
     // CurrentUserHolder,不额外发请求。
     val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
 
-    // 底栏玻璃材质取样源:标在 NavHost 上,滚过底栏下方的内容就是模糊输入。
-    val bottomBarHazeState = remember { HazeState() }
+    // 底栏液态玻璃的内容取样源:NavHost 标 layerBackdrop,玻璃与选中透镜都从它取景。
+    val bottomBarBackdrop = rememberLayerBackdrop()
 
     // 通知未读数:NotificationEventBus 是服务层(轮询 + MessageBus 实时)写入的唯一真源,
     // 这里只订阅、不自己拉。首页顶栏的铃铛此前一直没接这个数(全项目只有 NotificationModule
@@ -156,44 +156,52 @@ fun RootTabScreen(
                 currentDestination?.hierarchy?.any { it.route == tab.route } == true
             }.let { if (it >= 0) it else 0 }
 
+            // tab 切换统一入口:点击与胶囊拖拽换页都走这里(导航参数与原实现一致)。
+            val selectTab: (Int) -> Unit = { index ->
+                rootTabDestinations.getOrNull(index)?.let { tab ->
+                    tabNavController.navigate(tab.route) {
+                        // 回到 Tab 栈的起点
+                        popUpTo(tabNavController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+
             ArkDoBottomBar(
                 tabCount = rootTabDestinations.size,
                 selectedIndex = selectedTabIndex,
-                hazeState = bottomBarHazeState
-            ) { index ->
+                backdrop = bottomBarBackdrop,
+                onTabSelected = selectTab
+            ) { index, selected, iconVisible ->
                 val tab = rootTabDestinations[index]
-                val isSelected = index == selectedTabIndex
 
                 ArkDoBottomBarItem(
-                    selected = isSelected,
+                    selected = selected,
+                    semanticSelected = index == selectedTabIndex,
                     label = tab.label,
                     // 角标只挂通知标签;其余标签没有角标来源,恒为 0。
                     badgeCount = if (tab == RootTabDestination.NOTIFICATION) unreadCount else 0,
-                    onClick = {
-                        tabNavController.navigate(tab.route) {
-                            // 回到 Tab 栈的起点
-                            popUpTo(tabNavController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
+                    onClick = { selectTab(index) }
                 ) { tint ->
+                    // 玻璃路径下可见行的选中槽位不画图标(选中态画在透镜胶囊内),角标不受影响。
+                    if (!iconVisible) return@ArkDoBottomBarItem
                     if (tab == RootTabDestination.PROFILE) {
                         // 「我的」用真实头像:与首页顶栏账号入口共用 UserAvatar 和
                         // CurrentUserHolder,登录/登出/换号自动跟随。
                         AvatarTabIcon(
-                            selected = isSelected,
+                            selected = selected,
                             tint = tint,
-                            fallbackIcon = if (isSelected) Icons.Filled.Person else Icons.Outlined.Person,
+                            fallbackIcon = if (selected) Icons.Filled.Person else Icons.Outlined.Person,
                             avatar = currentUser?.let { user ->
                                 { size -> UserAvatar(user = user, avatarSize = size, showFlair = false) }
                             }
                         )
                     } else {
                         TabVectorIcon(
-                            selected = isSelected,
+                            selected = selected,
                             tint = tint,
                             selectedIcon = tab.selectedIcon,
                             unselectedIcon = tab.unselectedIcon
@@ -210,7 +218,7 @@ fun RootTabScreen(
             // 只吃顶部 inset:底部不再让位,内容才能从悬浮底栏下方穿过(沉浸式)。
             // 底栏遮挡由各页滚动容器垫 bottomBarClearance 解决。
             modifier = Modifier
-                .hazeSource(bottomBarHazeState)
+                .layerBackdrop(bottomBarBackdrop)
                 .padding(top = innerPadding.calculateTopPadding()),
             enterTransition = tabEnterTransition,
             exitTransition = tabExitTransition,
