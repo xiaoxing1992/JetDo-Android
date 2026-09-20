@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -68,6 +70,9 @@ import com.arkdo.android.ui.components.liquidglass.InteractiveHighlight
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
@@ -89,19 +94,19 @@ import kotlinx.coroutines.launch
 //   1. 玻璃容器:drawBackdrop 对身后内容 vibrancy + blur + 边缘透镜折射,
 //      表面只画 40% 的色调,玻璃感来自透出的内容;按压时整栏放大 16dp,
 //      并叠一层跟手指走的径向高光(InteractiveHighlight);
-//   2. 可见 tab 行画未选样式,但**选中槽位的图标不画**(避免与胶囊内图标重影),
-//      角标照画;
-//   3. 选中胶囊**静止时是平的**(只有 10% 压色),按下才"长成"玻璃透镜:
-//      折射/色差/高光/阴影/内阴影全部随 pressProgress 从 0 生长,松手回平。
-//      拖动时胶囊按速度沿 X 拉伸、Y 压扁(果冻),整栏也跟手偏移 ≤4dp。
-//      胶囊内部直接画当前槽位 tab 的选中态(实心 accent 图标 + accent 文字)。
-//      上游用"alpha=0 隐藏采样行 + combinedBackdrop 折射"实现同一效果,
-//      采样捕获对层级时序敏感,这里改为直接绘制,观感一致且稳定。
+//   2. 可见 tab 行画未选样式;
+//   3. 选中胶囊是一枚**空的透镜**,里面不画图标文字。静止时是平的(只有 10% 压色),
+//      按下才"长成"玻璃:折射/色差/高光/阴影/内阴影全部随 pressProgress 从 0 生长,
+//      松手回平。拖动时胶囊按速度沿 X 拉伸、Y 压扁(果冻),整栏也跟手偏移 ≤4dp。
+//      胶囊里看到的选中态来自"隐藏采样行"(alpha=0、全部 tab 画成 accent,标为
+//      layerBackdrop),胶囊用 combinedBackdrop 折射它:胶囊滑到哪,哪个 tab 就被染成
+//      选中色,颜色严格跟着胶囊走 —— 与上游同构。
 // 页面内容侧由 RootTabScreen 标 layerBackdrop 提供 [backdrop]。
 //
-// 版本兼容(三档,对齐上游的降级策略并下探到本应用 minSdk 26):
-//   - API 33+:完整液态玻璃(RuntimeShader 折射/色差/高光,库内自动启用);
-//   - API 31/32:RenderEffect 可用,均匀模糊 + vibrancy,折射/高光由库降级;
+// 版本兼容(对齐上游的降级策略并下探到本应用 minSdk 26):
+//   - API 33+:完整液态玻璃(RuntimeShader 折射/色差/高光),取样式胶囊;
+//   - API 31/32:RenderEffect 可用但无 RuntimeShader,库把透镜降级为空,取样行看不出
+//     折射;退回"胶囊内直接画选中态"的直绘方案(磨砂胶囊 + 实色选中态);
 //   - API 26-30:无 RenderEffect,退回实体材质(高不透明度表面 + 描边 +
 //     实色滑动胶囊),不引入 backdrop 采样。
 // ==========================================================================
@@ -201,8 +206,9 @@ private fun DampedDragAnimation.jellyScaleY(): Float {
  *
  * [backdrop] 由调用方持有并标在页面内容上(`Modifier.layerBackdrop`),
  * 玻璃与选中透镜都从它取样身后滚过的内容。
- * [item] 按 (index, selected, iconVisible) 回调:玻璃路径的可见行以 selected=false、
- * 胶囊所在槽位 iconVisible=false 调用(图标文字在胶囊内画);兜底路径以真实选中态调用。
+ * [item] 按 (index, selected, iconVisible) 回调:可见行以 selected=false 调用,隐藏采样行
+ * 以 selected=true 调用(胶囊折射它得到选中色);直绘方案下胶囊所在槽位 iconVisible=false
+ * (图标文字改画在胶囊内);兜底路径以真实选中态调用。
  * 无障碍的选中态请用 [ArkDoBottomBarItem.semanticSelected] 单独表达。
  */
 @Composable
@@ -267,12 +273,19 @@ fun ArkDoBottomBar(
         }
     }
 
-    // 按压时 tab 内容放大 1.2 倍(上游同参数)。
-    CompositionLocalProvider(
-        LocalBottomTabPressScale provides {
-            lerp(1f, BottomBarDefaults.PressContentScale, capsule.pressProgress)
-        }
-    ) {
+    // 取样式胶囊(API 33+,完整对齐上游):胶囊本身是**空的透镜**,里面不画任何图标文字。
+    // 内容来自"隐藏采样行"——一条 alpha=0、把全部 tab 都画成选中态(accent)的行,标为
+    // layerBackdrop;胶囊用 combinedBackdrop(页面, 采样行) 折射它:胶囊滑到哪,哪个 tab
+    // 就被"染"成选中色,半压着两个 tab 时各染一半,颜色严格跟着胶囊走。
+    // API 31/32 没有 RuntimeShader,库把透镜/色差降级为空,取样行看不出折射,退回
+    // "胶囊内直接画选中态"的直绘方案(磨砂胶囊 + 实色选中态,内容按槽位整格切换)。
+    val sampled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val tabsBackdrop = rememberLayerBackdrop()
+    val capsuleBackdrop = if (sampled) rememberCombinedBackdrop(backdrop, tabsBackdrop) else backdrop
+
+    // 按压时"胶囊里看到的"tab 内容放大 1.2 倍(上游只给采样行 provide,可见行不动)。
+    val pressContentScale = { lerp(1f, BottomBarDefaults.PressContentScale, capsule.pressProgress) }
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -286,7 +299,7 @@ fun ArkDoBottomBar(
         val capsuleWidth = minOf(BottomBarDefaults.CapsuleMaxWidth, slotWidth - BottomBarDefaults.ContentPadding * 2)
         val containerWidthPx = with(density) { maxWidth.toPx() }
 
-        // 胶囊当前压着的槽位:可见行在这个槽位不画图标、胶囊内画它的选中态。
+        // 直绘方案用:胶囊当前压着的槽位,可见行在这个槽位不画图标、胶囊内画它的选中态。
         // 跟胶囊位置而不是 selectedIndex 走,拖离原槽位时原图标才会立刻回填。
         // derivedStateOf 把逐帧的 value 收敛成槽位变化,避免拖动时每帧重组整行。
         val capsuleSlot by remember(tabCount) {
@@ -316,7 +329,7 @@ fun ArkDoBottomBar(
             )
         }
 
-        // 手势宿主:三层(容器 / 可见行 / 胶囊)的共同父节点。
+        // 手势宿主:各层(容器 / 可见行 / 采样行 / 胶囊)的共同父节点。
         // 拖拽手势必须挂在父节点上:胶囊只有 77dp 宽,手势挂它自身会让"槽位边缘起拖"
         // 变成无效点击(实测踩过:落到新 tab 后再拖没反应);挂在容器层也不行 ——
         // 容器与 tab 行是兄弟,Compose 命中上层兄弟后不再测试下层兄弟。
@@ -404,11 +417,12 @@ fun ArkDoBottomBar(
                 .border(1.dp, colors.border.copy(alpha = 0.5f), ContinuousCapsule)
         )
 
-        // 2) 可见 tab 行:未选样式;胶囊压着的槽位不画图标与文字(胶囊内画),角标保留。
+        // 2) 可见 tab 行:全部未选样式。取样方案下所有图标照画(胶囊折射的是采样行,
+        //    玻璃层不透明,盖得住底下);直绘方案下胶囊压着的槽位不画图标与文字,角标保留。
         //    高度必须钉死 62dp —— 用 fillMaxSize 会把 BoxWithConstraints 撑成全屏高,
         //    Scaffold 把整个全高节点当 bottomBar 贴底,容器就被顶到屏幕顶部去了。
-        //    两行(可见行 / 胶囊内)都垂直居中:tab 列本身 wrap 高,各自以容器中线为准
-        //    才能严丝合缝;顶对齐时胶囊内容会比可见行低 4dp(胶囊比容器矮的那 4dp)。
+        //    各行都垂直居中:tab 列本身 wrap 高,各自以容器中线为准才能严丝合缝;
+        //    顶对齐时 54dp 行的内容会比 62dp 行低 4dp。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -418,13 +432,55 @@ fun ArkDoBottomBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             repeat(tabCount) { index ->
-                item(index, false, index != capsuleSlot)
+                item(index, false, sampled || index != capsuleSlot)
+            }
+        }
+
+        // 2b) 隐藏采样行(取样方案):alpha=0 不上屏,只被 layerBackdrop 录下来给胶囊折射。
+        //     它自己也画一层玻璃(与容器同参数,透镜随按压生长)再画选中态 tab,
+        //     所以胶囊里看到的是"磨砂玻璃 + accent 图标文字",而不是清窗透出的页面。
+        //     无障碍语义清空,避免 TalkBack 读到两套 tab。
+        if (sampled) {
+            CompositionLocalProvider(LocalBottomTabPressScale provides pressContentScale) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .clearAndSetSemantics {}
+                        .alpha(0f)
+                        .layerBackdrop(tabsBackdrop)
+                        .graphicsLayer { translationX = panelOffset }
+                        .drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { ContinuousCapsule },
+                            effects = {
+                                val progress = capsule.pressProgress
+                                vibrancy()
+                                blur(BottomBarDefaults.GlassBlurRadius.toPx())
+                                lens(
+                                    BottomBarDefaults.GlassLensRadius.toPx() * progress,
+                                    BottomBarDefaults.GlassLensRadius.toPx() * progress
+                                )
+                            },
+                            highlight = { Highlight.Default.copy(alpha = capsule.pressProgress) },
+                            onDrawSurface = { drawRect(glassTint) }
+                        )
+                        .then(highlight.modifier)
+                        .fillMaxWidth()
+                        .height(BottomBarDefaults.CapsuleHeight)
+                        .padding(horizontal = BottomBarDefaults.ContentPadding),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(tabCount) { index ->
+                        item(index, true, true)
+                    }
+                }
             }
         }
 
         // 3) 选中玻璃胶囊:静止时是平的压色,按下才生长成透镜(折射/色差/高光/阴影/
-        //    内阴影全部 × pressProgress),选中态直接画在胶囊内部,随胶囊滑动。
-        //    胶囊可横向拖动换 tab:拖动时实时吸附经过的槽位(内容跟着切换),松手吸附最近 tab。
+        //    内阴影全部 × pressProgress)。取样方案下它是空的,内容全靠折射采样行;
+        //    直绘方案下内容直接画在胶囊内部、按槽位整格切换。
+        //    胶囊可横向拖动换 tab:松手吸附最近 tab。
         //    注意必须 align(CenterStart):默认 TopStart 会让胶囊顶着容器上沿、内部内容
         //    与可见行错位 4dp(实测踩过,"胶囊位置偏上"就是这个)。
         Box(
@@ -435,14 +491,15 @@ fun ArkDoBottomBar(
                         (slotWidth * capsule.value + (slotWidth - capsuleWidth) / 2).toPx() + panelOffset
                 }
                 .drawBackdrop(
-                    backdrop = backdrop,
+                    backdrop = capsuleBackdrop,
                     shape = { ContinuousCapsule },
                     effects = {
                         val progress = capsule.pressProgress
-                        // 与容器同一套磨砂:上游胶囊静止时不模糊(照片背景下是"清窗"),
-                        // 但本应用页面是密集图文,清窗会把头像/标题原样透进胶囊压住 accent 图标。
-                        vibrancy()
-                        blur(BottomBarDefaults.GlassBlurRadius.toPx())
+                        if (!sampled) {
+                            // 直绘方案:胶囊自己磨砂(取样方案的磨砂来自采样行那层)。
+                            vibrancy()
+                            blur(BottomBarDefaults.GlassBlurRadius.toPx())
+                        }
                         lens(
                             BottomBarDefaults.SelectionLensRadius.toPx() * progress,
                             BottomBarDefaults.SelectionChromaticRadius.toPx() * progress,
@@ -473,24 +530,26 @@ fun ArkDoBottomBar(
                 .width(capsuleWidth)
                 .height(BottomBarDefaults.CapsuleHeight)
         ) {
-            // 胶囊内容反向抵消 layerBlock 的放大/果冻:上游胶囊里没有子内容(靠折射隐藏行
-            // 显示),玻璃怎么变形都不影响内容;这里内容直接画在胶囊里,不抵消会被连带
-            // 放大到 1.39×1.2 撑出胶囊。抵消后内容只保留 tab 自身的 1.2 倍按压放大。
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1f / capsule.jellyScaleX()
-                        scaleY = 1f / capsule.jellyScaleY()
-                    },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                item(capsuleSlot, true, true)
+            if (!sampled) {
+                // 直绘方案的胶囊内容,反向抵消 layerBlock 的放大/果冻:不抵消会被连带
+                // 放大到 1.39×1.2 撑出胶囊。抵消后内容只保留 tab 自身的 1.2 倍按压放大。
+                CompositionLocalProvider(LocalBottomTabPressScale provides pressContentScale) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = 1f / capsule.jellyScaleX()
+                                scaleY = 1f / capsule.jellyScaleY()
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        item(capsuleSlot, true, true)
+                    }
+                }
             }
         }
         } // 手势宿主
     }
-    } // CompositionLocalProvider
 }
 
 /**
