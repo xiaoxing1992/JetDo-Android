@@ -368,10 +368,18 @@ fun ArkDoBottomBar(
                     )
                 }
                 // 触底即按压放大(上游 press-on-down),松手回缩。
-                .pointerInput(Unit) {
+                // 同时对齐 iOS 26 标签栏的"落指即移":手指按在哪个槽位,胶囊就先滑过去
+                // (不等松手、不等拖动阈值),之后拖动再从那里 1:1 跟手;松手后仍走
+                // 点击(onClick)或拖拽(onDragEnd)的正常选中路径切页。
+                .pointerInput(tabCount) {
+                    val slotWidthPx = size.width.toFloat() / tabCount
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        val down = awaitFirstDown(requireUnconsumed = false)
                         capsule.press()
+                        val slot = (down.position.x / slotWidthPx).toInt().fastCoerceIn(0, tabCount - 1)
+                        if (capsule.targetValue.fastRoundToInt() != slot) {
+                            capsule.updateValue(slot.toFloat())
+                        }
                         while (true) {
                             val e = awaitPointerEvent()
                             if (e.changes.all { !it.pressed }) break
