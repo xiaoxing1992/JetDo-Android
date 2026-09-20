@@ -41,6 +41,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -243,6 +244,9 @@ fun ArkDoBottomBar(
 
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+    // 手势 lambda 里要读"当前"的选中项和回调(它们是普通参数,lambda 只在 tabCount 变化时重建)。
+    val currentSelectedIndex = rememberUpdatedState(selectedIndex)
+    val currentOnTabSelected = rememberUpdatedState(onTabSelected)
 
     // 整栏跟手偏移:拖动时容器/可见行/胶囊一起随手指位移(EaseOut,≤4dp),松手弹回。
     val panelOffsetAnim = remember { Animatable(0f) }
@@ -350,12 +354,15 @@ fun ArkDoBottomBar(
                         },
                         onDragEnd = {
                             val target = capsule.targetValue.fastRoundToInt().fastCoerceIn(0, tabCount - 1)
-                            if (target != selectedIndex) onTabSelected(target)
+                            // 必须读 currentSelectedIndex:这个 lambda 只在 tabCount 变化时重建,
+                            // 直接用 selectedIndex 参数拿到的是首次组合时的 0 —— 从第四个拖回
+                            // 第一个时 target(0) 与陈旧值判等,回调不发,页面停在第四个(实测踩过)。
+                            if (target != currentSelectedIndex.value) currentOnTabSelected.value(target)
                             capsule.animateToValue(target.toFloat())
                             scope.launch { panelOffsetAnim.animateTo(0f, spring(1f, 300f, 0.5f)) }
                         },
                         onDragCancel = {
-                            capsule.animateToValue(selectedIndex.toFloat())
+                            capsule.animateToValue(currentSelectedIndex.value.toFloat())
                             scope.launch { panelOffsetAnim.animateTo(0f, spring(1f, 300f, 0.5f)) }
                         }
                     )
