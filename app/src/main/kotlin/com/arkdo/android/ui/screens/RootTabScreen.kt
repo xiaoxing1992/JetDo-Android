@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -219,6 +220,10 @@ fun RootTabScreen(
             // 底栏遮挡由各页滚动容器垫 bottomBarClearance 解决。
             modifier = Modifier
                 .layerBackdrop(bottomBarBackdrop)
+                // 底色画在取样层**里面**(layerBackdrop 之后):Scaffold 的 containerColor
+                // 在层外,不铺这层的话没自己画背景的页面(如通知页)取样出来是透明的,
+                // 底栏胶囊折射时盖不住身后的东西。
+                .background(com.arkdo.android.ui.theme.arkdoColors.pageBg)
                 .padding(top = innerPadding.calculateTopPadding()),
             enterTransition = tabEnterTransition,
             exitTransition = tabExitTransition,
