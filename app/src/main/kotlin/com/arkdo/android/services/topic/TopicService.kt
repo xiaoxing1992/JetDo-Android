@@ -975,7 +975,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 currentUserReaction = source.current_user_reaction?.id?.takeIf { it.isNotEmpty() },
                 boosts = mapBoosts(source.boosts),
                 canBoost = source.can_boost,
-                polls = null,
+                polls = mapPolls(source),
                 bookmarked = null,
                 bookmarkId = null,
                 userStatus = null,
@@ -1029,6 +1029,50 @@ class TopicService(private val bridge: JsonNetworkClient) {
             )
         }
         return boosts
+    }
+
+    /**
+     * discourse-poll：某楼的投票数组（对齐鸿蒙 mapPolls）。
+     * 每个投票的「当前用户已投项」来自楼级 polls_votes 表（按 poll.name 键），
+     * can_vote 是楼级开关，统一下放给各投票。
+     */
+    private fun mapPolls(source: DiscoursePost): List<Poll> {
+        val polls = mutableListOf<Poll>()
+        val sourcePolls = source.polls ?: return polls
+        val canVote = source.can_vote == true
+        val votesMap = source.polls_votes ?: emptyMap()
+        sourcePolls.forEach { item ->
+            polls.add(
+                Poll(
+                    name = item.name?.takeIf { it.isNotEmpty() } ?: "poll",
+                    title = item.title,
+                    type = item.type ?: "regular",
+                    status = item.status ?: "open",
+                    isPublic = item.public == true,
+                    results = item.results ?: "always",
+                    options = mapPollOptions(item.options),
+                    voters = item.voters ?: 0,
+                    chosenOptionIds = votesMap[item.name] ?: emptyList(),
+                    canVote = canVote
+                )
+            )
+        }
+        return polls
+    }
+
+    private fun mapPollOptions(sourceOptions: List<DiscoursePollOption>?): List<PollOption> {
+        val options = mutableListOf<PollOption>()
+        sourceOptions?.forEach { item ->
+            if (item.id.isNullOrEmpty()) return@forEach
+            options.add(
+                PollOption(
+                    id = item.id,
+                    label = item.html ?: "",
+                    votes = item.votes ?: 0
+                )
+            )
+        }
+        return options
     }
 
     private fun mapUser(source: DiscourseUser): User {
@@ -1194,7 +1238,32 @@ data class DiscoursePost(
     val read: Boolean? = null,
     // discourse-boosts：楼下别人发的 boost（随 posts.json 返回）+ 能否发（can_boost，火箭入口依据）。
     val boosts: List<DiscourseBoost>? = null,
-    val can_boost: Boolean? = null
+    val can_boost: Boolean? = null,
+    // discourse-poll：该楼的投票列表、当前用户各投票的已投项、能否投票（对齐鸿蒙 DiscoursePost）。
+    val polls: List<DiscoursePoll>? = null,
+    val polls_votes: Map<String, List<String>>? = null,
+    val can_vote: Boolean? = null
+)
+
+/** discourse-poll：一个投票选项（id + 展示 html + 票数）。 */
+@Serializable
+data class DiscoursePollOption(
+    val id: String? = null,
+    val html: String? = null,
+    val votes: Int? = null
+)
+
+/** discourse-poll：一个投票的服务端结构。 */
+@Serializable
+data class DiscoursePoll(
+    val name: String? = null,
+    val title: String? = null,
+    val type: String? = null,
+    val status: String? = null,
+    val public: Boolean? = null,
+    val results: String? = null,
+    val options: List<DiscoursePollOption>? = null,
+    val voters: Int? = null
 )
 
 /** discourse-boosts：一条 boost（id + cooked 短文本 + 用户），对齐鸿蒙 DiscourseBoost。 */
