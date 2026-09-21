@@ -2,6 +2,7 @@ package com.arkdo.android.feature.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arkdo.android.core.data.search.SearchAuthGate
 import com.arkdo.android.core.data.search.SearchRepository
 import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.core.model.SearchFilters
@@ -35,6 +36,9 @@ internal const val MAX_SEARCH_PAGE = 10
 
 /** WebView 宿主未就绪时的提示(对齐鸿蒙 runSearch 的 isArkWebReady 前置门)。 */
 internal const val HOST_NOT_READY_MESSAGE = "正在准备请求环境，请稍后重试"
+
+/** 未登录时搜索被服务端拦截的提示（linux.do 搜索要求登录，前置门先拦下）。 */
+internal const val LOGIN_REQUIRED_MESSAGE = "登录后才能搜索"
 
 /** 标签联想防抖(对齐鸿蒙 TAG_DEBOUNCE_MS,与搜索框同一量级)。 */
 internal const val TAG_DEBOUNCE_MS = 300L
@@ -90,7 +94,8 @@ data class SearchUiState(
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val repository: SearchRepository,
-    private val historyStore: SearchHistoryStore
+    private val historyStore: SearchHistoryStore,
+    private val authGate: SearchAuthGate
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -292,6 +297,19 @@ class SearchViewModel @Inject constructor(
     private fun runSearch(reset: Boolean) {
         val state = _uiState.value
         if (!state.canSearch) return
+        // linux.do 搜索接口要求登录（未登录返回 403 not_logged_in），
+        // 前置登录门：未登录直接请求登录弹层，不发注定失败的请求（对齐鸿蒙 runSearch 的 isArkWebReady 前置门）。
+        if (!authGate.ensureLoggedIn()) {
+            _uiState.update {
+                it.copy(
+                    isSearching = false,
+                    isLoadingMore = false,
+                    hasSearched = true,
+                    error = LOGIN_REQUIRED_MESSAGE
+                )
+            }
+            return
+        }
         // 对齐鸿蒙 runSearch 的 isArkWebReady 前置门:宿主 WebView 没挂好之前
         // fetch 桥必失败,先把话说明白,别让用户看到一句含糊的「网络错误」。
         if (!state.isHostReady) {
