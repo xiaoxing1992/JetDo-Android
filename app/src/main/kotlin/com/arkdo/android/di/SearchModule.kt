@@ -1,7 +1,9 @@
 package com.arkdo.android.di
 
 import android.content.Context
+import com.arkdo.android.core.data.search.SearchAuthGate
 import com.arkdo.android.feature.search.SearchHistoryStore
+import com.arkdo.android.services.session.LoginGate
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,6 +27,15 @@ object SearchModule {
     @Singleton
     fun provideSearchHistoryStore(@ApplicationContext context: Context): SearchHistoryStore =
         PreferencesSearchHistoryStore(context)
+
+    /**
+     * 搜索登录守卫：已登录放行；未登录请求根层弹登录半窗并返回 false，
+     * 搜索层就地拦截（linux.do 搜索接口要求登录，未登录必 403）。
+     */
+    @Provides
+    @Singleton
+    fun provideSearchAuthGate(@ApplicationContext context: Context): SearchAuthGate =
+        SearchAuthGate { LoginGate.ensureLoggedIn(context) }
 }
 
 /**

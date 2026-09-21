@@ -1,5 +1,6 @@
 package com.arkdo.android.feature.search
 
+import com.arkdo.android.core.data.search.SearchAuthGate
 import com.arkdo.android.core.data.search.SearchRepository
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
@@ -22,6 +23,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -46,8 +48,9 @@ class SearchViewModelTest {
     private fun viewModel(
         repository: SearchRepository = FakeSearchRepository(),
         history: SearchHistoryStore = InMemorySearchHistoryStore(),
-        hostReady: Boolean = true
-    ): SearchViewModel = SearchViewModel(repository, history).apply {
+        hostReady: Boolean = true,
+        authGate: SearchAuthGate = SearchAuthGate { true }
+    ): SearchViewModel = SearchViewModel(repository, history, authGate).apply {
         // 绝大多数用例只关心搜索逻辑本身,默认注入「宿主已就绪」;
         // 前置门用例显式传 hostReady = false。
         if (hostReady) setHostReady(true)
@@ -435,6 +438,40 @@ class SearchViewModelTest {
         assertEquals(1, repo.tagQueries.size)
         advanceUntilIdle()
         assertTrue(repo.tagQueries.contains("ko"))
+    }
+
+    @Test
+    fun `未登录时搜索被拦截且不发请求`() = runTest {
+        val repo = FakeSearchRepository(SearchPageResult.Success(SearchPage(emptyList(), 1, false)))
+        var loginRequested = false
+        val vm = viewModel(
+            repository = repo,
+            authGate = SearchAuthGate {
+                loginRequested = true
+                false
+            }
+        )
+
+        vm.setQuery("kotlin")
+        advanceUntilIdle()
+
+        assertTrue(loginRequested)
+        assertTrue(repo.queries.isEmpty())
+        assertEquals(LOGIN_REQUIRED_MESSAGE, vm.uiState.value.error)
+        assertFalse(vm.uiState.value.isSearching)
+    }
+
+    @Test
+    fun `登录后搜索正常放行`() = runTest {
+        val repo = FakeSearchRepository(SearchPageResult.Success(SearchPage(listOf(SearchHit(topic(1))), 1, false)))
+        val vm = viewModel(repository = repo)
+
+        vm.setQuery("kotlin")
+        advanceUntilIdle()
+
+        assertEquals(1, repo.queries.size)
+        assertEquals(listOf(1L), vm.uiState.value.hits.map { it.topic.id })
+        assertNull(vm.uiState.value.error)
     }
 }
 
