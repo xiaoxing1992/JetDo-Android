@@ -15,6 +15,9 @@ import kotlinx.serialization.json.Json
 // ==========================================================================
 
 private const val CURRENT_SESSION_PATH = "/session/current.json"
+// 未登录时 /session/current.json 的状态码。Discourse 对匿名请求回 404 + 空 body,
+// 而非 200 + current_user:null——它是登出/会话过期的判据,不是错误。
+private const val CURRENT_SESSION_ANONYMOUS_STATUS = 404
 
 @Serializable
 private data class DiscourseCurrentSessionResponse(
@@ -43,6 +46,21 @@ class AuthService(private val bridge: JsonNetworkClient) {
     suspend fun getCurrentUser(): NetworkResult<User?> {
         val response = bridge.getJson(CURRENT_SESSION_PATH)
         if (!response.success) {
+            // 匿名会话在 Discourse 上是 404 + 空 body(SessionController#current 的 render body: nil,
+            // status: 404),不是 200 + current_user:null。这是「确认未登录」的正向信号,必须与
+            // 「请求没成功」区分开:上层(SessionChecker/RootTabPage)对失败一律保留上一次登录态,
+            // 若把这条 404 当失败上抛,登出后登录态永远清不掉,只能杀进程重启。
+            // 同时要求 challengeState=NONE:CF 若用 404 壳子返回挑战页,仍按失败走过盾链路,不误判成登出。
+            if (response.statusCode == CURRENT_SESSION_ANONYMOUS_STATUS &&
+                response.challengeState == ChallengeState.NONE
+            ) {
+                return NetworkResult(
+                    success = true,
+                    statusCode = response.statusCode,
+                    challengeState = response.challengeState,
+                    data = null
+                )
+            }
             return NetworkResults.forwardFailure(response)
         }
         if (response.data == null) {
