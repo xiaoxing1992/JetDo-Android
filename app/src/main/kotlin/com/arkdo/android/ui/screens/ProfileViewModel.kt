@@ -91,7 +91,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     /** 登出(对齐鸿蒙 performLogout:先退清理、再 DELETE session、成功后本地清态 + 广播)。 */
-    fun logout(onDone: () -> Unit) {
+    fun logout(onResult: (Boolean) -> Unit) {
         val username = CurrentUserHolder.currentUser.value?.username.orEmpty()
         if (username.isEmpty() || _uiState.value.isLoggingOut) return
         _uiState.update { it.copy(isLoggingOut = true) }
@@ -99,7 +99,7 @@ class ProfileViewModel @Inject constructor(
             val result = authService.logout(username)
             _uiState.update { it.copy(isLoggingOut = false) }
             if (!result.success) {
-                onDone() // 页面用它弹 toast
+                onResult(false)
                 return@launch
             }
             // 先本地落地未登录,再广播(顺序不能反):清了镜像/角标,再触发会话复查与宿主重载。
@@ -108,7 +108,7 @@ class ProfileViewModel @Inject constructor(
             LoginGate.clearUserPrivileges()
             ArkWebNetworkBridge.markHostReloading()
             SessionEventBus.notifySessionChanged()
-            onDone()
+            onResult(true)
         }
     }
 }

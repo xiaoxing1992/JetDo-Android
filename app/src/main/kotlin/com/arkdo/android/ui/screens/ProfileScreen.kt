@@ -211,8 +211,12 @@ fun ProfileScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
-                    viewModel.logout {
-                        Toast.makeText(context, if (isLoggedIn) "已退出登录" else "退出登录失败,请稍后再试", Toast.LENGTH_SHORT).show()
+                    viewModel.logout { ok ->
+                        Toast.makeText(
+                            context,
+                            if (ok) "已退出登录" else "退出登录失败,请稍后再试",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }) {
                     Text("退出", color = arkdoColors.ldDanger)
