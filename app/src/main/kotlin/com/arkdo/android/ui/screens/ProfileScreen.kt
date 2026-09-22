@@ -543,7 +543,7 @@ private fun androidx.compose.foundation.layout.RowScope.QuickEntryNative(
 
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ProfileBadgeTile(badge: UserBadgeItem) {
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
     val gold = if (isDark) Color(0xFFE0B84C) else Color(0xFFD4A017)
     val silver = if (isDark) Color(0xFF9AA6B8) else Color(0xFF9EA7AD)
     val bronze = if (isDark) Color(0xFFC89066) else Color(0xFFB87333)

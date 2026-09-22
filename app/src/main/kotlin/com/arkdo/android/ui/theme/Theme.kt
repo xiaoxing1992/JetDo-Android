@@ -7,10 +7,16 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.arkdo.android.common.theme.AppThemeMode
+import com.arkdo.android.common.theme.ThemeModeStore
 
 /**
  * ArkDO 主题系统
@@ -89,28 +95,48 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = ArkdoDarkColors.border,
 )
 
+private val LocalArkdoDark = staticCompositionLocalOf { false }
+
+/**
+ * 当前是否画深色。由 [ArkDoTheme] 写入：跟随系统，或设置页的浅色/深色。
+ * 只读 CompositionLocal，引用块这类 @ReadOnlyComposable 也能用。
+ * 不要再直接调 [isSystemInDarkTheme]，否则强制浅色/深色时局部色不会跟着变。
+ */
+@Composable
+@ReadOnlyComposable
+fun isArkdoInDarkTheme(): Boolean = LocalArkdoDark.current
+
 @Composable
 fun ArkDoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val tokens = if (darkTheme) ArkdoDarkColors else ArkdoLightColors
+    // darkTheme 只作为「跟随系统」时的取值（预览可显式传入）。浅色/深色档无视它。
+    val themeMode by ThemeModeStore.mode.collectAsState()
+    val dark = when (themeMode) {
+        AppThemeMode.SYSTEM -> darkTheme
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+    }
+    val colorScheme = if (dark) DarkColorScheme else LightColorScheme
+    val tokens = if (dark) ArkdoDarkColors else ArkdoLightColors
 
-    // Edge-to-Edge 下状态栏/导航栏透明,图标深浅得跟主题走(而不是跟系统夜间模式):
-    // 将来接入「强制浅色/深色」三态时,这里保证图标不会在深色页上变成深色。
+    // Edge-to-Edge 下状态栏/导航栏透明,图标深浅跟当前主题走,不跟系统夜间模式。
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !darkTheme
-                isAppearanceLightNavigationBars = !darkTheme
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
             }
         }
     }
 
-    CompositionLocalProvider(LocalArkdoColors provides tokens) {
+    CompositionLocalProvider(
+        LocalArkdoColors provides tokens,
+        LocalArkdoDark provides dark
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

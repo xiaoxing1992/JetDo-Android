@@ -81,6 +81,10 @@ fun buildCsrfScript(
                 csrfSource = csrf ? 'meta' : 'none';
               }
               csrfLength = csrf ? csrf.length : 0;
+              if (!csrf) {
+                fail('csrf token missing');
+                return null;
+              }
 $prelude          const fetchOptions = {
                 method: $methodExpr,
                 credentials: 'include',

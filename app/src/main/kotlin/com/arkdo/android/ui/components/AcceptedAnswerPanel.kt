@@ -70,7 +70,7 @@ fun AcceptedAnswerPanel(
 ) {
     if (answers.isEmpty()) return
     val colors = com.arkdo.android.ui.theme.arkdoColors
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
     val success = if (isDark) Color(0xFF4CAF50) else AcceptedSuccess
 
     Column(
@@ -212,7 +212,7 @@ private fun AcceptedAnswerCard(
                     .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
             ) {
                 // 正文：高度上限裁剪 + 底部渐隐。
-                val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+                val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
                 Box(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier

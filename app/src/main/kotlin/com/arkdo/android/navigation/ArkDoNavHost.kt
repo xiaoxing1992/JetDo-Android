@@ -26,9 +26,11 @@ import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.composer.canUseComposer
 import com.arkdo.android.ui.composer.ensureComposerAccess
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.ProfileScreen
+import com.arkdo.android.ui.screens.SettingsScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.screens.WebViewPage
 import com.arkdo.android.ui.user.BadgesScreen
@@ -95,10 +97,7 @@ fun ArkDoNavHost(
         composable(Routes.PROFILE) {
             ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onOpenSettings = {
-                    // 设置页尚未迁移为原生路由,暂以调试/占位入口保留导航。
-                    navController.navigate(Routes.DEBUG_LOG)
-                },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenLogin = {
                     // 未登录「立即登录」→ 请求根层弹登录半窗。
                     LoginGate.requestLogin()
@@ -209,7 +208,7 @@ fun ArkDoNavHost(
             )
         }
 
-        // 调试日志页（排障用，Profile 页 FAB 进入）
+        // 调试日志页（设置 → 诊断日志）
         composable(Routes.DEBUG_LOG) {
             DebugLogScreen(
                 onNavigateBack = { navController.popBackStack() },
@@ -371,8 +370,15 @@ fun ArkDoNavHost(
             )
         }
 
-        // TODO: 添加其他页面路由
-        // composable(Routes.SETTINGS) { ... }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenFeedback = {
+                    navController.navigate("${Routes.TOPIC_DETAIL}/${AppConstants.FEEDBACK_TOPIC_ID}")
+                },
+                onOpenDiagnostics = { navController.navigate(Routes.DEBUG_LOG) }
+            )
+        }
         }
 
         // 登录半弹窗盖在导航内容之上（bindSheet 同层语义：sheet 画在根容器顶）。

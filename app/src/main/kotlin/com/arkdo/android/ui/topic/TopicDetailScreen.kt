@@ -52,9 +52,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -205,6 +208,24 @@ fun TopicDetailScreen(
         viewModel.loadTopic(topicId, slug, title, targetPostNumber)
     }
 
+    // 阅读计时：页面前后台切换暂停/恢复；销毁时停止并 flushPending（对齐鸿蒙 TopicReadController.detach）。
+    val detailLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(topicId, detailLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> viewModel.setTrackerFocus(true)
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> viewModel.setTrackerFocus(false)
+                androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> viewModel.onDetailDetach()
+                else -> Unit
+            }
+        }
+        detailLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            detailLifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onDetailDetach()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(arkdoColors.topicDetailPageBg)) {
         // 离屏公式引擎的唯一挂载点:有含公式的楼层时才会真正挂上 1×1 WebView,
         // 引用归零后空闲 20s 自行卸载(见 MathRenderService)。
@@ -276,7 +297,13 @@ fun TopicDetailScreen(
                                     boostDeleteLoadingId = ui.boostDeleteLoadingId,
                                     onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
                                     onDeleteBoost = { p, b, done -> viewModel.deleteBoost(p, b, done) },
-                                    onAddBoost = viewModel::openComposerForBoost
+                                    onAddBoost = viewModel::openComposerForBoost,
+                                    onEdit = { p -> viewModel.openEditorForEdit(p) },
+                                    editLoadingPostId = ui.editLoadingPostId,
+                                    postActionLoadingId = ui.postActionLoadingId,
+                                    onDeletePost = { p -> viewModel.deleteOwnPost(p) {} },
+                                    onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
+                                    onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) }
                                 )
                             }
                         }
@@ -312,19 +339,21 @@ fun TopicDetailScreen(
         }
 
         // 回复输入浮层（切片 7）：盖在内容与顶栏之上；FAB 打开时隐藏由 VM 状态保证。
+        // 三态：编辑（editingPostId>0）→ submitEdit；boost → submitBoost；否则普通回复。
         CommentInputOverlay(
             visible = ui.composerVisible,
             placeholder = ui.composerPlaceholder,
             initialText = ui.pendingReplyText,
             isSubmitting = ui.isSubmittingReply,
             onTextChange = viewModel::updateReplyDraft,
-            minChars = if (ui.boostTargetPostId > 0) 1 else 16,
+            minChars = if (ui.boostTargetPostId > 0 || ui.editingPostId > 0) 1 else 16,
             maxChars = if (ui.boostTargetPostId > 0) 16 else 0,
+            editMode = ui.editingPostId > 0,
             onSubmit = { text, typingMs, composerMs, done ->
-                if (ui.boostTargetPostId > 0) {
-                    viewModel.submitBoost(text, done)
-                } else {
-                    viewModel.createReply(text, typingMs, composerMs, done)
+                when {
+                    ui.editingPostId > 0 -> viewModel.submitEdit(text, done)
+                    ui.boostTargetPostId > 0 -> viewModel.submitBoost(text, done)
+                    else -> viewModel.createReply(text, typingMs, composerMs, done)
                 }
             },
             onClose = viewModel::closeComposer,
@@ -418,14 +447,36 @@ private fun TopicDetailContent(
     boostDeleteLoadingId: Long = 0L,
     onToggleBoostDelete: (Long) -> Unit = {},
     onDeleteBoost: (TopicPost, PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
-    onAddBoost: (TopicPost) -> Unit = {}
+    onAddBoost: (TopicPost) -> Unit = {},
+    // 编辑自己的楼层：点铅笔上抛（VM 取原文开浮层）。editLoadingPostId 供铅笔转圈。
+    onEdit: (TopicPost) -> Unit = {},
+    editLoadingPostId: Long = 0L,
+    // 软删除 / 恢复自己的楼（更多菜单里的垃圾桶 ↔ 恢复）。postActionLoadingId 供转圈。
+    postActionLoadingId: Long = 0L,
+    onDeletePost: (TopicPost) -> Unit = {},
+    onRecoverPost: (TopicPost) -> Unit = {},
+    // 阅读计时上报：可见楼层号变化（滚动/分页）时回调，由上层喂给 ReadingTracker。
+    onVisiblePostNumbers: (List<Int>) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
-    // 目标楼层还没在当前窗口里时不滚，等 loadMore/换窗把它带进来后再滚。
-    LaunchedEffect(posts, targetPostNumber) {
+    // 只跳一次：posts 会因已读上报(markPostsRead 重建列表)等原因变化，若 key 含 posts
+    // 会导致跳楼逻辑反复触发，把用户从滚动位置拉回目标楼。
+    // 目标楼未加载时（index<0）继续等 posts 变化，加载出来后滚一次即结束。
+    var handledTarget by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(targetPostNumber) {
         val target = targetPostNumber ?: return@LaunchedEffect
-        val index = posts.indexOfFirst { it.postNumber == target }
-        if (index >= 0) listState.animateScrollToItem(index + 1)
+        if (handledTarget == target) return@LaunchedEffect
+        snapshotFlow { posts }
+            .first { currentPosts ->
+                val index = currentPosts.indexOfFirst { it.postNumber == target }
+                if (index >= 0) {
+                    handledTarget = target
+                    listState.animateScrollToItem(index + 1)
+                    true
+                } else {
+                    false
+                }
+            }
     }
 
     // VM 发起的跳楼（引用跳楼/换窗定位）：一次性请求，滚完立刻消费清除。
@@ -436,6 +487,23 @@ private fun TopicDetailContent(
             listState.animateScrollToItem(index + 1)
         }
         onScrollRequestConsumed()
+    }
+
+    // 阅读计时：把当前在屏的楼层号喂给 tracker（对齐鸿蒙 onVisibleRange）。
+    // 列表布局：index 0 = 标题卡；hasEarlier 时 index 1 = 更早加载器；其后才是 posts 楼层；
+    // 底部 load_more 占位在 items 之后。用 layoutInfo 的可见项反查楼层号，防抖只上报变化。
+    LaunchedEffect(listState, posts, hasEarlier) {
+        val postsOffset = if (hasEarlier) 2 else 1
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
+            .collect { indexes ->
+                val visible = indexes.mapNotNull { itemIndex ->
+                    val postIndex = itemIndex - postsOffset
+                    posts.getOrNull(postIndex)?.postNumber
+                }
+                if (visible.isNotEmpty()) {
+                    onVisiblePostNumbers(visible)
+                }
+            }
     }
 
     LazyColumn(
@@ -502,7 +570,12 @@ private fun TopicDetailContent(
                 onToggleReaction = onToggleReaction,
                 onToggleBookmark = onToggleBookmark,
                 onCopyPostLink = onCopyPostLink,
-                onRepliesLoad = onRepliesLoad
+                onRepliesLoad = onRepliesLoad,
+                onEdit = { onEdit(it) },
+                editLoadingPostId = editLoadingPostId,
+                postActionLoadingId = postActionLoadingId,
+                onDeletePost = { onDeletePost(it) },
+                onRecoverPost = { onRecoverPost(it) }
             )
         }
 

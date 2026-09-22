@@ -1,13 +1,17 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
@@ -57,6 +61,7 @@ import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
 import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.ui.theme.isArkdoInDarkTheme
 import com.arkdo.android.core.common.RelativeTime
 import com.arkdo.android.core.designsystem.FaIcon
 
@@ -125,7 +130,14 @@ fun TopicPostItem(
     boostDeleteLoadingId: Long = 0L,
     onToggleBoostDelete: (boostId: Long) -> Unit = {},
     onDeleteBoost: (TopicPost, PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
-    onAddBoost: (TopicPost) -> Unit = {}
+    onAddBoost: (TopicPost) -> Unit = {},
+    // 编辑自己的楼层：点铅笔上抛（取原文由页面/VM 负责）。editLoadingPostId 供转圈。
+    onEdit: (TopicPost) -> Unit = {},
+    editLoadingPostId: Long = 0L,
+    // 软删除 / 恢复自己的楼（更多菜单：垃圾桶 ↔ 恢复箭头）。postActionLoadingId 供转圈。
+    postActionLoadingId: Long = 0L,
+    onDeletePost: (TopicPost) -> Unit = {},
+    onRecoverPost: (TopicPost) -> Unit = {}
 ) {
     val colors = arkdoColors
     val context = LocalContext.current
@@ -267,7 +279,12 @@ fun TopicPostItem(
                             }
                         }
                     }
-                }
+                },
+                onEdit = { onEdit(post) },
+                editLoading = editLoadingPostId == post.id,
+                onDeletePost = { onDeletePost(post) },
+                onRecoverPost = { onRecoverPost(post) },
+                postActionLoading = postActionLoadingId == post.id
             )
 
             // 本楼已有 boost：头像+短文本气泡排（每楼下方，对齐鸿蒙 BoostRow）。
@@ -407,11 +424,29 @@ private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
                 animationSpec = tween(durationMillis = if (read) 1200 else 0),
                 label = "unreadDot"
             )
+            // 上报进行中（reporting && !read）：蓝点循环呼吸（opacity 1↔0.35，700ms 周期，
+            // 对齐鸿蒙 breatheDim 定时器语义）。非呼吸期恒 1，不参与淡出。
+            val breathing = post.reporting && !read
+            val breatheAlpha = if (breathing) {
+                val transition = rememberInfiniteTransition(label = "breatheDot")
+                val value by transition.animateFloat(
+                    initialValue = 0.35f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 700, easing = EaseInOut),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "breatheDotValue"
+                )
+                value
+            } else {
+                1f
+            }
             Box(
                 modifier = Modifier
                     .padding(start = 2.dp)
                     .size(8.dp)
-                    .alpha(dotAlpha)
+                    .alpha(dotAlpha * breatheAlpha)
                     .clip(CircleShape)
                     .background(parseHexColor(UNREAD_DOT_BLUE))
             )
@@ -457,11 +492,18 @@ private fun PostFooter(
     boostDeleteLoadingId: Long = 0L,
     onToggleBoostDelete: (boostId: Long) -> Unit = {},
     onDeleteBoost: (TopicPost, PostBoost, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
-    onAddBoost: (TopicPost) -> Unit = {}
+    onAddBoost: (TopicPost) -> Unit = {},
+    // 编辑自己的楼层：yours=true 时把点赞位换成铅笔。
+    onEdit: () -> Unit = {},
+    editLoading: Boolean = false,
+    // 软删除 / 恢复：展开更多后，自己的楼多一个垃圾桶；删掉后换成恢复箭头。
+    onDeletePost: () -> Unit = {},
+    onRecoverPost: () -> Unit = {},
+    postActionLoading: Boolean = false
 ) {
     val colors = arkdoColors
     // icon_muted（浅 #BDBDBD / 深 #5C626B，源 Palette 值）。
-    val iconMuted = if (isSystemInDarkTheme()) Color(0xFF5C626B) else Color(0xFFBDBDBD)
+    val iconMuted = if (isArkdoInDarkTheme()) Color(0xFF5C626B) else Color(0xFFBDBDBD)
     val context = LocalContext.current
 
     // 「俺也一样」本地显示态：初始取 props（话题级值），toggle 后用服务端权威新态覆盖。
@@ -565,52 +607,67 @@ private fun PostFooter(
             // 右组：点赞 / 更多(拷贝+书签) / 回复。
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box {
-                    ActionButton(
-                        enabled = !reactionLoading,
-                        onClick = { onLikeToggle("heart") },
-                        onLongClick = onShowReactionPicker
-                    ) {
-                        when {
-                            // 请求中转圈；heart → 实心红；其它已选表情 → PNG；未回应 → 空心灰。
-                            reactionLoading -> LoadingDot()
-                            post.currentUserReaction == "heart" ->
-                                FaIcon("heart", parseHexColor(LIKE_RED), 16.dp)
-                            reactionEmojiAsset(post.currentUserReaction) != null ->
-                                AsyncImage(
-                                    model = "file:///android_asset/${reactionEmojiAsset(post.currentUserReaction)}",
-                                    contentDescription = post.currentUserReaction,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            else ->
-                                FaIcon("far-heart", iconMuted, 16.dp)
-                        }
-                    }
-                    if (showReactionPicker) {
-                        // 长按弹出的 10 表情面板（2 行 x 5），点某个即以该表情回应。
-                        Popup(
-                            alignment = Alignment.BottomEnd,
-                            onDismissRequest = onDismissReactionPicker
+                    // 自己的楼不给点赞入口，改放编辑铅笔（对齐鸿蒙 canEditInline 语义：
+                    // 仅「还在编辑时限内」且页面接了 onEdit 才显示，否则留空）。
+                    if (post.yours == true && post.canEdit == true) {
+                        ActionButton(
+                            enabled = !editLoading,
+                            onClick = onEdit
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                                    .padding(6.dp)
+                            if (editLoading) {
+                                LoadingDot()
+                            } else {
+                                FaIcon("pencil", iconMuted, 16.dp)
+                            }
+                        }
+                    } else if (post.yours != true) {
+                        ActionButton(
+                            enabled = !reactionLoading,
+                            onClick = { onLikeToggle("heart") },
+                            onLongClick = onShowReactionPicker
+                        ) {
+                            when {
+                                // 请求中转圈；heart → 实心红；其它已选表情 → PNG；未回应 → 空心灰。
+                                reactionLoading -> LoadingDot()
+                                post.currentUserReaction == "heart" ->
+                                    FaIcon("heart", parseHexColor(LIKE_RED), 16.dp)
+                                reactionEmojiAsset(post.currentUserReaction) != null ->
+                                    AsyncImage(
+                                        model = "file:///android_asset/${reactionEmojiAsset(post.currentUserReaction)}",
+                                        contentDescription = post.currentUserReaction,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                else ->
+                                    FaIcon("far-heart", iconMuted, 16.dp)
+                            }
+                        }
+                        if (showReactionPicker) {
+                            // 长按弹出的 10 表情面板（2 行 x 5），点某个即以该表情回应。
+                            Popup(
+                                alignment = Alignment.BottomEnd,
+                                onDismissRequest = onDismissReactionPicker
                             ) {
-                                listOf(0, 1).forEach { row ->
-                                    Row {
-                                        REACTION_ORDER.drop(row * 5).take(5).forEach { name ->
-                                            val asset = reactionEmojiAsset(name) ?: return@forEach
-                                            AsyncImage(
-                                                model = "file:///android_asset/$asset",
-                                                contentDescription = name,
-                                                modifier = Modifier
-                                                    .padding(6.dp)
-                                                    .size(28.dp)
-                                                    .clickable {
-                                                        onDismissReactionPicker()
-                                                        onLikeToggle(name)
-                                                    }
-                                            )
+                                Column(
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                                        .padding(6.dp)
+                                ) {
+                                    listOf(0, 1).forEach { row ->
+                                        Row {
+                                            REACTION_ORDER.drop(row * 5).take(5).forEach { name ->
+                                                val asset = reactionEmojiAsset(name) ?: return@forEach
+                                                AsyncImage(
+                                                    model = "file:///android_asset/$asset",
+                                                    contentDescription = name,
+                                                    modifier = Modifier
+                                                        .padding(6.dp)
+                                                        .size(28.dp)
+                                                        .clickable {
+                                                            onDismissReactionPicker()
+                                                            onLikeToggle(name)
+                                                        }
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -628,6 +685,22 @@ private fun PostFooter(
                             // 已收藏实心（ld_accent 蓝）/ 未收藏空心灰（bookmark / far-bookmark）。
                             bookmarkedLocal -> FaIcon("bookmark", colors.brand, 16.dp)
                             else -> FaIcon("far-bookmark", iconMuted, 16.dp)
+                        }
+                    }
+                    // 自己的楼：垃圾桶软删除；删掉后换成恢复（原站三个点展开后的那一颗）。
+                    if (post.yours == true) {
+                        val deleted = post.userDeleted == true
+                        ActionButton(
+                            enabled = !postActionLoading,
+                            onClick = { if (deleted) onRecoverPost() else onDeletePost() }
+                        ) {
+                            if (postActionLoading) {
+                                LoadingDot()
+                            } else if (deleted) {
+                                FaIcon("arrow-rotate-left", iconMuted, 16.dp)
+                            } else {
+                                FaIcon("trash-can", colors.ldDanger, 16.dp)
+                            }
                         }
                     }
                 } else {
