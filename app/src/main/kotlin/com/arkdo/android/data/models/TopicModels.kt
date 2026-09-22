@@ -227,7 +227,15 @@ data class TopicPost(
     @SerialName("flair_url") val flairUrl: String? = null,
     @SerialName("flair_bg_color") val flairBgColor: String? = null,
     @SerialName("flair_color") val flairColor: String? = null,
-    @SerialName("flair_name") val flairName: String? = null
+    @SerialName("flair_name") val flairName: String? = null,
+    // 本楼是不是当前登录用户发的（PostSerializer#yours），为真时不能给自己点赞，详情页把心形换成编辑入口。
+    @SerialName("yours") val yours: Boolean? = null,
+    // 当前用户能不能改这一楼（PostSerializer#can_edit，走 Guardian）。「是我的」不等于「还能改」。
+    @SerialName("can_edit") val canEdit: Boolean? = null,
+    // 作者自己删掉的楼（PostSerializer#user_deleted）。楼还在，正文换成「已被作者删除」，操作栏改成恢复。
+    @SerialName("user_deleted") val userDeleted: Boolean? = null,
+    // 当前用户能不能把这楼恢复回来（PostSerializer#can_recover）。作者在时限内为真。
+    @SerialName("can_recover") val canRecover: Boolean? = null
 ) {
     /** 由 cooked 本地解析（本地态，非服务端字段）。 */
     var plainText: String = ""

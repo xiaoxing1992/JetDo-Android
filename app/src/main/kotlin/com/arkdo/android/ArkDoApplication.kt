@@ -3,6 +3,7 @@ package com.arkdo.android
 import android.app.Application
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import com.arkdo.android.common.theme.ThemeModeStore
 import com.arkdo.android.services.logging.DebugLogStore
 import com.arkdo.android.services.network.DohService
 import com.arkdo.android.services.session.LoginGate
@@ -32,7 +33,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
 
         // 日志系统优先初始化：崩溃处理器要赶在任何业务代码之前装好，
         // 否则最早的异常抓不到。RecordingTree 把 Timber 输出抄进内存环形缓冲，
-        // 崩溃瞬间落盘，下次启动在「我的 → 调试日志」里回读、一键复制。
+        // 崩溃瞬间落盘，下次启动在「设置 → 诊断日志」里回读、一键复制。
         Timber.plant(DebugLogStore.tree())
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
@@ -45,6 +46,8 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
 
         // 初始化登录态持久化（SharedPreferences）
         LoginGate.initPersist(this)
+        // 主题三态要在首帧之前读出来，否则设置页选的浅色/深色要等下一次重组才生效。
+        ThemeModeStore.init(this)
 
         // 初始化 DoH (DNS over HTTPS)：从 DohManager 读配置构造解析器。
         // 同步执行（只读 SharedPreferences，不发请求），避免 host WebView 抢在配置就绪前建起来。

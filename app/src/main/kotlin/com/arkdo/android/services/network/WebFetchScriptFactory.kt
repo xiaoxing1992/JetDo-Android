@@ -171,7 +171,10 @@ object WebFetchScriptFactory {
                 "'Discourse-Logged-In': 'true'"
             ),
             prelude = "",
-            bodyExpr = jsonString(body),
+            // 空 body 必须省略，不能发 body: ""。fetch 对 DELETE/PUT 带上即使是空串的 body，
+            // 也会强制 Content-Type 并改写请求指纹；Discourse 把这种 DELETE /posts/:id
+            // 判成 invalid_access（「not permitted to view」），而不是 can_delete 失败。
+            bodyExpr = if (body.isEmpty()) "" else jsonString(body),
             referrerExpr = jsonString(referrer)
         )
 

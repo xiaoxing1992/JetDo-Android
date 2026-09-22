@@ -1,7 +1,6 @@
 package com.arkdo.android.ui.components
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,6 +54,7 @@ import com.arkdo.android.services.content.RichBlockType
 import com.arkdo.android.services.content.RichInlineNode
 import com.arkdo.android.services.content.RichInlineType
 import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.ui.theme.isArkdoInDarkTheme
 import com.arkdo.android.core.designsystem.FaIcon
 
 // ==========================================================================
@@ -264,7 +264,7 @@ private fun QuoteBlock(
 @androidx.compose.runtime.ReadOnlyComposable
 @androidx.compose.runtime.Composable
 private fun QuoteAccent(bar: Boolean): Color {
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    val dark = isArkdoInDarkTheme()
     return if (bar) {
         if (dark) Color(0xFF454B54) else Color(0xFFC7CDD5)
     } else {
@@ -672,7 +672,7 @@ internal fun InlineText(
 ) {
     val colors = arkdoColors
     val uriHandler = LocalUriHandler.current
-    val isDark = isSystemInDarkTheme()
+    val isDark = isArkdoInDarkTheme()
     // 行内代码：咖色字 #B45309 + 14sp 等宽，无背景色（以用户实机鸿蒙观感为准）。
     val codeColor = Color(0xFFB45309)
     val iconMutedColor = if (isDark) Color(0xFF5C626B) else Color(0xFFBDBDBD)

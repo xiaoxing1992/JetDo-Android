@@ -144,5 +144,14 @@ class PostDataSource {
             republish()
         }
     }
+
+    /** 删除一栋楼（删帖成功后从列表摘掉）。 */
+    fun removePost(postId: Long) {
+        val index = mutablePosts.indexOfFirst { it.id == postId }
+        if (index >= 0) {
+            mutablePosts.removeAt(index)
+            republish()
+        }
+    }
 }
 

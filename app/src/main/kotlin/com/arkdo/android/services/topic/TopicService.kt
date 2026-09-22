@@ -684,6 +684,179 @@ class TopicService(private val bridge: JsonNetworkClient) {
     // ========== 发表内容 ==========
 
     /**
+     * 取某楼的 Markdown 原文，供编辑用。GET /posts/{id}.json。
+     *
+     * 列表接口（topic.json / posts.json）只回 cooked HTML 不回 raw，所以点开编辑必须单独取一次；
+     * 顺带这一趟拿到的也是最新 raw —— 正好当作乐观并发的基线传给 updatePost。
+     */
+    suspend fun getPostRaw(postId: Long): NetworkResult<String> {
+        val response = bridge.getJson("/posts/$postId.json")
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点读取楼层原文响应为空。"
+            )
+        return try {
+            val post = json.decodeFromString<DiscoursePost>(data)
+            val raw = post.raw
+            if (raw == null) {
+                NetworkResults.unexpectedResponse(
+                    response.statusCode,
+                    response.challengeState,
+                    "站点读取楼层原文响应缺少 raw。"
+                )
+            } else {
+                NetworkResult(
+                    success = true,
+                    statusCode = response.statusCode,
+                    challengeState = response.challengeState,
+                    data = raw
+                )
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][TopicService] getPostRaw parse failed length=${data.length}")
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点读取楼层原文响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /**
+     * 编辑某楼。PUT /posts/{id}，form body（对齐鸿蒙 TopicService.updatePost）：
+     *   post[raw] / post[original_text] / post[topic_id] / post[edit_reason] / post[locale]
+     *
+     * original_text 是乐观并发的基线：PostsController#update 里
+     * `original_text.present? && original_text != post.raw` 直接 409 edit_conflict。
+     * 传它才能在「打开编辑框期间这楼被别处改过」时被服务端拦下。
+     */
+    suspend fun updatePost(
+        postId: Long,
+        topicId: Long,
+        raw: String,
+        originalRaw: String
+    ): NetworkResult<TopicPost> {
+        val parts = mutableListOf(
+            "post%5Bedit_reason%5D=",
+            "post%5Braw%5D=${encode(raw)}",
+            "post%5Btopic_id%5D=$topicId",
+            "post%5Boriginal_text%5D=${encode(originalRaw)}",
+            "post%5Blocale%5D="
+        )
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.putForm(
+            "/posts/$postId",
+            parts.joinToString("&"),
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点保存编辑响应为空。"
+            )
+        return try {
+            val wrapper = json.decodeFromString<DiscoursePostUpdateResponse>(data)
+            val updated = wrapper.post
+            val posts = if (updated != null) mapPosts(listOf(updated)) else emptyList()
+            if (posts.isEmpty()) {
+                NetworkResults.unexpectedResponse(
+                    response.statusCode,
+                    response.challengeState,
+                    "站点保存编辑响应缺少楼层数据。"
+                )
+            } else {
+                NetworkResult(
+                    success = true,
+                    statusCode = response.statusCode,
+                    challengeState = response.challengeState,
+                    data = posts.first()
+                )
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][TopicService] updatePost parse failed length=${data.length}")
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点保存编辑响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /**
+     * 软删除某楼。DELETE /posts/{id}。
+     *
+     * 原站对作者是软删除：楼还在，cooked 被换成「(帖子已被作者删除)」，并带 user_deleted。
+     * 响应一般是更新后的 post JSON（裸对象或 { post }）；解析失败也按成功返回，由调用方就地换成占位。
+     */
+    suspend fun deletePost(postId: Long, topicId: Long): NetworkResult<TopicPost?> {
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.deleteForm(
+            "/posts/$postId",
+            "",
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        return NetworkResult(
+            success = true,
+            statusCode = response.statusCode,
+            challengeState = response.challengeState,
+            data = parsePostMutationBody(response.data)
+        )
+    }
+
+    /**
+     * 恢复自己软删除的楼。PUT /posts/{id}/recover。
+     * 响应是恢复后的 post JSON；解析不出楼层则视为失败（否则界面还停在占位上）。
+     */
+    suspend fun recoverPost(postId: Long, topicId: Long): NetworkResult<TopicPost> {
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.putForm(
+            "/posts/$postId/recover",
+            "",
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val post = parsePostMutationBody(response.data)
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点恢复楼层响应缺少楼层数据。"
+            )
+        return NetworkResult(
+            success = true,
+            statusCode = response.statusCode,
+            challengeState = response.challengeState,
+            data = post
+        )
+    }
+
+    /** DELETE / PUT recover 的 body：可能是 { post }，也可能是裸 DiscoursePost。解析不出就返回 null。 */
+    private fun parsePostMutationBody(data: String?): TopicPost? {
+        if (data.isNullOrBlank()) return null
+        return try {
+            val wrapped = runCatching { json.decodeFromString<DiscoursePostUpdateResponse>(data).post }.getOrNull()
+            val source = wrapped ?: json.decodeFromString<DiscoursePost>(data)
+            mapPosts(listOf(source)).firstOrNull()
+        } catch (e: Exception) {
+            Timber.i(e, "[ArkDO][TopicService] post mutation body not a post length=${data.length}")
+            null
+        }
+    }
+
+    /**
      * discourse-boosts：发一条 boost。POST /discourse-boosts/posts/{postId}/boosts，
      * form body raw（对齐鸿蒙 createBoost）。
      */
@@ -988,7 +1161,11 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 flairUrl = source.flair_url?.takeIf { it.isNotEmpty() },
                 flairBgColor = source.flair_bg_color?.takeIf { it.isNotEmpty() },
                 flairColor = source.flair_color?.takeIf { it.isNotEmpty() },
-                flairName = source.flair_name?.takeIf { it.isNotEmpty() }
+                flairName = source.flair_name?.takeIf { it.isNotEmpty() },
+                yours = source.yours,
+                canEdit = source.can_edit,
+                userDeleted = source.user_deleted,
+                canRecover = source.can_recover
             ).also { post ->
                 // replyToUser 是类体可变字段（非构造参数），构造后赋值。
                 post.replyToUser = source.reply_to_user?.let {
@@ -1242,7 +1419,18 @@ data class DiscoursePost(
     // discourse-poll：该楼的投票列表、当前用户各投票的已投项、能否投票（对齐鸿蒙 DiscoursePost）。
     val polls: List<DiscoursePoll>? = null,
     val polls_votes: Map<String, List<String>>? = null,
-    val can_vote: Boolean? = null
+    val can_vote: Boolean? = null,
+    // 编辑用：Markdown 原文（仅 /posts/{id}.json 单帖接口回带）。
+    val raw: String? = null,
+    // 本楼是不是当前登录用户发的（PostSerializer#yours）。为真时不能给自己点赞。
+    val yours: Boolean? = null,
+    // 当前用户能不能改这一楼（PostSerializer#can_edit，走 Guardian）。
+    val can_edit: Boolean? = null,
+    // 作者软删除（user_deleted=true 时 cooked 被换成「已被作者删除」占位）。
+    val user_deleted: Boolean? = null,
+    // 当前用户能不能恢复这楼（作者在时限内、或管理员）。
+    val can_recover: Boolean? = null,
+    val deleted_at: String? = null
 )
 
 /** discourse-poll：一个投票选项（id + 展示 html + 票数）。 */
@@ -1343,6 +1531,12 @@ data class DiscourseTagResult(
     val count: Int? = null,
     val description: String? = null,
     val pm_only: Boolean? = null
+)
+
+/** PUT /posts/{id} 的响应外壳：更新后的整个 post 挂在 post 字段下（与创建接口的裸对象不同）。 */
+@Serializable
+data class DiscoursePostUpdateResponse(
+    val post: DiscoursePost? = null
 )
 
 // ========== 发表回复（POST /posts） ==========

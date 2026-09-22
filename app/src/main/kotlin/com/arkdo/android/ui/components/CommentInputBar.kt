@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.R
+import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.delay
@@ -82,7 +84,9 @@ fun CommentInputOverlay(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     minChars: Int = 16,
-    maxChars: Int = 0
+    maxChars: Int = 0,
+    // 编辑态：提交按钮换对勾图标（回复态保持回复箭头，对齐鸿蒙共用一个圆钮、图标按场景区分）。
+    editMode: Boolean = false
 ) {
     // initialText 只在浮层从无到有时取一次；提交成功后 VM 清草稿，输入条随之回到空态。
     var text by remember { mutableStateOf(initialText) }
@@ -244,6 +248,14 @@ fun CommentInputOverlay(
                                 modifier = Modifier.size(22.dp),
                                 color = ArkdoFixedColors.OnDarkFg,
                                 strokeWidth = 2.dp
+                            )
+                        } else if (editMode) {
+                            // 编辑态提交 = 保存：对勾图标（FaIcon 字体图标，语义清晰）。
+                            FaIcon(
+                                "check",
+                                ArkdoFixedColors.OnDarkFg,
+                                18.dp,
+                                Modifier.size(18.dp)
                             )
                         } else {
                             Icon(

@@ -11,9 +11,12 @@ import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.session.LoginGate
+import com.arkdo.android.services.reading.ReadingTracker
 import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.PostStreamPager
 import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
+import com.arkdo.android.services.challenge.ChallengeRecoveryState
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /** 每页拉取楼层数，对齐鸿蒙 POSTS_PAGE_SIZE。 */
@@ -32,6 +36,9 @@ private const val POSTS_PAGE_SIZE = 20
 
 /** 跳楼落地高亮时长，对齐鸿蒙 armTargetFlash 的 3s。 */
 private const val TARGET_FLASH_MS = 3000L
+
+/** 作者软删除后站点回的中文占位（响应没带 cooked 时本地兜底）。 */
+private const val DELETED_BY_AUTHOR_HTML = "<p>(帖子已被作者删除)</p>"
 
 /**
  * 话题详情页 ViewModel —— 窗口式加载，对齐鸿蒙 TopicDetailPage 的数据流。
@@ -54,6 +61,22 @@ class TopicDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TopicDetailUiState())
     val uiState: StateFlow<TopicDetailUiState> = _uiState.asStateFlow()
+
+    /** 阅读计时上报（对齐鸿蒙 TopicReadController 的 ReadingTracker 托管）。 */
+    private val readingTracker = ReadingTracker(viewModelScope)
+
+    /** 撞盾挂起批次补发的前提：过盾成功（COOLDOWN）信号（对齐鸿蒙 TopicReadController.attach 的订阅）。 */
+    private val challengeUnsubscribe = ChallengeRecoveryEventBus.subscribeState { state ->
+        if (state == ChallengeRecoveryState.COOLDOWN) {
+            readingTracker.notifyChallengeResolved()
+        }
+    }
+
+    override fun onCleared() {
+        challengeUnsubscribe()
+        readingTracker.stop()
+        super.onCleared()
+    }
 
     private var currentTopicId: Long? = null
     private var currentSlug: String? = null
@@ -448,7 +471,15 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 对齐鸿蒙 resetComposerModes：回复/boost/编辑三态复位。 */
     private fun resetComposerModes() {
-        _uiState.update { it.copy(composerReplyToPostNumber = null, boostTargetPostId = 0L) }
+        _uiState.update {
+            it.copy(
+                composerReplyToPostNumber = null,
+                boostTargetPostId = 0L,
+                editingPostId = 0L,
+                editingOriginalRaw = "",
+                editLoadingPostId = 0L
+            )
+        }
     }
 
     /** 点火箭：打开 boost 输入浮层（占位「发一个 boost...」），对齐鸿蒙 openComposerForBoost。 */
@@ -464,6 +495,154 @@ class TopicDetailViewModel @Inject constructor(
                 composerVisible = true
             )
         }
+    }
+
+    /**
+     * 点铅笔：取原文 → 打开编辑浮层（对齐鸿蒙 openComposerForEdit）。
+     *
+     * 列表接口只回 cooked HTML 不回 Markdown 原文，所以必须先 GET /posts/{id}.json 取 raw；
+     * 这一趟顺带拿到最新原文，正好作为乐观并发基线存进 editingOriginalRaw。
+     * 取原文期间先转圈（editLoadingPostId），失败 Toast，成功再开浮层预填。
+     */
+    fun openEditorForEdit(post: TopicPost) {
+        if (!LoginGate.ensureLoggedIn(appContext)) {
+            return
+        }
+        val state = _uiState.value
+        if (state.editLoadingPostId > 0) return
+        _uiState.update { it.copy(editLoadingPostId = post.id) }
+        viewModelScope.launch {
+            val result = topicService.getPostRaw(post.id)
+            _uiState.update { it.copy(editLoadingPostId = 0L) }
+            if (!result.success || result.data == null) {
+                _uiState.update { it.copy(actionMessage = "读取原文失败，请稍后重试") }
+                return@launch
+            }
+            resetComposerModes()
+            _uiState.update {
+                it.copy(
+                    editingPostId = post.id,
+                    editingOriginalRaw = result.data,
+                    composerPlaceholder = "编辑这条回复",
+                    composerVisible = true,
+                    pendingReplyText = result.data
+                )
+            }
+        }
+    }
+
+    /**
+     * 保存编辑（对齐鸿蒙 submitEdit）。成功就地把新 cooked 写回该楼（不整页重载，避免滚动位置被冲掉）；
+     * 409 是编辑冲突（打开编辑框后这楼被改过），单独提示；其余失败按普通保存失败提示。
+     */
+    fun submitEdit(text: String, done: (Boolean) -> Unit) {
+        val state = _uiState.value
+        val postId = state.editingPostId
+        val topic = state.topic ?: return done(false)
+        if (postId <= 0) return done(false)
+        val originalRaw = state.editingOriginalRaw
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSubmittingReply = true) }
+            val result = topicService.updatePost(postId, topic.id, text, originalRaw)
+            _uiState.update { it.copy(isSubmittingReply = false) }
+            if (result.success && result.data != null) {
+                applyEditedPost(result.data)
+                _uiState.update {
+                    it.copy(
+                        composerVisible = false,
+                        pendingReplyText = "",
+                        editingPostId = 0L,
+                        editingOriginalRaw = "",
+                        actionMessage = "已保存"
+                    )
+                }
+                done(true)
+            } else if (result.statusCode == 409) {
+                _uiState.update { it.copy(actionMessage = "这条回复已被改动，请重新打开编辑") }
+                done(false)
+            } else {
+                _uiState.update { it.copy(actionMessage = "保存失败，请稍后重试") }
+                done(false)
+            }
+        }
+    }
+
+    /** 把编辑后的楼层写回列表（对齐鸿蒙 applyEditedPost：就地替换，不整列重建）。 */
+    private fun applyEditedPost(updated: TopicPost) {
+        dataSource.replacePost(updated)
+        _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
+    }
+
+    /**
+     * 软删除自己的楼（原站：更多菜单里的垃圾桶，不是编辑浮层）。
+     *
+     * DELETE 成功后楼还在：正文换成「(帖子已被作者删除)」，操作栏改成恢复。
+     * 站点若回了更新后的 post 就用它的 cooked；没回就本地占位。
+     */
+    fun deleteOwnPost(post: TopicPost, done: (Boolean) -> Unit) {
+        if (!LoginGate.ensureLoggedIn(appContext)) {
+            return done(false)
+        }
+        val topic = _uiState.value.topic ?: return done(false)
+        if (_uiState.value.postActionLoadingId > 0) return done(false)
+        viewModelScope.launch {
+            _uiState.update { it.copy(postActionLoadingId = post.id) }
+            val result = topicService.deletePost(post.id, topic.id)
+            _uiState.update { it.copy(postActionLoadingId = 0L) }
+            if (result.success) {
+                val fromServer = result.data
+                val placeholder = fromServer?.takeIf { it.userDeleted == true }
+                    ?: post.copy(
+                        cookedHtml = DELETED_BY_AUTHOR_HTML,
+                        userDeleted = true,
+                        canRecover = true
+                    )
+                // mapPosts 不回填作者/被回复人/阅读态，就地替换时从原楼接回来。
+                carryLocalFields(from = post, onto = placeholder)
+                dataSource.replacePost(placeholder)
+                _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
+                done(true)
+            } else {
+                _uiState.update { it.copy(actionMessage = "删除失败，请稍后重试") }
+                done(false)
+            }
+        }
+    }
+
+    /**
+     * 恢复自己软删除的楼。PUT /posts/{id}/recover，成功后用站点回的正文替换占位。
+     */
+    fun recoverOwnPost(post: TopicPost, done: (Boolean) -> Unit) {
+        if (!LoginGate.ensureLoggedIn(appContext)) {
+            return done(false)
+        }
+        val topic = _uiState.value.topic ?: return done(false)
+        if (_uiState.value.postActionLoadingId > 0) return done(false)
+        viewModelScope.launch {
+            _uiState.update { it.copy(postActionLoadingId = post.id) }
+            val result = topicService.recoverPost(post.id, topic.id)
+            _uiState.update { it.copy(postActionLoadingId = 0L) }
+            if (result.success && result.data != null) {
+                val restored = result.data
+                carryLocalFields(from = post, onto = restored)
+                dataSource.replacePost(restored)
+                _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
+                done(true)
+            } else {
+                _uiState.update { it.copy(actionMessage = "恢复失败，请稍后重试") }
+                done(false)
+            }
+        }
+    }
+
+    /** copy / mapPosts 都会丢掉类体可变字段，写回列表前从原楼接上。 */
+    private fun carryLocalFields(from: TopicPost, onto: TopicPost) {
+        if (onto.author == null) onto.author = from.author
+        if (onto.replyToUser == null) onto.replyToUser = from.replyToUser
+        if (onto.plainText.isEmpty()) onto.plainText = from.plainText
+        onto.reporting = from.reporting
+        if (onto.badgeIcons == null) onto.badgeIcons = from.badgeIcons
+        if (onto.linkClicks == null) onto.linkClicks = from.linkClicks
     }
 
     /** boost 提交：走 createBoost；成功回填楼层（气泡追加 + canBoost 置 false）。 */
@@ -497,7 +676,13 @@ class TopicDetailViewModel @Inject constructor(
     }
 
     fun closeComposer() {
-        _uiState.update { it.copy(composerVisible = false) }
+        _uiState.update {
+            it.copy(
+                composerVisible = false,
+                editingPostId = 0L,
+                editingOriginalRaw = ""
+            )
+        }
     }
 
     /** 输入内容暂存：关掉浮层再点开内容还在（鸿蒙 pendingReplyText 的内存等价物，磁盘草稿后续切片接）。 */
@@ -676,6 +861,82 @@ class TopicDetailViewModel @Inject constructor(
                 loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了"
             )
         }
+        startReadingTrackerIfNeeded(detail)
+    }
+
+    // ==================== 阅读计时上报（对齐鸿蒙 TopicReadController） ====================
+
+    /**
+     * 详情加载成功后启动计时上报。未登录一律不启动：匿名 POST /topics/timings 会被后端拒。
+     * 已读楼预置进 tracker（seedRead），避免对已读楼重复计时上报。
+     */
+    private fun startReadingTrackerIfNeeded(detail: TopicDetail) {
+        if (!LoginGate.isLoggedIn(appContext)) return
+        val posts = dataSource.posts
+        if (posts.isEmpty()) return
+        readingTracker.start(
+            topicId = detail.id,
+            reportFn = ReadingTracker.ReportTimings { topicId, timings, topicTime ->
+                topicService.reportTimings(topicId, timings, topicTime)
+            },
+            onRead = { postNumbers -> markPostsRead(postNumbers) },
+            onReporting = { postNumbers, reporting -> markPostsReporting(postNumbers, reporting) }
+        )
+        readingTracker.seedRead(posts.filter { it.read == true }.map { it.postNumber })
+        readingTracker.seedRead(posts.map { it.postNumber }.filter { it <= (detail.lastReadPostNumber ?: 0) })
+        Timber.i("[ArkDO][ReadingTracker] started topicId=%d posts=%d", detail.id, posts.size)
+    }
+
+    /** 可见楼层变化（详情页滚动时喂入）：更新在屏楼层列表 + 刷新防挂机滚动时间戳。 */
+    fun updateVisiblePostNumbers(postNumbers: List<Int>) {
+        readingTracker.setOnscreen(postNumbers)
+        readingTracker.scrolled()
+    }
+
+    /** 页面前后台切换：暂停/恢复阅读计时（对齐鸿蒙 setFocus）。 */
+    fun setTrackerFocus(hasFocus: Boolean) {
+        readingTracker.setFocus(hasFocus)
+    }
+
+    /** 离开详情页：停表结算 + 把剩余批次发出（对齐鸿蒙 TopicReadController.detach 的两段收尾）。 */
+    fun onDetailDetach() {
+        if (readingTracker.stopTiming()) {
+            readingTracker.flushPending()
+        }
+    }
+
+    /** 上报成功：把这些楼标已读（蓝点淡出）。data class 需重建触发重组。 */
+    private fun markPostsRead(postNumbers: List<Int>) {
+        val numbers = postNumbers.toHashSet()
+        _uiState.update { state ->
+            val posts = state.posts.toMutableList()
+            var changed = false
+            for (i in posts.indices) {
+                val post = posts[i]
+                if (post.postNumber in numbers && post.read != true) {
+                    posts[i] = post.copy(read = true)
+                    changed = true
+                }
+            }
+            if (!changed) state else state.copy(posts = posts)
+        }
+    }
+
+    /** 上报期间蓝点"呼吸"（reporting 状态）。 */
+    private fun markPostsReporting(postNumbers: List<Int>, reporting: Boolean) {
+        val numbers = postNumbers.toHashSet()
+        _uiState.update { state ->
+            val posts = state.posts.toMutableList()
+            var changed = false
+            for (i in posts.indices) {
+                val post = posts[i]
+                if (post.postNumber in numbers && post.reporting != reporting) {
+                    posts[i] = post.copy().also { it.reporting = reporting }
+                    changed = true
+                }
+            }
+            if (!changed) state else state.copy(posts = posts)
+        }
     }
 
     /** 武装目标楼落地高亮：3s 后自动清零，避免楼层重建时重播（对齐鸿蒙 armTargetFlash）。 */
@@ -734,5 +995,11 @@ data class TopicDetailUiState(
     // boost 目标楼 id：>0 时回复输入浮层处于 boost 模式（对齐鸿蒙 boostTargetPostId）。
     val boostTargetPostId: Long = 0L,
     // 正在删除的 boost id（转圈防重复，对齐鸿蒙 deletingBoostId）。
-    val boostDeleteLoadingId: Long = 0L
+    val boostDeleteLoadingId: Long = 0L,
+    // 编辑模式：目标楼 id（>0 时回复浮层处于编辑态）+ 乐观并发基线原文 + 取原文 loading。
+    val editingPostId: Long = 0L,
+    val editingOriginalRaw: String = "",
+    val editLoadingPostId: Long = 0L,
+    // 正在软删除或恢复的楼 id（>0 时该楼操作按钮转圈，避免连点）。
+    val postActionLoadingId: Long = 0L
 )

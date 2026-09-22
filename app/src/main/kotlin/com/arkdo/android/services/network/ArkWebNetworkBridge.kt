@@ -173,6 +173,10 @@ class WebviewJsonExecutor(
 object ArkWebNetworkBridge : JsonNetworkClient {
 
     private var webView: WebView? = null
+
+    /** 恢复探测读宿主文档标题/HTML。没有宿主时返回 null，调用方不得当成“已放行”。 */
+    fun peekWebView(): WebView? = webView
+
     private var executor: ArkWebJsonExecutor? = null
     private var webviewExecutor: WebviewJsonExecutor? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -355,7 +359,11 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                         """.trimIndent()
                     ) { result ->
                         Timber.i("[ArkDO][Network] attachHost: challenge detection raw result=%s", result)
-                        val isChallengePage = result?.contains("\"hasChallenge\":true") == true
+                        // evaluateJavascript 回传的是 JS 值的 JSON 编码：内层 {"hasChallenge":true}
+                        // 到这里变成字符串 "{\"hasChallenge\":true}"。直接 contains 字面 true 永远匹配不上，
+                        // 挑战页会被当成干净页，过盾流程根本不启动。
+                        val isChallengePage = result?.contains("\\\"hasChallenge\\\":true") == true
+                            || result?.contains("\"hasChallenge\":true") == true
 
                         // 额外检查：如果标题是"请稍候…"也认为是挑战页面
                         val hasPendingTitle = result?.contains("请稍候") == true
@@ -441,7 +449,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                             """.trimIndent()
                         ) { result ->
                             Timber.i("[ArkDO][Network] attachHost: 403 challenge check result=%s", result)
-                            if (result?.contains("\"hasChallenge\":true") == true) {
+                            // 同 onPageFinished：回调值是二次 JSON 编码，\"hasChallenge\":true 才是真实形态。
+                            if (result?.contains("\\\"hasChallenge\\\":true") == true ||
+                                result?.contains("\"hasChallenge\":true") == true
+                            ) {
                                 Timber.w("[ArkDO][Network] attachHost: Cloudflare challenge confirmed on 403, notifying")
                                 ChallengeEventBus.notifyChallengeRequired("bootstrap", 403, ChallengeState.REQUIRED)
                             }
@@ -981,13 +992,28 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         method: String,
         options: JsonRequestOptions?
     ): NetworkResult<String> {
-        if (method == "POST") {
-            Timber.i("[ArkDO][Network] POST %s csrf source=%s length=%d",
-                path, envelope.csrfSource ?: "unknown", envelope.csrfLength ?: 0)
+        if (envelope.csrfSource != null || envelope.csrfLength != null) {
+            Timber.i("[ArkDO][Network] %s %s csrf source=%s length=%d",
+                method, path, envelope.csrfSource ?: "unknown", envelope.csrfLength ?: 0)
         }
 
         if (!envelope.errorMessage.isNullOrEmpty()) {
             Timber.i("[ArkDO][Network] %s %s envelope error=%s", method, path, envelope.errorMessage)
+            // 写请求在宿主挑战页上读不到 token。空 token 发出去只会换来 Discourse 的
+            // "BAD CSRF"（纯文本，ChallengeDetector 认不出），这里直接当成需要过盾。
+            if (envelope.errorMessage == "csrf token missing" && options?.notifyChallenge != false) {
+                ChallengeEventBus.notifyChallengeRequired(path, 0, ChallengeState.REQUIRED)
+                return NetworkResult(
+                    success = false,
+                    statusCode = 0,
+                    challengeState = ChallengeState.REQUIRED,
+                    error = NetworkError(
+                        NetworkErrorCode.CHALLENGE_REQUIRED,
+                        "需要完成可见 Cloudflare 验证后重试。",
+                        requiresChallenge = true
+                    )
+                )
+            }
             return NetworkResult(
                 success = false,
                 statusCode = 0,
