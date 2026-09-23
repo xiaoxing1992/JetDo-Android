@@ -53,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -603,6 +605,13 @@ private fun AnnotatedString.Builder.appendHomeSearchText(
     }
 }
 
+private val PromptTextStyle = TextStyle(
+    fontSize = 14.sp,
+    fontWeight = FontWeight.Medium,
+    lineHeight = 18.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false)
+)
+
 @Composable
 private fun IncomingTopicsPrompt(
     visible: Boolean,
@@ -627,13 +636,14 @@ private fun IncomingTopicsPrompt(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(text = "查看", color = colors.ldAccent, style = PromptTextStyle)
+                IncomingCountDigits(count, colors.ldAccent)
                 Text(
-                    text = "查看 $count 个新的或更新的话题",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                    text = "个新的或更新的话题",
                     color = colors.ldAccent,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    style = PromptTextStyle
                 )
                 if (loading) {
                     Spacer(Modifier.width(8.dp))
@@ -642,6 +652,99 @@ private fun IncomingTopicsPrompt(
             }
             HorizontalDivider(color = colors.border)
         }
+    }
+}
+
+private val IncomingDigitHeight = 18.dp
+private val IncomingDigitWidth = 9.dp
+
+/** 个数按位滚。旧数字上滑淡出，新数字从下滑入；进位展开，退位收起。 */
+@Composable
+private fun IncomingCountDigits(count: Int, color: Color) {
+    var previous by remember { mutableIntStateOf(count) }
+    var shown by remember { mutableIntStateOf(count) }
+    var progress by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(count) {
+        if (count == shown) return@LaunchedEffect
+        previous = shown
+        shown = count
+        progress = 0f
+        animate(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = INCOMING_DIGIT_MS, easing = EaseOut)
+        ) { value, _ ->
+            progress = value
+        }
+        previous = shown
+    }
+    Row(
+        modifier = Modifier.padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        incomingDigitColumns(previous, shown).forEachIndexed { index, column ->
+            IncomingDigitColumn(column, progress, color, Modifier)
+        }
+    }
+}
+
+@Composable
+private fun IncomingDigitColumn(
+    column: IncomingDigitColumn,
+    progress: Float,
+    color: Color,
+    modifier: Modifier
+) {
+    val width = incomingDigitColumnWidth(column.kind, progress, with(LocalDensity.current) {
+        IncomingDigitWidth.toPx()
+    })
+    Box(
+        modifier = modifier
+            .width(with(LocalDensity.current) { width.toDp() })
+            .height(IncomingDigitHeight)
+            .clipToBounds(),
+        contentAlignment = Alignment.Center
+    ) {
+        if (column.kind == IncomingDigitKind.STABLE) {
+            IncomingDigitText(column.current, color)
+        } else {
+            if (column.previous.isNotEmpty()) {
+                IncomingDigitText(
+                    column.previous,
+                    color,
+                    Modifier.graphicsLayer {
+                        translationY = -IncomingDigitHeight.toPx() * progress
+                        alpha = 1f - progress
+                    }
+                )
+            }
+            if (column.current.isNotEmpty()) {
+                IncomingDigitText(
+                    column.current,
+                    color,
+                    Modifier.graphicsLayer {
+                        translationY = IncomingDigitHeight.toPx() * (1f - progress)
+                        alpha = progress
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomingDigitText(digit: String, color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.height(IncomingDigitHeight),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = digit,
+            color = color,
+            textAlign = TextAlign.Center,
+            style = PromptTextStyle,
+            modifier = Modifier.offset(y = with(LocalDensity.current) { 1.toDp() })
+        )
     }
 }
 

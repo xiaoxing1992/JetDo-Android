@@ -107,4 +107,37 @@ class HomeVisualParityTest {
         assertEquals(900L, incomingHighlightHoldMs(1500L))
         assertEquals(0L, incomingHighlightHoldMs(400L))
     }
+
+    @Test
+    fun incoming_prompt_digits_roll_enter_and_exit() {
+        val roll = incomingDigitColumns(375, 376)
+        assertEquals(listOf("3", "7", "5"), roll.map { it.previous })
+        assertEquals(listOf("3", "7", "6"), roll.map { it.current })
+        assertEquals(
+            listOf(IncomingDigitKind.STABLE, IncomingDigitKind.STABLE, IncomingDigitKind.ROLL),
+            roll.map { it.kind }
+        )
+
+        val enter = incomingDigitColumns(99, 100)
+        assertEquals("", enter[0].previous)
+        assertEquals("1", enter[0].current)
+        assertEquals(IncomingDigitKind.ENTER, enter[0].kind)
+        assertEquals(IncomingDigitKind.ROLL, enter[1].kind)
+        assertEquals("9", enter[1].previous)
+        assertEquals("0", enter[1].current)
+
+        val exit = incomingDigitColumns(10, 1)
+        assertEquals("1", exit[0].previous)
+        assertEquals("", exit[0].current)
+        assertEquals(IncomingDigitKind.EXIT, exit[0].kind)
+        assertEquals("0", exit[1].previous)
+        assertEquals("1", exit[1].current)
+
+        assertEquals(0f, incomingDigitColumnWidth(IncomingDigitKind.ENTER, 0f, 9f))
+        assertEquals(9f, incomingDigitColumnWidth(IncomingDigitKind.ENTER, 1f, 9f))
+        assertEquals(9f, incomingDigitColumnWidth(IncomingDigitKind.EXIT, 0f, 9f))
+        assertEquals(0f, incomingDigitColumnWidth(IncomingDigitKind.EXIT, 1f, 9f))
+        assertEquals(9f, incomingDigitColumnWidth(IncomingDigitKind.STABLE, 0.5f, 9f))
+        assertEquals(9f, incomingDigitColumnWidth(IncomingDigitKind.ROLL, 0.5f, 9f))
+    }
 }
