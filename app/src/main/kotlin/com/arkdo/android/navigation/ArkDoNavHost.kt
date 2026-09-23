@@ -32,6 +32,7 @@ import com.arkdo.android.ui.screens.ExperimentalSettingsScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.ProfileScreen
 import com.arkdo.android.ui.screens.SettingsScreen
+import com.arkdo.android.ui.screens.TopicListStyleSettingsScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.screens.WebViewPage
 import com.arkdo.android.ui.user.BadgesScreen
@@ -378,11 +379,15 @@ fun ArkDoNavHost(
                     navController.navigate("${Routes.TOPIC_DETAIL}/${AppConstants.FEEDBACK_TOPIC_ID}")
                 },
                 onOpenDiagnostics = { navController.navigate(Routes.DEBUG_LOG) },
-                onOpenExperimental = { navController.navigate(Routes.SETTINGS_EXPERIMENTAL) }
+                onOpenExperimental = { navController.navigate(Routes.SETTINGS_EXPERIMENTAL) },
+                onOpenTopicListStyle = { navController.navigate(Routes.SETTINGS_TOPIC_LIST_STYLE) }
             )
         }
         composable(Routes.SETTINGS_EXPERIMENTAL) {
             ExperimentalSettingsScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS_TOPIC_LIST_STYLE) {
+            TopicListStyleSettingsScreen(onNavigateBack = { navController.popBackStack() })
         }
         }
 
@@ -420,6 +425,7 @@ object Routes {
     const val SETTINGS_PUSH = "settings_push"
     const val SETTINGS_NETWORK = "settings_network"
     const val SETTINGS_EXPERIMENTAL = "settings_experimental"
+    const val SETTINGS_TOPIC_LIST_STYLE = "settings_topic_list_style"
 
     // 其他功能页面
     const val LEVEL_PROGRESS = "level_progress"
