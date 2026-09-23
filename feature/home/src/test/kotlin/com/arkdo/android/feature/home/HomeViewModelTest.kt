@@ -168,6 +168,67 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun loadIncomingTopics_moves_updated_rows_to_the_top_and_keeps_fresh_data() = runTest {
+        val updated = topic(id = 1L, title = "Topic 1 updated")
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1), topic(2), topic(3)), page = 0, hasMore = true)),
+            byIds = listOf(updated, topic(4), updated)
+        )
+        val viewModel = viewModel(repository = repository)
+
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        viewModel.addIncomingTopic(1L)
+        viewModel.addIncomingTopic(4L)
+        viewModel.loadIncomingTopics()
+        advanceUntilIdle()
+
+        val topics = viewModel.uiState.value.topics
+        assertEquals(listOf(1L, 4L, 2L, 3L), topics.map(HomeTopic::id))
+        assertEquals("Topic 1 updated", topics.first().title)
+        assertEquals(listOf(1L, 4L), viewModel.uiState.value.incomingInsertIds)
+        assertEquals(listOf(1L, 4L), viewModel.uiState.value.incomingHighlightIds)
+        assertTrue(viewModel.uiState.value.incomingHighlightUntil > System.currentTimeMillis())
+        assertTrue(viewModel.uiState.value.isLoadingIncoming)
+        val epoch = viewModel.uiState.value.incomingInsertEpoch
+        viewModel.finishIncomingInsert(epoch)
+        assertTrue(viewModel.uiState.value.incomingInsertIds.isEmpty())
+        assertEquals(listOf(1L, 4L), viewModel.uiState.value.incomingHighlightIds)
+        viewModel.finishIncomingHighlight()
+        assertTrue(viewModel.uiState.value.incomingHighlightIds.isEmpty())
+        assertEquals(0L, viewModel.uiState.value.incomingHighlightUntil)
+        assertTrue(viewModel.uiState.value.incomingTopicIds.isEmpty())
+        assertFalse(viewModel.uiState.value.incomingPromptVisible)
+        assertFalse(viewModel.uiState.value.isLoadingIncoming)
+    }
+
+    @Test
+    fun loadIncomingTopics_keeps_the_prompt_when_fetch_fails_or_returns_empty() = runTest {
+        val failed = OutcomeHomeRepository(HomePageResult.Failure("加载新话题失败，请重试"))
+        val failedViewModel = viewModel(repository = failed)
+        failedViewModel.addIncomingTopic(9L)
+        failedViewModel.loadIncomingTopics()
+        advanceUntilIdle()
+
+        assertEquals(listOf(9L), failedViewModel.uiState.value.incomingTopicIds)
+        assertTrue(failedViewModel.uiState.value.incomingPromptVisible)
+        assertEquals("加载新话题失败，请重试", failedViewModel.uiState.value.error)
+        assertFalse(failedViewModel.uiState.value.isLoadingIncoming)
+
+        val empty = OutcomeHomeRepository(
+            HomePageResult.Success(HomePage(emptyList(), page = 0, hasMore = false))
+        )
+        val emptyViewModel = viewModel(repository = empty)
+        emptyViewModel.addIncomingTopic(9L)
+        emptyViewModel.loadIncomingTopics()
+        advanceUntilIdle()
+
+        assertEquals(listOf(9L), emptyViewModel.uiState.value.incomingTopicIds)
+        assertTrue(emptyViewModel.uiState.value.incomingPromptVisible)
+        assertEquals("暂未获取到新话题，请稍后重试", emptyViewModel.uiState.value.error)
+    }
+
+    @Test
     fun loadIncomingTopics_prepends_only_topics_missing_from_current_list() = runTest {
         val repository = FakeHomeRepository(
             HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = true)),
@@ -182,10 +243,19 @@ class HomeViewModelTest {
         viewModel.loadIncomingTopics()
         advanceUntilIdle()
 
-        assertEquals(listOf(2L, 1L), viewModel.uiState.value.topics.map(HomeTopic::id))
+        assertEquals(listOf(1L, 2L), viewModel.uiState.value.topics.map(HomeTopic::id))
         assertEquals(listOf(1L, 2L), repository.byIdsCalls)
+        assertEquals(listOf(1L, 2L), viewModel.uiState.value.incomingInsertIds)
+        assertEquals(listOf(1L, 2L), viewModel.uiState.value.incomingHighlightIds)
+        assertTrue(viewModel.uiState.value.isLoadingIncoming)
+        val epoch = viewModel.uiState.value.incomingInsertEpoch
+        viewModel.finishIncomingInsert(epoch)
+        assertTrue(viewModel.uiState.value.incomingInsertIds.isEmpty())
+        assertEquals(listOf(1L, 2L), viewModel.uiState.value.incomingHighlightIds)
+        assertTrue(viewModel.uiState.value.incomingHighlightUntil > 0L)
         assertTrue(viewModel.uiState.value.incomingTopicIds.isEmpty())
         assertFalse(viewModel.uiState.value.incomingPromptVisible)
+        assertFalse(viewModel.uiState.value.isLoadingIncoming)
     }
 
     @Test
@@ -224,9 +294,9 @@ class HomeViewModelTest {
     }
 }
 
-private fun topic(id: Long) = HomeTopic(
+private fun topic(id: Long, title: String = "Topic $id") = HomeTopic(
     id = id,
-    title = "Topic $id",
+    title = title,
     author = HomeUser(id = id, username = "user$id")
 )
 
@@ -260,6 +330,14 @@ private class BlockingHomeRepository : FakeHomeRepository(
         callCount += 1
         return super.load(query, page)
     }
+}
+
+private class OutcomeHomeRepository(
+    private val result: HomePageResult
+) : HomeRepository {
+    override suspend fun load(query: HomeQuery, page: Int): HomePageResult = result
+
+    override suspend fun loadByIds(topicIds: List<Long>): HomePageResult = result
 }
 
 private class DeferredHomeRepository : HomeRepository {

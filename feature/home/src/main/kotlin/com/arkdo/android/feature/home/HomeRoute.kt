@@ -64,6 +64,8 @@ fun HomeRoute(
         accountUser = accountUser,
         colors = colors,
         avatarBaseUrl = avatarBaseUrl,
-        onFabScroll = viewModel::updateFabMode
+        onFabScroll = viewModel::updateFabMode,
+        onIncomingInsertFinished = viewModel::finishIncomingInsert,
+        onIncomingHighlightFinished = viewModel::finishIncomingHighlight
     )
 }

@@ -39,7 +39,15 @@ data class MessageBusData(
     @SerialName("unread_high_priority_notifications") val unreadHighPriorityNotifications: Int? = null,
     @SerialName("id") val id: Long? = null,
     @SerialName("post_number") val postNumber: Int? = null,
-    @SerialName("type") val type: String? = null
+    @SerialName("type") val type: String? = null,
+    @SerialName("payload") val payload: MessageBusTopicPayload? = null
+)
+
+/** /latest 与 /new 消息里嵌套的话题字段。 */
+@Serializable
+data class MessageBusTopicPayload(
+    @SerialName("category_id") val categoryId: Long? = null,
+    @SerialName("created_at") val createdAt: String? = null
 )
 
 /** MessageBus 事件模型。 */
@@ -55,6 +63,25 @@ data class MessageBusEvent(
 )
 
 typealias MessageBusListener = (MessageBusEvent) -> Unit
+
+const val LATEST_TOPICS_CHANNEL = "/latest"
+const val NEW_TOPICS_CHANNEL = "/new"
+
+/**
+ * 首页「新的或更新的话题」用的话题 id。
+ * /latest 只认 latest 与 new_topic，/new 只认 new_topic。静音类消息和别的频道都不算。
+ */
+fun extractIncomingHomeTopicId(event: MessageBusEvent?): Long? {
+    if (event?.type != "message" || event.data == null) return null
+    val allowed = when (event.channel) {
+        NEW_TOPICS_CHANNEL -> setOf("new_topic")
+        LATEST_TOPICS_CHANNEL -> setOf("latest", "new_topic")
+        else -> return null
+    }
+    if (event.data.messageType !in allowed) return null
+    val topicId = event.data.topicId ?: return null
+    return topicId.takeIf { it > 0 }
+}
 
 /** 从 /topic/<id> 频道事件里取话题 id。 */
 fun extractMessageBusTopicId(event: MessageBusEvent?): Long? {
