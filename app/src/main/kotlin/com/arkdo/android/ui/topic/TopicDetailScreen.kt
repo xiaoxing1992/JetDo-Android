@@ -101,6 +101,7 @@ import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
+import com.arkdo.android.ui.drafts.DraftResume
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import dev.chrisbanes.haze.HazeState
@@ -124,6 +125,7 @@ fun TopicDetailScreen(
     title: String? = null,
     targetPostNumber: Int? = null,
     highlightTarget: String? = null,
+    draftResume: DraftResume? = null,
     onNavigateBack: () -> Unit,
     onNavigateToTopic: (topicId: Long, slug: String?, targetPostNumber: Int?) -> Unit = { _, _, _ -> },
     onNavigateToUser: (User) -> Unit = {},
@@ -205,7 +207,7 @@ fun TopicDetailScreen(
     }
 
     LaunchedEffect(topicId, targetPostNumber) {
-        viewModel.loadTopic(topicId, slug, title, targetPostNumber)
+        viewModel.loadTopic(topicId, slug, title, targetPostNumber, draftResume)
     }
 
     // 阅读计时：页面前后台切换暂停/恢复；销毁时停止并 flushPending（对齐鸿蒙 TopicReadController.detach）。
@@ -231,6 +233,7 @@ fun TopicDetailScreen(
         // 引用归零后空闲 20s 自行卸载(见 MathRenderService)。
         com.arkdo.android.ui.components.MathRenderHostSlot()
 
+        // 只录楼层列表。回复按钮在这层外面取样，避免采到自己，也避开共享转场层把坐标算偏。
         SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = viewerState,
@@ -256,54 +259,54 @@ fun TopicDetailScreen(
                             }
                             else -> ui.topic?.let { topic ->
                                 TopicDetailContent(
-                                    hazeState = hazeState,
-                                    // 默认滚动位置：顶栏（状态栏+56dp）之下再让出 contentTopGap。
-                                    headerTopPadding = headerHeight + contentTopGap,
-                                    listState = listState,
-                                    topic = topic,
-                                    onOpenImages = { images, start -> viewerState = images to start },
-                                    categories = ui.categories,
-                                    posts = ui.posts,
-                                    isLoadingMore = ui.isLoadingMore,
-                                    hasMore = ui.hasMore,
-                                    onLoadMore = { viewModel.loadMorePosts() },
-                                    targetPostNumber = targetPostNumber,
-                                    flashTargetPostId = ui.flashTargetPostId,
-                                    // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
-                                    scrollRequestPostNumber = ui.scrollRequestPostNumber,
-                                    onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
-                                    hasEarlier = ui.hasEarlier,
-                                    earlierCount = ui.earlierCount,
-                                    isLoadingEarlier = ui.isLoadingEarlier,
-                                    onLoadEarlier = { viewModel.loadEarlierPosts() },
-                                    onOpenLink = onOpenUri,
-                                    onOpenUser = onOpenUser,
-                                    onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
-                                    onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
-                                    onCopyPostLink = { p -> viewModel.postLink(p) },
-                                    onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
-                                    onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
-                                    onReply = viewModel::openComposerForPost,
-                                    topicCreatedById = topic.createdById ?: -1L,
-                                    sharedIssueVisible = ui.sharedIssueVisible,
-                                    sharedIssueCreated = ui.sharedIssueCreated,
-                                    sharedIssueCount = ui.sharedIssueCount,
-                                    sharedIssueCanCreate = ui.sharedIssueCanCreate,
-                                    acceptedAnswers = topic.acceptedAnswers.orEmpty(),
-                                    onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) },
-                                    onVotePoll = { p, pollName, ids -> viewModel.votePoll(p, pollName, ids) },
-                                    onRemovePollVote = { p, pollName -> viewModel.removePollVote(p, pollName) },
-                                    boostDeleteTargetId = ui.boostDeleteTargetId,
-                                    boostDeleteLoadingId = ui.boostDeleteLoadingId,
-                                    onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
-                                    onDeleteBoost = { p, b, done -> viewModel.deleteBoost(p, b, done) },
-                                    onAddBoost = viewModel::openComposerForBoost,
-                                    onEdit = { p -> viewModel.openEditorForEdit(p) },
-                                    editLoadingPostId = ui.editLoadingPostId,
-                                    postActionLoadingId = ui.postActionLoadingId,
-                                    onDeletePost = { p -> viewModel.deleteOwnPost(p) {} },
-                                    onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
-                                    onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) }
+                                        hazeState = hazeState,
+                                        // 默认滚动位置：顶栏（状态栏+56dp）之下再让出 contentTopGap。
+                                        headerTopPadding = headerHeight + contentTopGap,
+                                        listState = listState,
+                                        topic = topic,
+                                        onOpenImages = { images, start -> viewerState = images to start },
+                                        categories = ui.categories,
+                                        posts = ui.posts,
+                                        isLoadingMore = ui.isLoadingMore,
+                                        hasMore = ui.hasMore,
+                                        onLoadMore = { viewModel.loadMorePosts() },
+                                        targetPostNumber = targetPostNumber,
+                                        flashTargetPostId = ui.flashTargetPostId,
+                                        // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
+                                        scrollRequestPostNumber = ui.scrollRequestPostNumber,
+                                        onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
+                                        hasEarlier = ui.hasEarlier,
+                                        earlierCount = ui.earlierCount,
+                                        isLoadingEarlier = ui.isLoadingEarlier,
+                                        onLoadEarlier = { viewModel.loadEarlierPosts() },
+                                        onOpenLink = onOpenUri,
+                                        onOpenUser = onOpenUser,
+                                        onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
+                                        onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
+                                        onCopyPostLink = { p -> viewModel.postLink(p) },
+                                        onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
+                                        onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
+                                        onReply = viewModel::openComposerForPost,
+                                        topicCreatedById = topic.createdById ?: -1L,
+                                        sharedIssueVisible = ui.sharedIssueVisible,
+                                        sharedIssueCreated = ui.sharedIssueCreated,
+                                        sharedIssueCount = ui.sharedIssueCount,
+                                        sharedIssueCanCreate = ui.sharedIssueCanCreate,
+                                        acceptedAnswers = topic.acceptedAnswers.orEmpty(),
+                                        onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) },
+                                        onVotePoll = { p, pollName, ids -> viewModel.votePoll(p, pollName, ids) },
+                                        onRemovePollVote = { p, pollName -> viewModel.removePollVote(p, pollName) },
+                                        boostDeleteTargetId = ui.boostDeleteTargetId,
+                                        boostDeleteLoadingId = ui.boostDeleteLoadingId,
+                                        onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
+                                        onDeleteBoost = { p, b, done -> viewModel.deleteBoost(p, b, done) },
+                                        onAddBoost = viewModel::openComposerForBoost,
+                                        onEdit = { p -> viewModel.openEditorForEdit(p) },
+                                        editLoadingPostId = ui.editLoadingPostId,
+                                        postActionLoadingId = ui.postActionLoadingId,
+                                        onDeletePost = { p -> viewModel.deleteOwnPost(p) {} },
+                                        onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
+                                        onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) }
                                 )
                             }
                         }
@@ -368,11 +371,8 @@ fun TopicDetailScreen(
             }
         }
 
-        // 右下角悬浮回复按钮（对齐鸿蒙 smartReachReplyFab / replyFabButton）：
-        // 52dp 圆形、默认透明底 + 0.5vp 半透明白光边（hds_floating_action_highlight）+
-        // 品牌蓝图标 22dp（品牌蓝只用于图标，对齐 REPLY_BLUE 注释「品牌蓝仅用于图标」）。
-        // 玻璃磨砂是设置项且默认关（FabGlassPrefs），关闭态就是透明+光边；设置页迁移后接。
-        // 出现淡入 150ms；消失立即移除（打开浮层时被遮罩盖住，无退场动画，对齐 asymmetric）。
+        // 右下角普通回复按钮：圆内 50% 白，描边 1.5dp、70% 白。不走玻璃。
+        // 出现淡入 150ms；消失立即移除（打开浮层时被遮罩盖住，无退场动画）。
         AnimatedVisibility(
             visible = ui.topic != null && !ui.composerVisible && viewerState == null,
             enter = fadeIn(tween(150, easing = EaseOut)),
@@ -381,24 +381,18 @@ fun TopicDetailScreen(
                 .align(Alignment.BottomEnd)
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(end = 16.dp, bottom = 16.dp)
-                .zIndex(2f)
+                .zIndex(4f)
         ) {
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(52.dp)
+                    .shadow(6.dp, CircleShape)
                     .clip(CircleShape)
-                    // 鸿蒙用 backgroundEffect(blur=28, color=#33F2F3F5, saturation=1.2) 把背后
-                    // 页面模糊成"亮白圆"——Android 无背后模糊，按"模糊均色后"的视觉等价给一个高亮
-                    // 浅白底（#F8F9FB，比 topicDetailPageBg 亮一档），再叠 0.6dp 描边和 6dp 软阴影
-                    // 在浅灰底上"托起"。比首页沿用 floatingActionBg 时明显得多。
-                    .background(arkdoColors.topicDetailReplyFabBg)
-                    .border(0.6.dp, arkdoColors.topicDetailReplyFabBorder, CircleShape)
-                    .shadow(elevation = 6.dp, shape = CircleShape, ambientColor = ArkdoFixedColors.ShadowSoft, spotColor = ArkdoFixedColors.ShadowSoft)
-                    .clickable(onClick = viewModel::openComposerForTopic),
-                contentAlignment = Alignment.Center
+                    .background(Color.White.copy(alpha = 0.5f))
+                    .border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                    .clickable(onClick = viewModel::openComposerForTopic)
             ) {
-                // 鸿蒙用 sys.symbol.message_fill（22dp、品牌蓝），Android 走 FA 库用 comment.svg
-                // （同样的实心消息气泡形态，对齐 symbol message_fill 视觉）。
                 FaIcon("comment", ArkdoFixedColors.BrandBlue, 22.dp)
             }
         }

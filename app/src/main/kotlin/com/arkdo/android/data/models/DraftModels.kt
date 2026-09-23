@@ -14,6 +14,7 @@ enum class DraftAction(val value: String) {
     @SerialName("createTopic") NEW_TOPIC("createTopic"),
     @SerialName("reply") REPLY("reply"),
     @SerialName("privateMessage") PRIVATE_MESSAGE("privateMessage"),
+    @SerialName("edit") EDIT("edit"),
     OTHER("other");
 
     companion object {
@@ -72,6 +73,18 @@ data class Draft(
     /** 正文原文。 */
     val reply: String
         get() = parsed?.reply ?: ""
+
+    /** 编辑草稿的目标楼。缺了就不能开编辑态。 */
+    val postId: Long?
+        get() = parsed?.postId?.takeIf { it > 0 }
+
+    /** 编辑开始时的服务端原文，409 冲突比对用。 */
+    val originalText: String?
+        get() = parsed?.originalText
+
+    /** 列表两行预览：优先服务端 excerpt，没有再退回正文，并清掉图片和引用块。 */
+    val excerpt: String
+        get() = cleanDraftExcerpt(excerptRaw, reply)
 }
 
 /** Draft.data 的内嵌 JSON 结构。 */
@@ -89,7 +102,8 @@ data class DraftData(
     @SerialName("locale") val locale: String? = null,
     @SerialName("reply_to_post_number") val replyToPostNumber: Int? = null,
     @SerialName("reply_to_user") val replyToUser: DraftUserRef? = null,
-    @SerialName("original_text") val originalText: String? = null
+    @SerialName("original_text") val originalText: String? = null,
+    @SerialName("postId") val postId: Long? = null
 )
 
 @Serializable
@@ -119,3 +133,13 @@ data class SaveDraftResponse(
     @SerialName("success") val success: String? = null,
     @SerialName("draft_sequence") val draftSequence: Long? = null
 )
+
+/** 列表预览清洗，对齐鸿蒙 DraftService.cleanExcerpt。 */
+internal fun cleanDraftExcerpt(excerpt: String?, reply: String?): String {
+    val source = excerpt?.takeIf { it.isNotEmpty() } ?: reply.orEmpty()
+    return source
+        .replace(Regex("""!\[[^\]]*]\([^)]*\)"""), "[图片]")
+        .replace(Regex("""\[quote=[^\]]*\][\s\S]*?\[/quote\]"""), "")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+}
