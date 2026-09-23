@@ -74,7 +74,7 @@ import java.util.TimeZone
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchFilterPanel(
+internal fun SearchFilterPanel(
     initial: SearchFilters,
     categories: List<HomeCategory>,
     tokens: SearchVisualTokens,
