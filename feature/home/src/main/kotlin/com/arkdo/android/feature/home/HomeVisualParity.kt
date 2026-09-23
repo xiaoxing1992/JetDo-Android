@@ -75,6 +75,52 @@ internal fun incomingInsertAlpha(progress: Float, fadeIn: Boolean): Float =
 internal fun incomingHighlightHoldMs(remainingMs: Long): Long =
     (remainingMs - INCOMING_HIGHLIGHT_FADE_MS).coerceAtLeast(0L)
 
+internal const val INCOMING_DIGIT_MS: Int = 260
+
+internal enum class IncomingDigitKind { STABLE, ROLL, ENTER, EXIT }
+
+internal data class IncomingDigitColumn(
+    val previous: String,
+    val current: String,
+    val kind: IncomingDigitKind
+)
+
+/**
+ * 提示条数字按位对齐。个位在右，短的一侧前导位是空串：
+ * 空的旧位是进位，空的新位是退位，两边都有且不同才滚动。
+ */
+internal fun incomingDigitColumns(previousCount: Int, currentCount: Int): List<IncomingDigitColumn> {
+    val previous = previousCount.coerceAtLeast(0).toString()
+    val current = currentCount.coerceAtLeast(0).toString()
+    val width = maxOf(previous.length, current.length)
+    return List(width) { index ->
+        val previousDigit = digitAt(previous, index, width)
+        val currentDigit = digitAt(current, index, width)
+        val kind = when {
+            previousDigit.isEmpty() -> IncomingDigitKind.ENTER
+            currentDigit.isEmpty() -> IncomingDigitKind.EXIT
+            previousDigit != currentDigit -> IncomingDigitKind.ROLL
+            else -> IncomingDigitKind.STABLE
+        }
+        IncomingDigitColumn(previousDigit, currentDigit, kind)
+    }
+}
+
+private fun digitAt(value: String, index: Int, width: Int): String {
+    val offset = index - (width - value.length)
+    return if (offset < 0) "" else value[offset].toString()
+}
+
+/** enter 从 0 展开到满宽，exit 从满宽合到 0，其余保持满宽。 */
+internal fun incomingDigitColumnWidth(kind: IncomingDigitKind, progress: Float, fullWidth: Float): Float {
+    val clamped = progress.coerceIn(0f, 1f)
+    return when (kind) {
+        IncomingDigitKind.ENTER -> fullWidth * clamped
+        IncomingDigitKind.EXIT -> fullWidth * (1f - clamped)
+        else -> fullWidth
+    }
+}
+
 internal data class HomeTextSegment(val text: String, val hit: Boolean)
 
 /**
