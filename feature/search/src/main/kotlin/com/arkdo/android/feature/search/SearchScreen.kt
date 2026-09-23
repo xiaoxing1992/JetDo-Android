@@ -70,7 +70,7 @@ import com.arkdo.android.core.model.SearchType
  * 点条目勾选当前项 —— 全部照搬 SearchOverlay.SearchBarRow 的排布。
  */
 @Composable
-fun SearchScreen(
+internal fun SearchScreen(
     state: SearchUiState,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,

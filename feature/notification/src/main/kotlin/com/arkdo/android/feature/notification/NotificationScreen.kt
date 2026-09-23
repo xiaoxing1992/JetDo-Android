@@ -49,7 +49,7 @@ private val Brand = Color(0xFF0088CC)
 private val UnreadBackground = Color(0xFFE8F1FE)
 
 @Composable
-fun NotificationScreen(
+internal fun NotificationScreen(
     state: NotificationUiState,
     loggedIn: Boolean,
     showTopBar: Boolean,

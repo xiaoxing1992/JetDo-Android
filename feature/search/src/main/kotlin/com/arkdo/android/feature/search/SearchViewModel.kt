@@ -43,7 +43,7 @@ internal const val LOGIN_REQUIRED_MESSAGE = "登录后才能搜索"
 /** 标签联想防抖(对齐鸿蒙 TAG_DEBOUNCE_MS,与搜索框同一量级)。 */
 internal const val TAG_DEBOUNCE_MS = 300L
 
-data class SearchUiState(
+internal data class SearchUiState(
     val query: String = "",
     val searchType: SearchType = SearchType.TOPICS,
     /** 帖子结果。 */
@@ -99,7 +99,7 @@ class SearchViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
-    val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+    internal val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     private var debounceJob: Job? = null
     /** 请求序号:边打字边搜时丢弃过期响应(只认最后一次)。 */

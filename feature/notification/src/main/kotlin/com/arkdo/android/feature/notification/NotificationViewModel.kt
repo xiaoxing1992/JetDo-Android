@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class NotificationUiState(
+internal data class NotificationUiState(
     val items: List<NotificationItem> = emptyList(),
     val initialLoading: Boolean = false,
     val refreshing: Boolean = false,
@@ -30,7 +30,7 @@ class NotificationViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NotificationUiState())
-    val uiState: StateFlow<NotificationUiState> = _uiState.asStateFlow()
+    internal val uiState: StateFlow<NotificationUiState> = _uiState.asStateFlow()
 
     private var loading = false
 
