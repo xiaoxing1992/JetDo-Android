@@ -231,6 +231,18 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun dismissIncomingTopics_clears_prompt_and_pending_insert() = runTest {
+        val viewModel = viewModel(repository = FakeHomeRepository())
+
+        viewModel.addIncomingTopic(11L)
+        viewModel.dismissIncomingTopics()
+
+        assertTrue(viewModel.uiState.value.incomingTopicIds.isEmpty())
+        assertFalse(viewModel.uiState.value.incomingPromptVisible)
+        assertTrue(viewModel.uiState.value.incomingInsertIds.isEmpty())
+    }
+
+    @Test
     fun loadIncomingTopics_moves_updated_rows_to_the_top_and_keeps_fresh_data() = runTest {
         val updated = topic(id = 1L, title = "Topic 1 updated")
         val repository = FakeHomeRepository(

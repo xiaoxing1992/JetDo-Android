@@ -69,8 +69,9 @@ import com.arkdo.android.ui.theme.arkdoColors
 
 // 设置页,对齐鸿蒙 SettingsPage:灰底无描边卡片。
 // 外观三档会立刻改主题。关于里的反馈、版本、免责声明、诊断日志是真入口。
-// 论坛 / 通知 / 网络 / 实验 / 我的站点 / 帖子列表样式在 Android 上还没有子页,
-// 点了只提示,不造一个空页面冒充已经做好。悬浮按钮玻璃效果没有消费方,先不放开关。
+// 论坛 / 通知 / 网络 / 我的站点 / 帖子列表样式在 Android 上还没有子页,
+// 点了只提示,不造一个空页面冒充已经做好。实验性功能只放了首页新话题提醒。
+// 悬浮按钮玻璃效果没有消费方,先不放开关。
 
 private val PageMargin = 12.dp
 private val CardRadius = 16.dp
@@ -89,6 +90,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onOpenFeedback: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenExperimental: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -159,7 +161,7 @@ fun SettingsScreen(
                 SettingRow(
                     icon = Icons.Outlined.Science,
                     label = "实验性功能",
-                    onClick = { toastNotMigrated(context) }
+                    onClick = onOpenExperimental
                 )
                 Hairline()
                 SettingRow(

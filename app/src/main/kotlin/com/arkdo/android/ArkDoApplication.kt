@@ -4,6 +4,7 @@ import android.app.Application
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.arkdo.android.common.theme.ThemeModeStore
+import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
 import com.arkdo.android.services.network.DohService
 import com.arkdo.android.services.session.LoginGate
@@ -48,6 +49,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         LoginGate.initPersist(this)
         // 主题三态要在首帧之前读出来，否则设置页选的浅色/深色要等下一次重组才生效。
         ThemeModeStore.init(this)
+        RealtimeTopicsPrefs.init(this)
 
         // 初始化 DoH (DNS over HTTPS)：从 DohManager 读配置构造解析器。
         // 同步执行（只读 SharedPreferences，不发请求），避免 host WebView 抢在配置就绪前建起来。

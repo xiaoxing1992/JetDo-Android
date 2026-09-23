@@ -28,6 +28,7 @@ import com.arkdo.android.ui.composer.canUseComposer
 import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.ui.screens.DebugLogScreen
+import com.arkdo.android.ui.screens.ExperimentalSettingsScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.ProfileScreen
 import com.arkdo.android.ui.screens.SettingsScreen
@@ -376,8 +377,12 @@ fun ArkDoNavHost(
                 onOpenFeedback = {
                     navController.navigate("${Routes.TOPIC_DETAIL}/${AppConstants.FEEDBACK_TOPIC_ID}")
                 },
-                onOpenDiagnostics = { navController.navigate(Routes.DEBUG_LOG) }
+                onOpenDiagnostics = { navController.navigate(Routes.DEBUG_LOG) },
+                onOpenExperimental = { navController.navigate(Routes.SETTINGS_EXPERIMENTAL) }
             )
+        }
+        composable(Routes.SETTINGS_EXPERIMENTAL) {
+            ExperimentalSettingsScreen(onNavigateBack = { navController.popBackStack() })
         }
         }
 

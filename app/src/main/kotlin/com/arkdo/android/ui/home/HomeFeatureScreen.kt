@@ -4,8 +4,12 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
@@ -50,9 +54,15 @@ fun HomeFeatureScreen(
     }
     val eventSequence = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     val currentQuery = rememberUpdatedState(viewModel.currentQuery)
+    val realtimeTopicsEnabled by RealtimeTopicsPrefs.enabled.collectAsState()
+    val acceptsRealtime = rememberUpdatedState(realtimeTopicsEnabled)
+    LaunchedEffect(realtimeTopicsEnabled) {
+        if (!realtimeTopicsEnabled) viewModel.dismissIncomingTopics()
+    }
     DisposableEffect(Unit) {
         val main = Handler(Looper.getMainLooper())
         val unsubscribe = MessageBusEventBus.subscribe { event ->
+            if (!acceptsRealtime.value) return@subscribe
             if (!acceptsIncomingTopic(currentQuery.value, event)) return@subscribe
             val topicId = extractIncomingHomeTopicId(event) ?: return@subscribe
             main.post {
