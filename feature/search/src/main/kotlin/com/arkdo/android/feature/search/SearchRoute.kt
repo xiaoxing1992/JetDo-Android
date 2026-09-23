@@ -1,8 +1,5 @@
 package com.arkdo.android.feature.search
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -12,16 +9,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.core.model.HomeCategory
-import com.arkdo.android.core.model.SearchFilters
-import com.arkdo.android.core.model.SearchHit
-import com.arkdo.android.core.model.SearchType
 
 /**
  * 搜索页的对外入口。
  *
  * 与 `HomeRoute`/`NotificationRoute` 同一套写法:Route 负责把 ViewModel 的状态与回调
- * 接给 Screen,并把宿主(app 层)注入的依赖(视觉 token、主题色、帖子行渲染器)透传下去。
- * feature 模块不依赖 app 主题,颜色由启动处映射。
+ * 接给 Screen,并把宿主(app 层)注入的视觉 token 透传下去。
+ * 帖子行由搜索模块自己画,头像和资源走 [avatarBaseUrl]。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,7 +26,7 @@ fun SearchRoute(
     onBack: () -> Unit,
     onOpenTopic: (topicId: Long, targetPostNumber: Int?) -> Unit,
     onOpenUser: (username: String) -> Unit,
-    topicRow: @Composable (hit: SearchHit, categories: List<HomeCategory>, highlights: List<String>) -> Unit,
+    avatarBaseUrl: String,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -50,7 +44,7 @@ fun SearchRoute(
     SearchScreen(
         state = state,
         tokens = tokens,
-        topicRow = topicRow,
+        avatarBaseUrl = avatarBaseUrl,
         onQueryChange = viewModel::setQuery,
         onSubmit = viewModel::submit,
         onSearchTypeChange = viewModel::setSearchType,

@@ -65,6 +65,7 @@ import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.feature.search.parseTopicHexColor
 
 // ==========================================================================
 // 对齐鸿蒙版 views/components/CategoryDrawer.ets。
@@ -557,7 +558,7 @@ private fun CategoryRow(
     val context = LocalContext.current
 
     val restricted = category.readRestricted && !isLoggedIn
-    val accent = parseHexColor(category.color) ?: Color(0xFF6B7280)
+    val accent = parseTopicHexColor(category.color) ?: Color(0xFF6B7280)
     val iconId = homeCategoryIcon(context, category, parent)
     val logo = category.uploadedLogo?.takeIf(String::isNotBlank)
         ?: parent?.uploadedLogo?.takeIf(String::isNotBlank)

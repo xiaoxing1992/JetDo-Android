@@ -39,3 +39,16 @@ data class SearchVisualTokens(
         )
     }
 }
+
+/** 搜索结果行只取色板里和帖子行重叠的那几项。 */
+internal fun SearchVisualTokens.toTopicRowColors(): TopicRowColors = TopicRowColors(
+    pageBg = pageBg,
+    textSecondary = textSecondary,
+    textBody = textPrimary,
+    brand = ldAccent,
+    border = border,
+    surfaceMuted = surfaceMuted,
+    avatarFg = textSecondary,
+    avatarBorder = Color(0x4D00AEFF),
+    unread = Color(0xFF66CCFF)
+)

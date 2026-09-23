@@ -83,8 +83,7 @@ fun SearchScreen(
     onClearHistory: () -> Unit,
     onLoadMore: () -> Unit,
     tokens: SearchVisualTokens = SearchVisualTokens.Default,
-    /** 帖子结果行由宿主提供(复用首页那张卡,视觉才一致);高亮词取本次搜索词的解析结果。 */
-    topicRow: @Composable (hit: SearchHit, categories: List<HomeCategory>, highlights: List<String>) -> Unit
+    avatarBaseUrl: String
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -173,7 +172,7 @@ fun SearchScreen(
                         tokens = tokens,
                         onOpenTopic = onOpenTopic,
                         onLoadMore = onLoadMore,
-                        topicRow = topicRow
+                        avatarBaseUrl = avatarBaseUrl
                     )
                 }
             }
@@ -375,7 +374,7 @@ private fun TopicResults(
     tokens: SearchVisualTokens,
     onOpenTopic: (SearchHit) -> Unit,
     onLoadMore: () -> Unit,
-    topicRow: @Composable (hit: SearchHit, categories: List<HomeCategory>, highlights: List<String>) -> Unit
+    avatarBaseUrl: String
 ) {
     LazyColumn(
         state = listState,
@@ -385,8 +384,22 @@ private fun TopicResults(
         // 点击走行组件自己的 onClick/onUnreadBadgeClick(其根部 clickable 会吃掉
         // 外层包装的点击)。鸿蒙搜索结果列表自带水平留白 16,行组件内已是 12,外层补 4。
         items(state.hits, key = { it.topic.id }) { hit ->
+            val category = hit.topic.category ?: state.categories.firstOrNull { it.id == hit.topic.categoryId }
+            val parent = category?.parentCategoryId?.let { parentId ->
+                state.categories.firstOrNull { it.id == parentId }
+            }
             Box(modifier = Modifier.padding(horizontal = 4.dp)) {
-                topicRow(hit, state.categories, state.highlights)
+                TopicRow(
+                    topic = hit.topic,
+                    category = category,
+                    parentCategory = parent,
+                    // 未读行和普通行都进同一个 handler,对齐鸿蒙 handleResultClick。
+                    onClick = { onOpenTopic(hit) },
+                    onUnreadClick = { onOpenTopic(hit) },
+                    colors = tokens.toTopicRowColors(),
+                    avatarBaseUrl = avatarBaseUrl,
+                    searchHighlights = state.highlights
+                )
             }
         }
 
