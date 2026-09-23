@@ -17,6 +17,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -76,6 +78,7 @@ import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.components.TagIconRegistry
 import com.arkdo.android.ui.components.TopicBadgeUtils
 import com.arkdo.android.ui.composer.MarkdownActions.EditState
 import com.arkdo.android.ui.composer.MarkdownActions.MdAction
@@ -97,7 +100,7 @@ import java.io.ByteArrayOutputStream
  * 预览:离屏 WebView 加载 assets/markdown/render.html(markdown-it)把 raw 编译成 HTML,
  * 交给 PostRichContent 与详情页同管线渲染;引擎未就绪/超时时退回原文。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewTopicScreen(
     categories: List<TopicCategory> = emptyList(),
@@ -291,14 +294,13 @@ fun NewTopicScreen(
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
 
-                // 分类 chip + 已选标签 chips + 加标签按钮(横滑)。
-                Row(
+                // 分类 chip + 已选标签 chips + 加标签按钮。一行放不下就换行，整颗 chip 点下去移除标签。
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     CategoryChip(
                         categories = effectiveCategories,
@@ -588,6 +590,11 @@ private fun CategoryChip(
 @Composable
 private fun SelectedTagChip(tag: TagSuggestion, onRemove: () -> Unit) {
     val colors = arkdoColors
+    val context = LocalContext.current
+    val icon = remember(tag.name) {
+        TagIconRegistry.ensureTagIconsLoaded(context)
+        TagIconRegistry.getTagIconStyle(tag.name)
+    }
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
@@ -596,6 +603,14 @@ private fun SelectedTagChip(tag: TagSuggestion, onRemove: () -> Unit) {
             .padding(start = 10.dp, end = 9.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (icon != null) {
+            FaIcon(
+                icon.iconId,
+                TagIconRegistry.parseColor(icon.color) ?: colors.ldAccent,
+                12.dp,
+                Modifier.padding(end = 5.dp)
+            )
+        }
         Text(tag.name, fontSize = 13.sp, color = colors.ldAccent)
         FaIcon("xmark", colors.ldAccent, 11.dp, Modifier.padding(start = 5.dp))
     }
