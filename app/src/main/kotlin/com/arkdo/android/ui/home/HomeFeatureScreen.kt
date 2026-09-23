@@ -6,8 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
@@ -51,8 +49,7 @@ fun HomeFeatureScreen(
         androidx.compose.runtime.mutableStateOf<HomeIncomingTopicEvent?>(null)
     }
     val eventSequence = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
-    val uiState by viewModel.uiState.collectAsState()
-    val currentQuery = rememberUpdatedState(uiState.query)
+    val currentQuery = rememberUpdatedState(viewModel.currentQuery)
     DisposableEffect(Unit) {
         val main = Handler(Looper.getMainLooper())
         val unsubscribe = MessageBusEventBus.subscribe { event ->
@@ -67,7 +64,6 @@ fun HomeFeatureScreen(
     }
 
     HomeRoute(
-        query = uiState.query,
         isWebViewReady = isWebViewReady,
         isLoggedIn = isLoggedIn,
         isCheckingSession = isCheckingSession,

@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.arkdo.android.core.model.HomeQuery
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -46,7 +47,7 @@ import kotlin.math.abs
  */
 @Composable
 fun HomeDrawerOverlay(
-    state: HomeUiState,
+    viewModel: HomeViewModel,
     isLoggedIn: Boolean,
     colors: HomeVisualTokens,
     assetBaseUrl: String,
@@ -63,6 +64,7 @@ fun HomeDrawerOverlay(
     content: @Composable () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val state by viewModel.uiState.collectAsState()
 
     val density = LocalDensity.current
     val drawerWidthPx = with(density) { DrawerWidth.toPx() }

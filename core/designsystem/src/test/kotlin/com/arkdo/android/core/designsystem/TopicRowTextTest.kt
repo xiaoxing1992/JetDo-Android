@@ -1,4 +1,4 @@
-package com.arkdo.android.feature.search
+package com.arkdo.android.core.designsystem
 
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic

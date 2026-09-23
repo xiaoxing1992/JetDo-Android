@@ -1,4 +1,4 @@
-package com.arkdo.android.feature.search
+package com.arkdo.android.core.designsystem
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color

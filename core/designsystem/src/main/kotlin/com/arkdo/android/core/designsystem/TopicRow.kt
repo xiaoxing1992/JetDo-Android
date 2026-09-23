@@ -1,4 +1,4 @@
-package com.arkdo.android.feature.search
+package com.arkdo.android.core.designsystem
 
 import android.content.Context
 import androidx.compose.foundation.background

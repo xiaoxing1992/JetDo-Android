@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-data class HomeUiState(
+internal data class HomeUiState(
     val query: HomeQuery = HomeQuery(),
     val topics: List<HomeTopic> = emptyList(),
     val page: Int = 0,
@@ -61,7 +61,13 @@ class HomeViewModel @Inject constructor(
     private val sessionVersion: SessionVersionSource
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
-    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    internal val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    /** 当前列表筛选。宿主发帖时带上选中的版块，不必订阅整份界面状态。 */
+    val composeCategoryId: Long? get() = _uiState.value.query.categoryId
+
+    /** 当前列表筛选。宿主判断实时新话题该不该提示时读这一份。 */
+    val currentQuery: HomeQuery get() = _uiState.value.query
 
     private var requestInFlight = false
     private var pendingLoad = false

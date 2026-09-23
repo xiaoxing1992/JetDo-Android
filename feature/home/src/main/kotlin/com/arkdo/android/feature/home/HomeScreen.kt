@@ -78,9 +78,9 @@ import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
-import com.arkdo.android.feature.search.TopicAvatar
-import com.arkdo.android.feature.search.TopicRow
-import com.arkdo.android.feature.search.TopicRowColors
+import com.arkdo.android.core.designsystem.TopicAvatar
+import com.arkdo.android.core.designsystem.TopicRow
+import com.arkdo.android.core.designsystem.TopicRowColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -91,7 +91,7 @@ private val FooterHeight = 54.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
+internal fun HomeScreen(
     state: HomeUiState,
     onRetry: () -> Unit,
     onRefresh: () -> Unit,

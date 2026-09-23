@@ -65,7 +65,7 @@ import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.core.designsystem.FaIcon
-import com.arkdo.android.feature.search.parseTopicHexColor
+import com.arkdo.android.core.designsystem.parseTopicHexColor
 
 // ==========================================================================
 // 对齐鸿蒙版 views/components/CategoryDrawer.ets。
@@ -86,7 +86,7 @@ private const val TAB_CATEGORY = 0
 private const val TAB_TAG = 1
 
 @Composable
-fun HomeDrawer(
+internal fun HomeDrawer(
     draft: HomeQuery,
     applied: HomeQuery,
     categories: List<HomeCategory>,
