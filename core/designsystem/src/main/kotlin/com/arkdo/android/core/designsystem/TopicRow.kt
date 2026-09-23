@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
@@ -81,7 +83,8 @@ fun TopicRow(
     colors: TopicRowColors,
     avatarBaseUrl: String,
     searchHighlights: List<String> = emptyList(),
-    background: Color = colors.pageBg
+    background: Color = colors.pageBg,
+    style: TopicListStyle = TopicListStyleStore.style.collectAsState().value
 ) {
     val click = if (topicUnreadTarget(topic) != null) onUnreadClick else onClick
     Column(
@@ -93,21 +96,23 @@ fun TopicRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(background)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = style.rowPadding.dp),
             verticalAlignment = Alignment.Top
         ) {
-            TopicAvatar(topic.author, 48.dp, colors, avatarBaseUrl)
-            Spacer(Modifier.width(8.dp))
+            TopicAvatar(topic.author, style.avatarSize.dp, colors, avatarBaseUrl)
+            Spacer(Modifier.width(style.avatarGap.dp))
             Column(modifier = Modifier.weight(1f)) {
-                TopicTitleRow(topic, colors, searchHighlights)
+                TopicTitleRow(topic, colors, searchHighlights, style)
                 topic.searchBlurb?.takeIf(String::isNotEmpty)?.let { blurb ->
-                    Spacer(Modifier.height(4.dp))
-                    TopicSearchBlurb(blurb, colors, searchHighlights)
+                    Spacer(Modifier.height(style.blurbGap.dp))
+                    TopicSearchBlurb(blurb, colors, searchHighlights, style)
                 }
                 val postedAt = relativeTime(topic.lastPostedAt)
                 if (topicHasMetadata(topic, category, postedAt)) {
-                    Spacer(Modifier.height(3.dp))
-                    TopicMetadataRow(category, parentCategory, topic.tags, postedAt, colors, avatarBaseUrl)
+                    Spacer(Modifier.height(style.metaRowGap.dp))
+                    TopicMetadataRow(
+                        category, parentCategory, topic.tags, postedAt, colors, avatarBaseUrl, style
+                    )
                 }
             }
         }
@@ -119,65 +124,90 @@ fun TopicRow(
 private fun TopicTitleRow(
     topic: HomeTopic,
     colors: TopicRowColors,
-    searchHighlights: List<String>
+    searchHighlights: List<String>,
+    style: TopicListStyle
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-    val iconSize = 15.dp
-    val iconSlot = with(density) { (iconSize + 5.dp).toSp() }
+    val iconSize = style.inlineIconSize.dp
+    val iconGap = style.inlineIconGap.dp
+    val iconSlot = with(density) { (iconSize + iconGap).toSp() }
     val iconSp = with(density) { iconSize.toSp() }
+    val badgeSize = style.unreadBadgeFontSize.sp
     val unreadCount = topic.unreadPosts
     val pillLabel = "\u00a0$unreadCount\u00a0"
     val pillWidth = if (unreadCount > 0) {
         with(density) {
             measurer.measure(
                 AnnotatedString(pillLabel),
-                TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                TextStyle(fontSize = badgeSize, fontWeight = FontWeight.Medium)
             ).size.width.toSp()
         }
     } else 0.sp
     val title = buildAnnotatedString {
         if (topic.bookmarked) appendInlineContent("bookmark", "bookmark")
         if (topic.hasAcceptedAnswer) appendInlineContent("solved", "solved")
-        // 标题命中只改颜色。字重保持整行 Medium，和鸿蒙 titleFontWeight 落在每一段上一样。
+        // 标题命中只改颜色。字重保持整行的设置值，和鸿蒙 titleFontWeight 落在每一段上一样。
         appendSearchText(topic.title, searchHighlights, colors.brand, emphasizeHit = false)
         if (unreadCount > 0) {
-            withStyle(SpanStyle(fontSize = 12.sp)) { append("  ") }
+            withStyle(SpanStyle(fontSize = badgeSize)) { append("  ") }
             appendInlineContent("unread", pillLabel)
         } else if (topic.unseen) {
-            withStyle(SpanStyle(fontSize = 8.sp, color = colors.unread)) { append(" ●") }
+            withStyle(SpanStyle(fontSize = style.unseenDotFontSize.sp, color = colors.unread)) { append(" ●") }
         }
     }
     val inline = buildMap {
         put("bookmark", InlineTextContent(Placeholder(iconSlot, iconSp, PlaceholderVerticalAlign.Center)) {
             Row {
                 FaIconRaw("bookmark-gray.svg", Modifier.size(iconSize))
-                Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.width(iconGap))
             }
         })
         put("solved", InlineTextContent(Placeholder(iconSlot, iconSp, PlaceholderVerticalAlign.Center)) {
             Row {
                 FaIconRaw("far-square-check-green.svg", Modifier.size(iconSize))
-                Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.width(iconGap))
             }
         })
         if (unreadCount > 0) {
-            put("unread", InlineTextContent(Placeholder(pillWidth, 12.sp, PlaceholderVerticalAlign.Center)) {
-                Box(
-                    modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(colors.unread),
-                    contentAlignment = Alignment.Center
+            put(
+                "unread",
+                InlineTextContent(
+                    Placeholder(pillWidth, style.titleFontSize.sp, PlaceholderVerticalAlign.TextCenter)
                 ) {
-                    Text(pillLabel, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(style.unreadBadgeRadius.dp))
+                                .background(colors.unread)
+                                .padding(vertical = 1.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                pillLabel,
+                                fontSize = badgeSize,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                            )
+                        }
+                    }
                 }
-            })
+            )
         }
     }
     Text(
         text = title,
         inlineContent = inline,
-        fontSize = 17.sp,
-        fontWeight = FontWeight.Medium,
-        lineHeight = 23.sp,
+        fontSize = style.titleFontSize.sp,
+        fontWeight = style.titleWeight,
+        lineHeight = style.titleLineHeight.sp,
+        style = TextStyle(
+            lineHeightStyle = LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Center,
+                trim = LineHeightStyle.Trim.None
+            )
+        ),
         color = colors.textBody,
         modifier = Modifier.fillMaxWidth()
     )
@@ -187,7 +217,8 @@ private fun TopicTitleRow(
 private fun TopicSearchBlurb(
     blurb: String,
     colors: TopicRowColors,
-    searchHighlights: List<String>
+    searchHighlights: List<String>,
+    style: TopicListStyle
 ) {
     val text = buildAnnotatedString {
         // 摘要非命中是常规字重，命中词升到 Medium 并染品牌色。
@@ -195,7 +226,7 @@ private fun TopicSearchBlurb(
     }
     Text(
         text = text,
-        fontSize = 13.sp,
+        fontSize = style.secondaryFontSize.sp,
         color = colors.textSecondary,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
@@ -230,7 +261,8 @@ private fun TopicMetadataRow(
     tags: List<HomeTag>,
     postedAt: String,
     colors: TopicRowColors,
-    assetBaseUrl: String
+    assetBaseUrl: String,
+    style: TopicListStyle
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (category != null || tags.isNotEmpty()) {
@@ -241,10 +273,12 @@ private fun TopicMetadataRow(
                     .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                category?.let { TopicCategoryBadge(it, parentCategory, colors, assetBaseUrl) }
+                category?.let { TopicCategoryBadge(it, parentCategory, colors, assetBaseUrl, style) }
                 val context = LocalContext.current
                 val tagStyles = remember(context) { loadTagStyles(context) }
-                tags.forEach { tag -> TopicTagBadge(tag, tagStyles[tag.name.trim().lowercase()], colors) }
+                tags.forEach { tag ->
+                    TopicTagBadge(tag, tagStyles[tag.name.trim().lowercase()], colors, style)
+                }
             }
         } else {
             Spacer(Modifier.weight(1f))
@@ -253,7 +287,7 @@ private fun TopicMetadataRow(
             Text(
                 postedAt,
                 color = colors.textSecondary,
-                fontSize = 13.sp,
+                fontSize = style.secondaryFontSize.sp,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
@@ -265,7 +299,8 @@ private fun TopicCategoryBadge(
     category: HomeCategory,
     parentCategory: HomeCategory?,
     colors: TopicRowColors,
-    assetBaseUrl: String
+    assetBaseUrl: String,
+    style: TopicListStyle
 ) {
     val context = LocalContext.current
     val iconId = topicCategoryIcon(context, category, parentCategory)
@@ -295,7 +330,7 @@ private fun TopicCategoryBadge(
         Text(
             text = category.name,
             color = colors.textSecondary,
-            fontSize = 14.sp,
+            fontSize = style.secondaryFontSize.sp,
             style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
         )
     }
@@ -304,7 +339,12 @@ private fun TopicCategoryBadge(
 private data class TagStyle(val iconId: String, val color: Color)
 
 @Composable
-private fun TopicTagBadge(tag: HomeTag, style: TagStyle?, colors: TopicRowColors) {
+private fun TopicTagBadge(
+    tag: HomeTag,
+    tagStyle: TagStyle?,
+    colors: TopicRowColors,
+    style: TopicListStyle
+) {
     Row(
         modifier = Modifier
             .padding(end = 7.dp)
@@ -314,13 +354,13 @@ private fun TopicTagBadge(tag: HomeTag, style: TagStyle?, colors: TopicRowColors
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (style != null && FaIconSet.has(LocalContext.current, style.iconId)) {
-            FaIcon(style.iconId, style.color, 10.dp, Modifier.padding(end = 4.dp))
+        if (tagStyle != null && FaIconSet.has(LocalContext.current, tagStyle.iconId)) {
+            FaIcon(tagStyle.iconId, tagStyle.color, 10.dp, Modifier.padding(end = 4.dp))
         }
         Text(
             text = tag.name,
             color = colors.textSecondary,
-            fontSize = 14.sp,
+            fontSize = style.secondaryFontSize.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
