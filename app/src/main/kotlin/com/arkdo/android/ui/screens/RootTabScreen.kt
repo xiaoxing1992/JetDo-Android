@@ -45,10 +45,8 @@ import com.arkdo.android.ui.components.TabVectorIcon
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeFeatureScreen
-import com.arkdo.android.ui.home.HomeScreen
-import com.arkdo.android.ui.home.HomeViewModel
-import com.arkdo.android.ui.home.toHomeQuery
 import com.arkdo.android.ui.home.toHomeUser
+import com.arkdo.android.feature.home.HomeViewModel
 import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.ui.notification.NotificationScreen
 
@@ -70,13 +68,10 @@ fun RootTabScreen(
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和 HomeScreen 共用同一个实例。
+    // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和首页共用同一个实例。
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
     val homeViewModel: HomeViewModel = hiltViewModel()
-    val legacyHomeState by homeViewModel.uiState.collectAsState()
-    LaunchedEffect(isWebViewReady) {
-        homeViewModel.loadSiteMetadataIfNeeded(isWebViewReady)
-    }
+    val homeState by homeViewModel.uiState.collectAsState()
 
     // 启动会话检查(对齐鸿蒙 RootTabPage handleArkWebReady:宿主就绪后才发 session 请求;
     // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录。之后 WebView 就绪、
@@ -128,7 +123,19 @@ fun RootTabScreen(
         onDispose { unsubscribe() }
     }
 
-    HomeDrawerHost(viewModel = homeViewModel) {
+    HomeDrawerHost(
+        uiState = homeState,
+        isLoggedIn = currentUser != null,
+        onOpen = { homeViewModel.openDrawer(currentUser != null) },
+        onClose = homeViewModel::closeDrawer,
+        onDraftChange = { homeViewModel.updateDraft(it, currentUser != null) },
+        onApply = homeViewModel::applyDraft,
+        onReset = homeViewModel::resetDraft,
+        onToggleExpand = homeViewModel::toggleDrawerExpand,
+        onTagQueryChange = homeViewModel::onTagQueryChanged,
+        onTagTabShown = homeViewModel::loadHotTagsIfNeeded,
+        onRetryCategories = homeViewModel::reloadCategories
+    ) {
     // 底栏是悬浮胶囊,内容全出血、从底栏下方穿过;各页滚动容器按这个高度垫
     // contentPadding.bottom,保证滚到底时最后一条不被底栏遮住。
     // 容器高 + 底部间隙 + 系统手势区,三段合一传给子页面(core:designsystem 的 CompositionLocal)。
@@ -231,67 +238,9 @@ fun RootTabScreen(
             popExitTransition = tabExitTransition
         ) {
             composable(Routes.HOME) {
-                val state by homeViewModel.uiState.collectAsState()
-                val context = androidx.compose.ui.platform.LocalContext.current
-                // 登录态/当前用户镜像:会话检查成功后写入;首页右上角账号入口据此渲染。
-                val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
-                val loggedIn = currentUser != null
-HomeScreen(
-                    isWebViewReady = isWebViewReady,
-                    viewModel = homeViewModel,
-                    onTopicClick = { topicId, targetPostNumber ->
-                        // target 非空 = 未读行跳楼:详情页加载后滚动到该楼层。
-                        val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
-                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
-                    },
-                    onProfileClick = {
-                        // 首页右上角头像 → 个人中心(对齐鸿蒙 handleAccountClick→push PROFILE)。
-                        // 「我的」页是根导航上的独立页,能盖住底部栏(Android 无底部栏,等效盖住 Tab 内容);
-                        // 从首页 push,返回键/返回按钮回首页。
-                        navController.navigate(Routes.PROFILE) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNotificationsClick = {
-                        // 首页顶栏铃铛 → 通知 tab(对齐鸿蒙 handleNotificationClick→switchTab NOTIFICATIONS)。
-                        tabNavController.navigate(Routes.NOTIFICATION) {
-                            popUpTo(tabNavController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    isLoggedIn = loggedIn,
-                    isCheckingSession = false,
-                    accountUser = currentUser,
-                    onComposeClick = {
-                        // 同时检查内存中的当前用户,避免持久化的旧登录标记在会话失效后
-                        // 仍然放行发帖页。登录成功后由用户再次点击发帖。
-                        if (ensureComposerAccess(context)) {
-                            val categoryId = state.listQuery.category?.id?.takeIf { it > 0 }
-                            val arg = categoryId?.let { "?categoryId=$it" } ?: ""
-                            navController.navigate("${Routes.NEW_TOPIC}$arg")
-                        }
-                    },
-                    onSearchClick = {
-                        // 顶栏放大镜 → 搜索页(对齐鸿蒙 HomePage 的 openSearch)。
-                        navController.navigate(Routes.SEARCH)
-                    },
-                    onDebugClick = {
-                        // 顶栏虫形图标 → 调试日志页(排障用,无需登录,可分享/复制日志文件)。
-                        navController.navigate(Routes.DEBUG_LOG)
-                    }
-                )
-            }
-            composable(Routes.NEW_HOME) {
-                // 模块化首页(feature:home)过渡 tab:与旧首页并存对照,
-                // 等视觉/交互对齐后再删掉旧首页。版块索引由 feature 内部自取。
                 val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
                 val context = androidx.compose.ui.platform.LocalContext.current
-                val featureQuery = legacyHomeState.listQuery.toHomeQuery()
                 HomeFeatureScreen(
-                    query = featureQuery,
                     isWebViewReady = isWebViewReady,
                     isLoggedIn = currentUser != null,
                     isCheckingSession = false,
@@ -313,13 +262,13 @@ HomeScreen(
                     onSearchClick = { navController.navigate(Routes.SEARCH) },
                     onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
                     onComposeClick = {
-                        // 与旧首页同一条会话闸门,未拿到当前用户时不得进入编辑页。
                         if (ensureComposerAccess(context)) {
-                            val arg = featureQuery.categoryId?.let { "?categoryId=$it" } ?: ""
+                            val arg = homeState.query.categoryId?.let { "?categoryId=$it" } ?: ""
                             navController.navigate("${Routes.NEW_TOPIC}$arg")
                         }
                     },
-                    onMenuClick = { homeViewModel.openDrawer() }
+                    onMenuClick = { homeViewModel.openDrawer(currentUser != null) },
+                    viewModel = homeViewModel
                 )
             }
             composable(Routes.NOTIFICATION) {
@@ -397,15 +346,9 @@ internal enum class RootTabDestination(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    LEGACY_HOME(
+    HOME(
         route = Routes.HOME,
         label = "首页",
-        selectedIcon = Icons.Filled.Home,
-        unselectedIcon = Icons.Outlined.Home
-    ),
-    NEW_HOME(
-        route = Routes.NEW_HOME,
-        label = "新首页",
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home
     ),
@@ -424,8 +367,7 @@ internal enum class RootTabDestination(
 }
 
 internal val rootTabDestinations = listOf(
-    RootTabDestination.LEGACY_HOME,
-    RootTabDestination.NEW_HOME,
+    RootTabDestination.HOME,
     RootTabDestination.NOTIFICATION,
     RootTabDestination.PROFILE
 )

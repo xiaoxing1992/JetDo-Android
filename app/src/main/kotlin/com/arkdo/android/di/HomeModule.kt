@@ -5,6 +5,7 @@ import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.data.search.DefaultSearchRepository
 import com.arkdo.android.core.data.search.SearchRepository
+import com.arkdo.android.core.data.session.SessionVersionSource
 import com.arkdo.android.core.data.site.DefaultCategoryRepository
 import com.arkdo.android.core.network.JsonNetworkClient
 import dagger.Module
@@ -30,4 +31,14 @@ object HomeModule {
     @Singleton
     fun provideSearchRepository(client: JsonNetworkClient): SearchRepository =
         DefaultSearchRepository(client)
+
+    @Provides
+    @Singleton
+    fun provideSessionVersionSource(): SessionVersionSource = object : SessionVersionSource {
+        override fun currentVersion(): Long =
+            com.arkdo.android.services.session.SessionEventBus.getCurrentVersion()
+
+        override fun subscribe(listener: (Long) -> Unit): () -> Unit =
+            com.arkdo.android.services.session.SessionEventBus.subscribe(listener)
+    }
 }

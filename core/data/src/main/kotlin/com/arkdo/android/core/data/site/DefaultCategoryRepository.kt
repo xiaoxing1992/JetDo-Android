@@ -1,7 +1,12 @@
 package com.arkdo.android.core.data.site
 
+import com.arkdo.android.core.data.json.DiscourseJson
 import com.arkdo.android.core.model.HomeCategory
+import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.core.network.JsonNetworkClient
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import java.net.URLEncoder
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -50,6 +55,33 @@ class DefaultCategoryRepository(
             CategoryLoadResult.Failure("站点信息响应不是有效 JSON")
         }
     }
+
+    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> {
+        val path = "/tags/filter/search?q=${encode(query.trim())}&limit=$limit&filterForInput=true"
+        val response = client.getJson(path)
+        if (!response.success) return emptyList()
+        val data = response.data ?: return emptyList()
+        return runCatching {
+            val root = json.parseToJsonElement(data).jsonObject
+            root["results"]?.jsonArray.orEmpty().mapNotNull { element ->
+                runCatching {
+                    val obj = element.jsonObject
+                    if (obj["pm_only"]?.jsonPrimitive?.contentOrNull == "true") return@runCatching null
+                    val id = DiscourseJson.long(obj, "id") ?: return@runCatching null
+                    val name = DiscourseJson.string(obj, "name") ?: return@runCatching null
+                    TagSuggestion(
+                        id = id,
+                        name = name,
+                        text = DiscourseJson.string(obj, "text") ?: name,
+                        count = DiscourseJson.int(obj, "count") ?: 0
+                    )
+                }.getOrNull()
+            }
+        }.getOrElse { emptyList() }
+    }
+
+    private fun encode(value: String): String =
+        URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
 
     private fun mapCategory(source: DiscourseCategory): HomeCategory? {
         val id = source.id ?: return null

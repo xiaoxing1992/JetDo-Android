@@ -1,6 +1,7 @@
 package com.arkdo.android.feature.home
 
 import com.arkdo.android.core.data.home.HomeRepository
+import com.arkdo.android.core.data.session.SessionVersionSource
 import com.arkdo.android.core.data.site.CategoryLoadResult
 import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.model.HomeCategory
@@ -10,6 +11,7 @@ import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
+import com.arkdo.android.core.model.TagSuggestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -40,8 +42,9 @@ class HomeViewModelTest {
 
     private fun viewModel(
         repository: HomeRepository = FakeHomeRepository(),
-        categories: CategoryRepository = FakeCategoryRepository()
-    ): HomeViewModel = HomeViewModel(repository, categories)
+        categories: CategoryRepository = FakeCategoryRepository(),
+        session: SessionVersionSource = FakeSessionVersionSource()
+    ): HomeViewModel = HomeViewModel(repository, categories, session)
 
     @Test
     fun loadInitial_publishesTopicsAndPaginationState() = runTest {
@@ -125,6 +128,66 @@ class HomeViewModelTest {
         viewModel.updateFabMode(scrollOffset = 1_199f, viewportHeight = 1_000f)
 
         assertFalse(viewModel.uiState.value.showBackToTopFab)
+    }
+
+    @Test
+    fun openDrawer_copiesQueryAndExpandsParent() = runTest {
+        val parent = HomeCategory(id = 1L, name = "开发")
+        val child = HomeCategory(id = 2L, name = "Android", parentCategoryId = 1L)
+        val categories = FakeCategoryRepository(CategoryLoadResult.Success(listOf(parent, child)))
+        val viewModel = viewModel(categories = categories)
+        viewModel.ensureCategoriesLoaded()
+        advanceUntilIdle()
+        viewModel.setQuery(HomeQuery(feed = HomeFeed.HOT, categoryId = 2L, categoryName = "Android"))
+        advanceUntilIdle()
+
+        viewModel.openDrawer(isLoggedIn = true)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.drawerOpen)
+        assertEquals(2L, state.draftQuery.categoryId)
+        assertEquals(HomeFeed.HOT, state.draftQuery.feed)
+        assertEquals(listOf(1L), state.drawerExpandedIds)
+    }
+
+    @Test
+    fun applyDraft_reloadsWhenQueryChanges() = runTest {
+        val repository = FakeHomeRepository()
+        val viewModel = viewModel(repository = repository)
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        viewModel.openDrawer(isLoggedIn = true)
+        viewModel.updateDraft(HomeQuery(feed = HomeFeed.HOT), isLoggedIn = true)
+
+        viewModel.applyDraft()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.drawerOpen)
+        assertEquals(HomeFeed.HOT, viewModel.uiState.value.query.feed)
+        assertEquals(2, repository.calls.size)
+    }
+
+    @Test
+    fun applyDraft_sameQueryDoesNotReload() = runTest {
+        val repository = FakeHomeRepository()
+        val viewModel = viewModel(repository = repository)
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        viewModel.openDrawer(isLoggedIn = true)
+
+        viewModel.applyDraft()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.calls.size)
+    }
+
+    @Test
+    fun loggedOutUnreadDraftFallsBackToLatest() = runTest {
+        val viewModel = viewModel()
+        viewModel.openDrawer(isLoggedIn = false)
+        viewModel.updateDraft(HomeQuery(feed = HomeFeed.UNREAD), isLoggedIn = false)
+
+        assertEquals(HomeFeed.LATEST, viewModel.uiState.value.draftQuery.feed)
     }
 
     @Test
@@ -292,6 +355,60 @@ class HomeViewModelTest {
         assertTrue(viewModel.uiState.value.incomingTopicIds.isEmpty())
         assertFalse(viewModel.uiState.value.incomingPromptVisible)
     }
+
+    @Test
+    fun session_version_change_reloads_the_current_list() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = false)),
+            HomePageResult.Success(HomePage(listOf(topic(5)), page = 0, hasMore = false))
+        )
+        val session = FakeSessionVersionSource()
+        val viewModel = viewModel(repository = repository, session = session)
+
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        session.emit(1L)
+        advanceUntilIdle()
+
+        assertEquals(listOf(5L), viewModel.uiState.value.topics.map(HomeTopic::id))
+        assertEquals(2, repository.calls.size)
+    }
+
+    @Test
+    fun session_version_change_queues_while_a_list_request_is_in_flight() = runTest {
+        val repository = DeferredHomeRepository()
+        val session = FakeSessionVersionSource()
+        val viewModel = viewModel(repository = repository, session = session)
+
+        viewModel.loadInitial()
+        session.emit(1L)
+
+        assertTrue(viewModel.uiState.value.pendingSessionRefresh)
+        assertEquals(0, repository.loadCalls)
+
+        repository.initial.complete(HomePageResult.Success(HomePage(listOf(topic(1)), 0, false)))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.pendingSessionRefresh)
+        assertEquals(2, repository.loadCalls)
+        assertEquals(listOf(7L), viewModel.uiState.value.topics.map(HomeTopic::id))
+    }
+
+    @Test
+    fun session_version_already_seen_does_not_reload() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = false))
+        )
+        val session = FakeSessionVersionSource(current = 3L)
+        val viewModel = viewModel(repository = repository, session = session)
+
+        viewModel.loadInitial()
+        advanceUntilIdle()
+        session.emit(3L)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.calls.size)
+    }
 }
 
 private fun topic(id: Long, title: String = "Topic $id") = HomeTopic(
@@ -343,12 +460,37 @@ private class OutcomeHomeRepository(
 private class DeferredHomeRepository : HomeRepository {
     val initial = kotlinx.coroutines.CompletableDeferred<HomePageResult>()
     val byIdsCalls = mutableListOf<Long>()
+    var loadCalls = 0
 
-    override suspend fun load(query: HomeQuery, page: Int): HomePageResult = initial.await()
+    override suspend fun load(query: HomeQuery, page: Int): HomePageResult {
+        loadCalls += 1
+        return if (loadCalls == 1) {
+            initial.await()
+        } else {
+            HomePageResult.Success(HomePage(listOf(topic(7)), page = 0, hasMore = false))
+        }
+    }
 
     override suspend fun loadByIds(topicIds: List<Long>): HomePageResult {
         byIdsCalls += topicIds
         return HomePageResult.Success(HomePage(listOf(topic(2)), page = 0, hasMore = false))
+    }
+}
+
+private class FakeSessionVersionSource(current: Long = 0L) : SessionVersionSource {
+    private var version = current
+    private val listeners = mutableListOf<(Long) -> Unit>()
+
+    override fun currentVersion(): Long = version
+
+    override fun subscribe(listener: (Long) -> Unit): () -> Unit {
+        listeners += listener
+        return { listeners.remove(listener) }
+    }
+
+    fun emit(next: Long) {
+        version = next
+        listeners.toList().forEach { it(next) }
     }
 }
 
@@ -362,4 +504,6 @@ private class FakeCategoryRepository(
         callCount += 1
         return result
     }
+
+    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> = emptyList()
 }

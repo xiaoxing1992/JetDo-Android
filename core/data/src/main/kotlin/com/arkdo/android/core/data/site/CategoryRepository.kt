@@ -12,4 +12,14 @@ sealed interface CategoryLoadResult {
 interface CategoryRepository {
     /** Loads the full category list from the site. */
     suspend fun load(): CategoryLoadResult
+
+    /**
+     * 全站标签联想。空查询返回热门标签；失败返回空列表，不打断筛选。
+     * 对应 `GET /tags/filter/search`。
+     */
+    suspend fun suggestTags(query: String, limit: Int = TAG_SUGGEST_LIMIT): List<com.arkdo.android.core.model.TagSuggestion>
+
+    companion object {
+        const val TAG_SUGGEST_LIMIT = 5
+    }
 }

@@ -3,6 +3,7 @@ package com.arkdo.android.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.core.data.home.HomeRepository
+import com.arkdo.android.core.data.session.SessionVersionSource
 import com.arkdo.android.core.data.site.CategoryLoadResult
 import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.model.HomeCategory
@@ -10,6 +11,9 @@ import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTopic
+import com.arkdo.android.core.model.TagSuggestion
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -31,6 +35,7 @@ data class HomeUiState(
     val incomingTopicIds: List<Long> = emptyList(),
     val isLoadingIncoming: Boolean = false,
     val pendingIncomingRefresh: Boolean = false,
+    val pendingSessionRefresh: Boolean = false,
     val incomingPromptVisible: Boolean = false,
     /** 正在插入的新行。动画由界面播完后调用 [HomeViewModel.finishIncomingInsert]。 */
     val incomingInsertIds: List<Long> = emptyList(),
@@ -39,13 +44,21 @@ data class HomeUiState(
     val incomingHighlightIds: List<Long> = emptyList(),
     val incomingHighlightUntil: Long = 0L,
     val categories: List<HomeCategory> = emptyList(),
-    val isCategoriesLoading: Boolean = false
+    val isCategoriesLoading: Boolean = false,
+    val categoriesError: String? = null,
+    val drawerOpen: Boolean = false,
+    val draftQuery: HomeQuery = HomeQuery(),
+    val drawerExpandedIds: List<Long> = emptyList(),
+    val tagQuery: String = "",
+    val tagResults: List<TagSuggestion> = emptyList(),
+    val tagLoading: Boolean = false
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: HomeRepository,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val sessionVersion: SessionVersionSource
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -55,21 +68,67 @@ class HomeViewModel @Inject constructor(
     private var generation = 0
     private var incomingRequestEpoch = 0
     private var categoriesRequested = false
+    private var categoryLoadFailed = false
+    private var handledSessionVersion = sessionVersion.currentVersion()
+    private val unsubscribeSession = sessionVersion.subscribe(::handleSessionChanged)
+    private var tagRequestEpoch = 0
+    private var tagSearchJob: Job? = null
 
-    /** Loads the site category index once; failures are silently swallowed (the list keeps working). */
+    init {
+        // 订阅前已经涨过的版本（登录发生在首页挂载之前）补一次，对齐鸿蒙 syncSessionVersion。
+        handleSessionChanged(sessionVersion.currentVersion())
+    }
+
+    override fun onCleared() {
+        unsubscribeSession()
+    }
+
+    /**
+     * 会话版本变了就重拉当前列表。撞上正在进行的请求先记账，请求结束再补拉。
+     * 版本不比已处理的新就丢掉，避免重复刷新。
+     */
+    private fun handleSessionChanged(version: Long) {
+        if (version <= handledSessionVersion) return
+        handledSessionVersion = version
+        if (requestInFlight || _uiState.value.isLoadingIncoming) {
+            _uiState.update { it.copy(pendingSessionRefresh = true) }
+            return
+        }
+        refresh()
+    }
+
+    private fun runPendingSessionRefresh() {
+        val state = _uiState.value
+        if (!state.pendingSessionRefresh) return
+        if (requestInFlight || state.isLoadingIncoming) return
+        _uiState.update { it.copy(pendingSessionRefresh = false) }
+        refresh()
+    }
+
+    /** Loads the site category index once; a failed load can be retried from the drawer. */
     fun ensureCategoriesLoaded() {
-        if (categoriesRequested) return
+        if (categoriesRequested && !categoryLoadFailed) return
         categoriesRequested = true
+        categoryLoadFailed = false
         if (_uiState.value.categories.isNotEmpty()) return
-        _uiState.update { it.copy(isCategoriesLoading = true) }
+        _uiState.update { it.copy(isCategoriesLoading = true, categoriesError = null) }
         viewModelScope.launch {
             val result = runCatching { categoryRepository.load() }
                 .getOrElse { CategoryLoadResult.Failure(it.message ?: "版块加载失败") }
             when (result) {
                 is CategoryLoadResult.Success -> _uiState.update {
-                    it.copy(categories = result.categories, isCategoriesLoading = false)
+                    it.copy(
+                        categories = result.categories,
+                        isCategoriesLoading = false,
+                        categoriesError = if (result.categories.isEmpty()) "站点未返回任何版块" else null
+                    )
                 }
-                is CategoryLoadResult.Failure -> _uiState.update { it.copy(isCategoriesLoading = false) }
+                is CategoryLoadResult.Failure -> {
+                    categoryLoadFailed = true
+                    _uiState.update {
+                        it.copy(isCategoriesLoading = false, categoriesError = result.message)
+                    }
+                }
             }
         }
     }
@@ -116,6 +175,87 @@ class HomeViewModel @Inject constructor(
 
     fun selectFeed(feed: HomeFeed) {
         setQuery(_uiState.value.query.copy(feed = feed))
+    }
+
+    fun openDrawer(isLoggedIn: Boolean) {
+        val state = _uiState.value
+        val parentId = state.query.categoryId?.let { selectedId ->
+            state.categories.firstOrNull { it.id == selectedId }?.parentCategoryId
+        }
+        val expanded = if (parentId != null && parentId !in state.drawerExpandedIds) {
+            state.drawerExpandedIds + parentId
+        } else {
+            state.drawerExpandedIds
+        }
+        if (state.categories.isEmpty()) ensureCategoriesLoaded()
+        val draft = state.query.withoutLoginOnlyFeeds(isLoggedIn)
+        _uiState.update {
+            it.copy(
+                drawerOpen = true,
+                draftQuery = draft,
+                drawerExpandedIds = expanded,
+                tagQuery = "",
+                tagResults = emptyList()
+            )
+        }
+    }
+
+    fun closeDrawer() {
+        _uiState.update { it.copy(drawerOpen = false) }
+    }
+
+    /** 抽屉里的改动只写草稿。未登录不能把未读流留在草稿里。 */
+    fun updateDraft(next: HomeQuery, isLoggedIn: Boolean) {
+        val draft = next.withoutLoginOnlyFeeds(isLoggedIn)
+        val categoryChanged = draft.categoryId != _uiState.value.draftQuery.categoryId
+        _uiState.update { it.copy(draftQuery = draft) }
+        if (categoryChanged && _uiState.value.tagQuery.isNotBlank()) {
+            loadTagSuggestions(_uiState.value.tagQuery)
+        }
+    }
+
+    fun resetDraft() {
+        _uiState.update { it.copy(draftQuery = HomeQuery()) }
+    }
+
+    /** 提交草稿。条件没变就只关抽屉。 */
+    fun applyDraft() {
+        val draft = _uiState.value.draftQuery
+        _uiState.update { it.copy(drawerOpen = false) }
+        setQuery(draft)
+    }
+
+    fun toggleDrawerExpand(categoryId: Long) {
+        _uiState.update {
+            val ids = it.drawerExpandedIds
+            it.copy(drawerExpandedIds = if (categoryId in ids) ids - categoryId else ids + categoryId)
+        }
+    }
+
+    fun onTagQueryChanged(query: String) {
+        _uiState.update { it.copy(tagQuery = query) }
+        tagSearchJob?.cancel()
+        tagSearchJob = viewModelScope.launch {
+            delay(TAG_DEBOUNCE_MS)
+            loadTagSuggestions(query.trim())
+        }
+    }
+
+    fun loadHotTagsIfNeeded() {
+        if (_uiState.value.tagResults.isNotEmpty() || _uiState.value.tagLoading) return
+        loadTagSuggestions(_uiState.value.tagQuery.trim())
+    }
+
+    private fun loadTagSuggestions(query: String) {
+        val epoch = ++tagRequestEpoch
+        _uiState.update { it.copy(tagLoading = true) }
+        viewModelScope.launch {
+            val results = runCatching {
+                categoryRepository.suggestTags(query)
+            }.getOrElse { emptyList() }
+            if (epoch != tagRequestEpoch) return@launch
+            _uiState.update { it.copy(tagLoading = false, tagResults = results) }
+        }
     }
 
     fun setQuery(query: HomeQuery) {
@@ -201,6 +341,7 @@ class HomeViewModel @Inject constructor(
                 }
             }
             runPendingIncomingRefresh()
+            runPendingSessionRefresh()
         }
     }
 
@@ -217,6 +358,7 @@ class HomeViewModel @Inject constructor(
             )
         }
         runPendingIncomingRefresh()
+        runPendingSessionRefresh()
     }
 
     /** 浅蓝已经淡回页面底色，清掉高亮，避免行一直停在浅蓝色。 */
@@ -312,6 +454,7 @@ class HomeViewModel @Inject constructor(
                 pendingLoad = false
                 loadInitial()
             }
+            runPendingSessionRefresh()
             runPendingIncomingRefresh()
         }
     }
@@ -323,4 +466,16 @@ class HomeViewModel @Inject constructor(
         val seen = existing.mapTo(HashSet()) { it.id }
         return existing + incoming.filter { seen.add(it.id) }
     }
+
+    private companion object {
+        const val TAG_DEBOUNCE_MS = 300L
+    }
 }
+
+/** 未读和未读新帖要登录。未登录时草稿退回「最新」，不发一定会失败的请求。 */
+internal fun HomeQuery.withoutLoginOnlyFeeds(isLoggedIn: Boolean): HomeQuery =
+    if (!isLoggedIn && (feed == HomeFeed.UNREAD || feed == HomeFeed.NEW)) {
+        copy(feed = HomeFeed.LATEST)
+    } else {
+        this
+    }

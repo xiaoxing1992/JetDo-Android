@@ -6,11 +6,10 @@ import org.junit.Test
 
 class RootTabDestinationTest {
     @Test
-    fun `底部 tab 顺序为 首页-新首页-通知-我的`() {
+    fun `底部 tab 顺序为 首页-通知-我的`() {
         assertEquals(
             listOf(
-                RootTabDestination.LEGACY_HOME to Routes.HOME,
-                RootTabDestination.NEW_HOME to Routes.NEW_HOME,
+                RootTabDestination.HOME to Routes.HOME,
                 RootTabDestination.NOTIFICATION to Routes.NOTIFICATION,
                 RootTabDestination.PROFILE to Routes.PROFILE
             ),
