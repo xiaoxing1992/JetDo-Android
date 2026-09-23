@@ -1,4 +1,4 @@
-package com.arkdo.android.ui.home
+package com.arkdo.android.feature.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -31,10 +31,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.arkdo.android.core.model.HomeQuery
-import com.arkdo.android.feature.home.HomeUiState
-import com.arkdo.android.ui.components.CategoryDrawer
-import com.arkdo.android.ui.theme.ArkdoFixedColors
-import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -45,14 +41,15 @@ import kotlin.math.abs
  * 而 RootTabScreen 的 Scaffold 会把内容区从标签栏和状态栏之间切出来，
  * 放在里面的抽屉永远够不到那几块。所以这里包住整个 RootTabScreen。
  *
- * 抽屉自身的上下系统栏留白在 CategoryDrawer 内部处理（对齐鸿蒙的
- * `padding({ top: sysTopInset })` + ConfirmBar `bottom: 12 + sysBottomInset`），
+ * 抽屉自身的上下系统栏留白在抽屉内容里处理，
  * 开关和草稿都由首页 ViewModel 持有，这里只负责跟手和动画。
  */
 @Composable
-fun HomeDrawerHost(
-    uiState: HomeUiState,
+fun HomeDrawerOverlay(
+    state: HomeUiState,
     isLoggedIn: Boolean,
+    colors: HomeVisualTokens,
+    assetBaseUrl: String,
     onOpen: () -> Unit,
     onClose: () -> Unit,
     onDraftChange: (HomeQuery) -> Unit,
@@ -65,41 +62,37 @@ fun HomeDrawerHost(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val colors = arkdoColors
     val coroutineScope = rememberCoroutineScope()
 
     val density = LocalDensity.current
-    val drawerWidthPx = with(density) { HomeConstants.DRAWER_WIDTH.dp.toPx() }
-    val edgeWidthPx = with(density) { HomeConstants.DRAWER_EDGE_WIDTH.dp.toPx() }
+    val drawerWidthPx = with(density) { DrawerWidth.toPx() }
+    val edgeWidthPx = with(density) { DrawerEdgeWidth.toPx() }
     // 0 = 完全在屏外，1 = 贴左边缘。跟手时直接 snapTo，松手再补完。
     val drawerProgress = remember { Animatable(0f) }
 
-    LaunchedEffect(uiState.drawerOpen) {
+    LaunchedEffect(state.drawerOpen) {
         drawerProgress.animateTo(
-            targetValue = if (uiState.drawerOpen) 1f else 0f,
+            targetValue = if (state.drawerOpen) 1f else 0f,
             animationSpec = tween(220, easing = EaseOut)
         )
     }
 
     /** 松手补完：过阈值就补到底，否则回弹。 */
     fun settleDrawer() {
-        val open = drawerProgress.value >= HomeConstants.DRAWER_COMMIT_RATIO
-        if (open == uiState.drawerOpen) {
+        val open = drawerProgress.value >= DrawerCommitRatio
+        if (open == state.drawerOpen) {
             // 状态没变，LaunchedEffect 不会触发，得自己收尾。
             coroutineScope.launch {
                 drawerProgress.animateTo(
                     if (open) 1f else 0f,
-                    tween(
-                        if (open) HomeConstants.DRAWER_COMMIT_MS.toInt()
-                        else HomeConstants.DRAWER_REBOUND_MS.toInt()
-                    )
+                    tween(if (open) DrawerCommitMs else DrawerReboundMs)
                 )
             }
         }
         if (open) onOpen() else onClose()
     }
 
-    BackHandler(enabled = uiState.drawerOpen) { onClose() }
+    BackHandler(enabled = state.drawerOpen) { onClose() }
 
     val progress = drawerProgress.value
 
@@ -129,7 +122,7 @@ fun HomeDrawerHost(
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(progress)
-                    .background(ArkdoFixedColors.Scrim)
+                    .background(colors.scrim)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -138,7 +131,7 @@ fun HomeDrawerHost(
 
             Box(
                 modifier = Modifier
-                    .width(HomeConstants.DRAWER_WIDTH.dp)
+                    .width(DrawerWidth)
                     .fillMaxHeight()
                     .offset { IntOffset(((progress - 1f) * drawerWidthPx).toInt(), 0) }
                     .background(colors.pageBg)
@@ -154,17 +147,19 @@ fun HomeDrawerHost(
                         onDragStopped = { settleDrawer() }
                     )
             ) {
-                CategoryDrawer(
-                    draft = uiState.draftQuery,
-                    applied = uiState.query,
-                    categories = uiState.categories,
-                    tagQuery = uiState.tagQuery,
-                    tagResults = uiState.tagResults,
-                    tagLoading = uiState.tagLoading,
+                HomeDrawer(
+                    draft = state.draftQuery,
+                    applied = state.query,
+                    categories = state.categories,
+                    tagQuery = state.tagQuery,
+                    tagResults = state.tagResults,
+                    tagLoading = state.tagLoading,
                     isLoggedIn = isLoggedIn,
-                    expandedIds = uiState.drawerExpandedIds,
-                    categoriesLoading = uiState.isCategoriesLoading,
-                    categoriesError = uiState.categoriesError,
+                    expandedIds = state.drawerExpandedIds,
+                    colors = colors,
+                    assetBaseUrl = assetBaseUrl,
+                    categoriesLoading = state.isCategoriesLoading,
+                    categoriesError = state.categoriesError,
                     onRetryCategories = onRetryCategories,
                     onDraftChange = onDraftChange,
                     onApply = onApply,
@@ -233,3 +228,9 @@ private fun Modifier.edgeSwipeToOpenDrawer(
         if (claimed) onEnd()
     }
 }
+
+private val DrawerWidth = 288.dp
+private val DrawerEdgeWidth = 56.dp
+private const val DrawerCommitRatio = 0.4f
+private const val DrawerCommitMs = 280
+private const val DrawerReboundMs = 220

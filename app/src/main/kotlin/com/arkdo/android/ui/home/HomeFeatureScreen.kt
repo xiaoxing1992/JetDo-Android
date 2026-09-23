@@ -124,6 +124,7 @@ fun arkdoHomeVisualTokens(): HomeVisualTokens {
         fabTopFg = colors.fabTopFg,
         incomingHighlight = colors.incomingHighlight,
         unread = ArkdoFixedColors.Unread,
-        amber = ArkdoFixedColors.Amber
+        amber = ArkdoFixedColors.Amber,
+        scrim = ArkdoFixedColors.Scrim
     )
 }

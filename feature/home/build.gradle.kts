@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
