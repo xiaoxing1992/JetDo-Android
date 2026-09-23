@@ -4,14 +4,14 @@ import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
 
 /** Same priority as the legacy home title: category, tag, feed, then app name. */
-fun homeTitle(query: HomeQuery, categoryName: String? = query.categoryName): String = when {
+internal fun homeTitle(query: HomeQuery, categoryName: String? = query.categoryName): String = when {
     !categoryName.isNullOrBlank() -> categoryName
     !query.tag.isNullOrBlank() -> query.tag!!
     query.feed == HomeFeed.LATEST -> "ArkDO"
     else -> query.feed.label
 }
 
-fun HomeQuery.isDefaultHomeQuery(): Boolean =
+internal fun HomeQuery.isDefaultHomeQuery(): Boolean =
     feed == HomeFeed.LATEST && categoryId == null && tag == null
 
 /** 版块和标签都选了，或者换了排序，顶栏才需要第二行。 */
@@ -28,7 +28,7 @@ internal fun HomeQuery.summaryTag(): String? =
     if (categoryId != null) tag?.takeIf(String::isNotBlank) else null
 
 /** 抽屉确认区的完整描述，不省略任何一项。 */
-fun describeHomeQuery(query: HomeQuery): String {
+internal fun describeHomeQuery(query: HomeQuery): String {
     val parts = mutableListOf(query.feed.label)
     when {
         !query.categoryName.isNullOrBlank() -> parts.add(query.categoryName!!)
@@ -38,6 +38,6 @@ fun describeHomeQuery(query: HomeQuery): String {
     return parts.joinToString(" · ")
 }
 
-fun sameHomeQuery(a: HomeQuery, b: HomeQuery): Boolean =
+internal fun sameHomeQuery(a: HomeQuery, b: HomeQuery): Boolean =
     a.feed == b.feed && (a.categoryId ?: 0L) == (b.categoryId ?: 0L) &&
         (a.tag ?: "") == (b.tag ?: "")

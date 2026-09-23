@@ -73,7 +73,6 @@ fun RootTabScreen(
     // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和首页共用同一个实例。
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
     val homeViewModel: HomeViewModel = hiltViewModel()
-    val homeState by homeViewModel.uiState.collectAsState()
 
     // 启动会话检查(对齐鸿蒙 RootTabPage handleArkWebReady:宿主就绪后才发 session 请求;
     // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录。之后 WebView 就绪、
@@ -126,7 +125,7 @@ fun RootTabScreen(
     }
 
     HomeDrawerOverlay(
-        state = homeState,
+        viewModel = homeViewModel,
         isLoggedIn = currentUser != null,
         colors = arkdoHomeVisualTokens(),
         assetBaseUrl = AppConstants.BASE_URL,
@@ -267,7 +266,7 @@ fun RootTabScreen(
                     onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
                     onComposeClick = {
                         if (ensureComposerAccess(context)) {
-                            val arg = homeState.query.categoryId?.let { "?categoryId=$it" } ?: ""
+                            val arg = homeViewModel.composeCategoryId?.let { "?categoryId=$it" } ?: ""
                             navController.navigate("${Routes.NEW_TOPIC}$arg")
                         }
                     },

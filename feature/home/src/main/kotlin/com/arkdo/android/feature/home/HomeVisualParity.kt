@@ -6,13 +6,13 @@ import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
 
 internal fun homeUnreadTarget(topic: HomeTopic): Int? =
-    com.arkdo.android.feature.search.topicUnreadTarget(topic)
+    com.arkdo.android.core.designsystem.topicUnreadTarget(topic)
 
 internal fun homeHasMetadata(
     topic: HomeTopic,
     category: HomeCategory?,
     relativeTime: String
-): Boolean = com.arkdo.android.feature.search.topicHasMetadata(topic, category, relativeTime)
+): Boolean = com.arkdo.android.core.designsystem.topicHasMetadata(topic, category, relativeTime)
 
 /**
  * Resolve the category the same way as the legacy list: prefer the category
@@ -38,10 +38,10 @@ internal fun homeCategoryForTopic(
 }
 
 internal fun homeAvatarCandidates(user: HomeUser?, baseUrl: String): List<String> =
-    com.arkdo.android.feature.search.topicAvatarCandidates(user, baseUrl)
+    com.arkdo.android.core.designsystem.topicAvatarCandidates(user, baseUrl)
 
 internal fun resolveHomeAsset(value: String, baseUrl: String): String =
-    com.arkdo.android.feature.search.resolveAsset(value, baseUrl)
+    com.arkdo.android.core.designsystem.resolveAsset(value, baseUrl)
 
 internal const val INCOMING_INSERT_MS: Int = 360
 internal const val INCOMING_HIGHLIGHT_MS: Long = 1500
@@ -118,5 +118,5 @@ internal data class HomeTextSegment(val text: String, val hit: Boolean)
  * 切分本身在搜索模块，首页测试仍走这个名字。
  */
 internal fun homeSearchSegments(text: String, highlights: List<String>): List<HomeTextSegment> =
-    com.arkdo.android.feature.search.searchTextSegments(text, highlights)
+    com.arkdo.android.core.designsystem.searchTextSegments(text, highlights)
         .map { HomeTextSegment(it.text, it.hit) }

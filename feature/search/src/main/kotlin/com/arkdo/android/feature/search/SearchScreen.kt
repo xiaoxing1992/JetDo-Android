@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.NotificationAvatar
+import com.arkdo.android.core.designsystem.TopicRow
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.core.model.SearchHit

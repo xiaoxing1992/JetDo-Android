@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import com.arkdo.android.core.designsystem.FaIconSet
 import com.arkdo.android.core.model.HomeCategory
-import com.arkdo.android.feature.search.parseTopicHexColor
+import com.arkdo.android.core.designsystem.parseTopicHexColor
 
 internal data class HomeTagStyle(val iconId: String, val color: Color)
 
