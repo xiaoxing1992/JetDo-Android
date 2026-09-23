@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -31,6 +30,8 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.feature.home.HomeUiState
 import com.arkdo.android.ui.components.CategoryDrawer
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
@@ -46,15 +47,24 @@ import kotlin.math.abs
  *
  * 抽屉自身的上下系统栏留白在 CategoryDrawer 内部处理（对齐鸿蒙的
  * `padding({ top: sysTopInset })` + ConfirmBar `bottom: 12 + sysBottomInset`），
- * 这样抽屉的底色能铺满整屏，内容又不会被系统栏压住。
+ * 开关和草稿都由首页 ViewModel 持有，这里只负责跟手和动画。
  */
 @Composable
 fun HomeDrawerHost(
-    viewModel: HomeViewModel,
+    uiState: HomeUiState,
+    isLoggedIn: Boolean,
+    onOpen: () -> Unit,
+    onClose: () -> Unit,
+    onDraftChange: (HomeQuery) -> Unit,
+    onApply: () -> Unit,
+    onReset: () -> Unit,
+    onToggleExpand: (Long) -> Unit,
+    onTagQueryChange: (String) -> Unit,
+    onTagTabShown: () -> Unit,
+    onRetryCategories: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
     val colors = arkdoColors
     val coroutineScope = rememberCoroutineScope()
 
@@ -86,10 +96,10 @@ fun HomeDrawerHost(
                 )
             }
         }
-        if (open) viewModel.openDrawer() else viewModel.closeDrawer()
+        if (open) onOpen() else onClose()
     }
 
-    BackHandler(enabled = uiState.drawerOpen) { viewModel.closeDrawer() }
+    BackHandler(enabled = uiState.drawerOpen) { onClose() }
 
     val progress = drawerProgress.value
 
@@ -123,7 +133,7 @@ fun HomeDrawerHost(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { viewModel.closeDrawer() }
+                    ) { onClose() }
             )
 
             Box(
@@ -146,26 +156,23 @@ fun HomeDrawerHost(
             ) {
                 CategoryDrawer(
                     draft = uiState.draftQuery,
-                    applied = uiState.listQuery,
+                    applied = uiState.query,
                     categories = uiState.categories,
-                    myCategoryIds = uiState.myCategoryIds,
-                    myTags = uiState.myTags,
                     tagQuery = uiState.tagQuery,
                     tagResults = uiState.tagResults,
                     tagLoading = uiState.tagLoading,
-                    isLoggedIn = uiState.isLoggedIn,
+                    isLoggedIn = isLoggedIn,
                     expandedIds = uiState.drawerExpandedIds,
-                    categoriesLoading = uiState.categoriesLoading,
+                    categoriesLoading = uiState.isCategoriesLoading,
                     categoriesError = uiState.categoriesError,
-                    onRetryCategories = { viewModel.retryLoadCategories() },
-                    onDraftChange = { viewModel.updateDraft(it) },
-                    onApply = { viewModel.applyDraft() },
-                    onClose = { viewModel.closeDrawer() },
-                    onReset = { viewModel.resetDraft() },
-                    onToggleExpand = { viewModel.toggleDrawerExpand(it) },
-                    onTagQueryChange = { viewModel.onTagQueryChanged(it) },
-                    onTagTabShown = { viewModel.loadHotTagsIfNeeded() },
-                    onRequireLogin = { viewModel.closeDrawer() }
+                    onRetryCategories = onRetryCategories,
+                    onDraftChange = onDraftChange,
+                    onApply = onApply,
+                    onClose = onClose,
+                    onReset = onReset,
+                    onToggleExpand = onToggleExpand,
+                    onTagQueryChange = onTagQueryChange,
+                    onTagTabShown = onTagTabShown
                 )
             }
         }

@@ -1,12 +1,12 @@
 package com.arkdo.android.core.model
 
-enum class HomeFeed(val apiValue: String, val label: String) {
+enum class HomeFeed(val apiValue: String, val label: String, val requiresLogin: Boolean = false) {
     LATEST("latest", "最新"),
     CREATED("created", "最新发布"),
     TOP("top", "排行榜"),
     HOT("hot", "热门"),
-    UNREAD("unread", "未读"),
-    NEW("new", "未读新帖")
+    UNREAD("unread", "未读", requiresLogin = true),
+    NEW("new", "未读新帖", requiresLogin = true)
 }
 
 data class HomeQuery(

@@ -57,17 +57,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import com.arkdo.android.data.models.FeedKey
+import com.arkdo.android.core.model.HomeCategory
+import com.arkdo.android.core.model.HomeFeed
+import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.core.model.HomeTag
+import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.data.models.TopicCategory
-import com.arkdo.android.data.models.TopicTag
-import com.arkdo.android.services.site.CategoryIndex
-import com.arkdo.android.services.site.FeedPrefs
-import com.arkdo.android.services.topic.TagSuggestion
-import com.arkdo.android.services.topic.TopicListQuery
-import com.arkdo.android.services.topic.describeTopicListQuery
-import com.arkdo.android.services.topic.filterRequiresLogin
-import com.arkdo.android.services.topic.isDefault
-import com.arkdo.android.services.topic.sameTopicListQuery
+import com.arkdo.android.feature.home.describeHomeQuery
+import com.arkdo.android.feature.home.isDefaultHomeQuery
+import com.arkdo.android.feature.home.sameHomeQuery
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.core.designsystem.FaIcon
 
@@ -91,11 +89,9 @@ private const val TAB_TAG = 1
 
 @Composable
 fun CategoryDrawer(
-    draft: TopicListQuery,
-    applied: TopicListQuery,
-    categories: List<TopicCategory>,
-    myCategoryIds: List<Long>,
-    myTags: List<TopicTag>,
+    draft: HomeQuery,
+    applied: HomeQuery,
+    categories: List<HomeCategory>,
     tagQuery: String,
     tagResults: List<TagSuggestion>,
     tagLoading: Boolean,
@@ -104,14 +100,13 @@ fun CategoryDrawer(
     categoriesLoading: Boolean = false,
     categoriesError: String? = null,
     onRetryCategories: () -> Unit = {},
-    onDraftChange: (TopicListQuery) -> Unit,
+    onDraftChange: (HomeQuery) -> Unit,
     onApply: () -> Unit,
     onClose: () -> Unit,
     onReset: () -> Unit,
     onToggleExpand: (Long) -> Unit,
     onTagQueryChange: (String) -> Unit,
     onTagTabShown: () -> Unit,
-    onRequireLogin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = arkdoColors
@@ -130,7 +125,7 @@ fun CategoryDrawer(
             .padding(top = topInset)
     ) {
         DrawerHeader(
-            showReset = !draft.isDefault(),
+            showReset = !draft.isDefaultHomeQuery(),
             onReset = onReset,
             onClose = onClose
         )
@@ -138,8 +133,8 @@ fun CategoryDrawer(
         FilterSection(
             draft = draft,
             isLoggedIn = isLoggedIn,
-            onPick = { onDraftChange(draft.copy(filter = it)) },
-            onBlocked = onRequireLogin
+            onPick = { onDraftChange(draft.copy(feed = it)) },
+            onClose = onClose
         )
 
         HorizontalDivider(
@@ -150,8 +145,8 @@ fun CategoryDrawer(
 
         ScopeTabBar(
             activeTab = activeTab,
-            categoryPicked = draft.category != null,
-            tagPicked = draft.tag != null,
+            categoryPicked = draft.categoryId != null,
+            tagPicked = !draft.tag.isNullOrBlank(),
             onSelect = { activeTab = it }
         )
 
@@ -169,25 +164,38 @@ fun CategoryDrawer(
                 CategoryTab(
                     draft = draft,
                     categories = categories,
-                    myCategoryIds = myCategoryIds,
                     isLoggedIn = isLoggedIn,
                     expandedIds = expandedIds,
                     loading = categoriesLoading,
                     error = categoriesError,
                     onRetry = onRetryCategories,
-                    onPick = { onDraftChange(draft.copy(category = it)) },
-                    onToggleExpand = onToggleExpand,
-                    onRequireLogin = onRequireLogin
+                    onPick = { category ->
+                        onDraftChange(
+                            draft.copy(
+                                categoryId = category?.id,
+                                categorySlug = category?.slug,
+                                categoryName = category?.name
+                            )
+                        )
+                    },
+                    onToggleExpand = onToggleExpand
                 )
             } else {
                 TagTab(
                     draft = draft,
-                    myTags = myTags,
                     tagQuery = tagQuery,
                     tagResults = tagResults,
                     tagLoading = tagLoading,
                     onQueryChange = onTagQueryChange,
-                    onPick = { onDraftChange(draft.copy(tag = it)) }
+                    onPick = { tag ->
+                        onDraftChange(
+                            draft.copy(
+                                tag = tag?.name,
+                                tagId = tag?.id,
+                                tagSlug = tag?.slug
+                            )
+                        )
+                    }
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -195,7 +203,7 @@ fun CategoryDrawer(
 
         ConfirmBar(
             draft = draft,
-            isDirty = !sameTopicListQuery(draft, applied),
+            isDirty = !sameHomeQuery(draft, applied),
             bottomInset = bottomInset,
             onApply = onApply,
             onClose = onClose
@@ -256,13 +264,23 @@ private fun DrawerHeader(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FilterSection(
-    draft: TopicListQuery,
+    draft: HomeQuery,
     isLoggedIn: Boolean,
-    onPick: (String) -> Unit,
-    onBlocked: () -> Unit
+    onPick: (HomeFeed) -> Unit,
+    onClose: () -> Unit
 ) {
-    // 顺序固定：最新 → 最新发布 → 热门 → 排行榜 → 未读 → 未读新帖
-    val feeds = remember { listOf(FeedPrefs.latestFeed()) + FeedPrefs.optionalFeeds() }
+    // 顺序跟设置页一致：最新、最新发布、热门、排行榜、未读、未读新帖。
+    // 枚举本身把排行榜排在热门前面，不能直接按 entries 铺。
+    val feeds = remember {
+        listOf(
+            HomeFeed.LATEST,
+            HomeFeed.CREATED,
+            HomeFeed.HOT,
+            HomeFeed.TOP,
+            HomeFeed.UNREAD,
+            HomeFeed.NEW
+        )
+    }
 
     FlowRow(
         modifier = Modifier
@@ -270,13 +288,14 @@ private fun FilterSection(
             .padding(start = 16.dp, end = 16.dp, top = 2.dp)
     ) {
         feeds.forEach { feed ->
+            val locked = feed.requiresLogin && !isLoggedIn
             ChoiceChip(
                 label = feed.label,
-                selected = draft.filter == feed.key,
-                // 未登录时 unread/new 置灰但仍可点，点了给提示。
-                chipDisabled = filterRequiresLogin(feed.key) && !isLoggedIn,
-                onTap = { onPick(feed.key) },
-                onBlockedTap = onBlocked
+                selected = draft.feed == feed,
+                // 未登录时未读入口置灰，点了只关抽屉，不改排序。
+                chipDisabled = locked,
+                onTap = { onPick(feed) },
+                onBlockedTap = onClose
             )
         }
     }
@@ -373,27 +392,22 @@ private fun ScopeTab(
 
 @Composable
 private fun CategoryTab(
-    draft: TopicListQuery,
-    categories: List<TopicCategory>,
-    myCategoryIds: List<Long>,
+    draft: HomeQuery,
+    categories: List<HomeCategory>,
     isLoggedIn: Boolean,
     expandedIds: List<Long>,
     loading: Boolean,
     error: String?,
     onRetry: () -> Unit,
-    onPick: (TopicCategory?) -> Unit,
-    onToggleExpand: (Long) -> Unit,
-    onRequireLogin: () -> Unit
+    onPick: (HomeCategory?) -> Unit,
+    onToggleExpand: (Long) -> Unit
 ) {
-    val myCategories = remember(categories, myCategoryIds) {
-        categories.filter { it.id in myCategoryIds && !CategoryIndex.isUncategorized(it) }
-    }
-    val topLevel = remember(categories) { CategoryIndex.topLevelCategories(categories) }
+    val topLevel = remember(categories) { categories.topLevel() }
 
     ScopeAllRow(
         iconId = "layer-group",
         label = "不限版块",
-        selected = draft.category == null,
+        selected = draft.categoryId == null,
         onClick = { onPick(null) }
     )
 
@@ -403,54 +417,15 @@ private fun CategoryTab(
         return
     }
 
-    // 没有自选版块时整棵树直接铺开，不套分组标题。
-    if (myCategories.isEmpty()) {
-        CategoryTree(
-            roots = topLevel,
-            categories = categories,
-            draft = draft,
-            isLoggedIn = isLoggedIn,
-            expandedIds = expandedIds,
-            onPick = onPick,
-            onToggleExpand = onToggleExpand,
-            onRequireLogin = onRequireLogin
-        )
-        return
-    }
-
-    var openGroup by remember { mutableIntStateOf(0) }
-
-    GroupHeader("我的版块", myCategories.size, openGroup == 0) {
-        openGroup = if (openGroup == 0) -1 else 0
-    }
-    ExpandBlock(visible = openGroup == 0) {
-        CategoryTree(
-            roots = myCategories,
-            categories = categories,
-            draft = draft,
-            isLoggedIn = isLoggedIn,
-            expandedIds = expandedIds,
-            onPick = onPick,
-            onToggleExpand = onToggleExpand,
-            onRequireLogin = onRequireLogin
-        )
-    }
-
-    GroupHeader("所有版块", topLevel.size, openGroup == 1) {
-        openGroup = if (openGroup == 1) -1 else 1
-    }
-    ExpandBlock(visible = openGroup == 1) {
-        CategoryTree(
-            roots = topLevel,
-            categories = categories,
-            draft = draft,
-            isLoggedIn = isLoggedIn,
-            expandedIds = expandedIds,
-            onPick = onPick,
-            onToggleExpand = onToggleExpand,
-            onRequireLogin = onRequireLogin
-        )
-    }
+    CategoryTree(
+        roots = topLevel,
+        categories = categories,
+        draft = draft,
+        isLoggedIn = isLoggedIn,
+        expandedIds = expandedIds,
+        onPick = onPick,
+        onToggleExpand = onToggleExpand
+    )
 }
 
 /** 版块为空时的状态位：加载中 / 失败可重试 / 站点确实没有版块。 */
@@ -504,28 +479,26 @@ private fun CategoryPlaceholder(
 
 @Composable
 private fun CategoryTree(
-    roots: List<TopicCategory>,
-    categories: List<TopicCategory>,
-    draft: TopicListQuery,
+    roots: List<HomeCategory>,
+    categories: List<HomeCategory>,
+    draft: HomeQuery,
     isLoggedIn: Boolean,
     expandedIds: List<Long>,
-    onPick: (TopicCategory?) -> Unit,
-    onToggleExpand: (Long) -> Unit,
-    onRequireLogin: () -> Unit
+    onPick: (HomeCategory?) -> Unit,
+    onToggleExpand: (Long) -> Unit
 ) {
     roots.forEach { root ->
-        val children = CategoryIndex.childrenOf(categories, root.id)
+        val children = categories.childrenOf(root.id)
         CategoryRow(
             category = root,
             parent = root,
             isChild = false,
-            selected = draft.category?.id == root.id,
+            selected = draft.categoryId == root.id,
             isLoggedIn = isLoggedIn,
             expandable = children.isNotEmpty(),
             expanded = root.id in expandedIds,
             onPick = onPick,
-            onToggleExpand = { onToggleExpand(root.id) },
-            onRequireLogin = onRequireLogin
+            onToggleExpand = { onToggleExpand(root.id) }
         )
 
         ExpandBlock(visible = root.id in expandedIds) {
@@ -535,13 +508,12 @@ private fun CategoryTree(
                         category = child,
                         parent = root,
                         isChild = true,
-                        selected = draft.category?.id == child.id,
+                        selected = draft.categoryId == child.id,
                         isLoggedIn = isLoggedIn,
                         expandable = false,
                         expanded = false,
                         onPick = onPick,
-                        onToggleExpand = {},
-                        onRequireLogin = onRequireLogin
+                        onToggleExpand = {}
                     )
                 }
             }
@@ -551,24 +523,25 @@ private fun CategoryTree(
 
 @Composable
 private fun CategoryRow(
-    category: TopicCategory,
-    parent: TopicCategory?,
+    category: HomeCategory,
+    parent: HomeCategory?,
     isChild: Boolean,
     selected: Boolean,
     isLoggedIn: Boolean,
     expandable: Boolean,
     expanded: Boolean,
-    onPick: (TopicCategory?) -> Unit,
-    onToggleExpand: () -> Unit,
-    onRequireLogin: () -> Unit
+    onPick: (HomeCategory?) -> Unit,
+    onToggleExpand: () -> Unit
 ) {
     val context = LocalContext.current
     val colors = arkdoColors
 
-    val restricted = category.readRestricted == true && !isLoggedIn
-    val accent = TopicBadgeUtils.categoryColor(category)
-    val iconId = TopicBadgeUtils.categoryIcon(context, category, parent)
-    val logo = TopicBadgeUtils.categoryLogo(category, parent)
+    val restricted = category.readRestricted && !isLoggedIn
+    val badge = category.asTopicCategory()
+    val parentBadge = parent?.asTopicCategory()
+    val accent = TopicBadgeUtils.categoryColor(badge)
+    val iconId = TopicBadgeUtils.categoryIcon(context, badge, parentBadge)
+    val logo = TopicBadgeUtils.categoryLogo(badge, parentBadge)
 
     Row(
         modifier = Modifier
@@ -577,7 +550,7 @@ private fun CategoryRow(
             .background(if (selected) colors.surfaceMuted else Color.Transparent)
             .alpha(if (restricted) 0.45f else 1f)
             // 受限版块整行仍然可点，点了走登录提示。
-            .clickable { if (restricted) onRequireLogin() else onPick(category) }
+            .clickable(enabled = !restricted) { onPick(category) }
             .padding(start = if (isChild) 28.dp else 12.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -643,13 +616,12 @@ private fun CategoryRow(
 
 @Composable
 private fun TagTab(
-    draft: TopicListQuery,
-    myTags: List<TopicTag>,
+    draft: HomeQuery,
     tagQuery: String,
     tagResults: List<TagSuggestion>,
     tagLoading: Boolean,
     onQueryChange: (String) -> Unit,
-    onPick: (TopicTag?) -> Unit
+    onPick: (HomeTag?) -> Unit
 ) {
     val colors = arkdoColors
 
@@ -700,34 +672,15 @@ private fun TagTab(
     ScopeAllRow(
         iconId = "tags",
         label = "不限标签",
-        selected = draft.tag == null,
+        selected = draft.tag.isNullOrBlank(),
         onClick = { onPick(null) }
     )
 
-    // 搜索态不做去重，否则搜不到自己的标签。
     val searching = tagQuery.trim().isNotEmpty()
-    if (myTags.isNotEmpty() && !searching) {
-        GroupHeader("我的标签", myTags.size, true) {}
-        myTags.forEach { tag ->
-            TagRow(name = tag.name, selected = draft.tag?.name == tag.name) {
-                onPick(TopicTag(id = tag.id, name = tag.name, slug = tag.slug))
-            }
-        }
-    }
-
-    val hot = if (myTags.isNotEmpty() && !searching) {
-        tagResults.filter { suggestion -> myTags.none { it.name == suggestion.name } }
-    } else {
-        tagResults
-    }
-
-    if (hot.isNotEmpty()) {
-        if (myTags.isNotEmpty() && !searching) {
-            GroupHeader("热门标签", hot.size, true) {}
-        }
-        hot.forEach { suggestion ->
-            TagRow(name = suggestion.name, selected = draft.tag?.name == suggestion.name) {
-                onPick(TopicTag(id = suggestion.id, name = suggestion.name, slug = null))
+    if (tagResults.isNotEmpty()) {
+        tagResults.forEach { suggestion ->
+            TagRow(name = suggestion.name, selected = draft.tag == suggestion.name) {
+                onPick(HomeTag(name = suggestion.name, id = suggestion.id))
             }
         }
     } else if (!tagLoading) {
@@ -894,7 +847,7 @@ private fun ExpandBlock(visible: Boolean, content: @Composable () -> Unit) {
 
 @Composable
 private fun ConfirmBar(
-    draft: TopicListQuery,
+    draft: HomeQuery,
     isDirty: Boolean,
     bottomInset: androidx.compose.ui.unit.Dp,
     onApply: () -> Unit,
@@ -912,7 +865,7 @@ private fun ConfirmBar(
         HorizontalDivider(thickness = 0.5.dp, color = colors.border)
 
         Text(
-            text = describeTopicListQuery(draft),
+            text = describeHomeQuery(draft),
             fontSize = 12.sp,
             color = colors.textSecondary,
             maxLines = 1,
@@ -937,4 +890,29 @@ private fun ConfirmBar(
             )
         }
     }
+}
+
+private fun HomeCategory.asTopicCategory(): TopicCategory = TopicCategory(
+    id = id,
+    name = name,
+    color = color,
+    textColor = textColor,
+    slug = slug,
+    parentCategoryId = parentCategoryId,
+    uploadedLogo = uploadedLogo,
+    icon = icon,
+    readRestricted = readRestricted
+)
+
+private fun List<HomeCategory>.topLevel(): List<HomeCategory> =
+    filter { it.parentCategoryId == null && !it.isUncategorized() }
+
+private fun List<HomeCategory>.childrenOf(parentId: Long): List<HomeCategory> =
+    filter { it.parentCategoryId == parentId }
+
+private fun HomeCategory.isUncategorized(): Boolean {
+    val slug = slug?.trim()?.lowercase().orEmpty()
+    if (slug == "uncategorized") return true
+    val normalized = name.trim()
+    return normalized == "未分类" || normalized.lowercase() == "uncategorized"
 }

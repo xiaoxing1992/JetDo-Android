@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
@@ -32,7 +34,6 @@ import com.arkdo.android.ui.theme.arkdoColors
  */
 @Composable
 fun HomeFeatureScreen(
-    query: HomeQuery,
     isWebViewReady: Boolean,
     isLoggedIn: Boolean,
     isCheckingSession: Boolean,
@@ -43,13 +44,15 @@ fun HomeFeatureScreen(
     onSearchClick: () -> Unit,
     onDebugClick: () -> Unit,
     onComposeClick: () -> Unit,
-    onMenuClick: () -> Unit
+    onMenuClick: () -> Unit,
+    viewModel: com.arkdo.android.feature.home.HomeViewModel
 ) {
     val incomingTopicEvent = remember {
         androidx.compose.runtime.mutableStateOf<HomeIncomingTopicEvent?>(null)
     }
     val eventSequence = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
-    val currentQuery = rememberUpdatedState(query)
+    val uiState by viewModel.uiState.collectAsState()
+    val currentQuery = rememberUpdatedState(uiState.query)
     DisposableEffect(Unit) {
         val main = Handler(Looper.getMainLooper())
         val unsubscribe = MessageBusEventBus.subscribe { event ->
@@ -64,7 +67,7 @@ fun HomeFeatureScreen(
     }
 
     HomeRoute(
-        query = query,
+        query = uiState.query,
         isWebViewReady = isWebViewReady,
         isLoggedIn = isLoggedIn,
         isCheckingSession = isCheckingSession,
@@ -78,7 +81,8 @@ fun HomeFeatureScreen(
         onSearchClick = onSearchClick,
         onDebugClick = onDebugClick,
         onComposeClick = onComposeClick,
-        onMenuClick = onMenuClick
+        onMenuClick = onMenuClick,
+        viewModel = viewModel
     )
 }
 

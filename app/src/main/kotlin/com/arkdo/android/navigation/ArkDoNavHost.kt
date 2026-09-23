@@ -397,7 +397,6 @@ fun ArkDoNavHost(
 object Routes {
     const val ROOT = "root"
     const val HOME = "home"
-    const val NEW_HOME = "new_home"
     const val SEARCH = "search"
     const val NOTIFICATION = "notification"
     const val PROFILE = "profile"

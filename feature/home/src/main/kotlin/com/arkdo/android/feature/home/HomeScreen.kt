@@ -214,6 +214,7 @@ fun HomeScreen(
         topBar = {
             HomeTitleBar(
                 query = state.query,
+                categoryName = state.categories.firstOrNull { it.id == state.query.categoryId }?.name,
                 isLoggedIn = isLoggedIn,
                 isCheckingSession = isCheckingSession,
                 accountUser = accountUser,
@@ -326,6 +327,7 @@ fun HomeScreen(
 @Composable
 private fun HomeTitleBar(
     query: HomeQuery,
+    categoryName: String?,
     isLoggedIn: Boolean,
     isCheckingSession: Boolean,
     accountUser: HomeUser?,
@@ -337,6 +339,8 @@ private fun HomeTitleBar(
     colors: HomeVisualTokens,
     avatarBaseUrl: String
 ) {
+    val lead = query.summaryLead()
+    val tag = query.summaryTag()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -352,13 +356,41 @@ private fun HomeTitleBar(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = homeTitle(query),
+                text = homeTitle(query, categoryName),
                 color = colors.textPrimary,
                 fontSize = if (query.isDefaultHomeQuery()) 26.sp else 21.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (lead.isNotEmpty() || tag != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (lead.isNotEmpty()) {
+                        Text(
+                            text = lead,
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            maxLines = 1
+                        )
+                    }
+                    if (tag != null) {
+                        if (lead.isNotEmpty()) {
+                            Text(
+                                text = " · ",
+                                color = colors.textTertiary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Text(
+                            text = tag,
+                            color = colors.brand,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
         }
         HomeBarButton(onClick = onSearchClick, contentDescription = "搜索", endMargin = 4.dp) {
             FaIcon("magnifying-glass", colors.textPrimary, 20.dp)
