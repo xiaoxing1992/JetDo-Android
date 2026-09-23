@@ -5,16 +5,14 @@ import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
 
-private const val HOME_AVATAR_SIZE = "96"
-
 internal fun homeUnreadTarget(topic: HomeTopic): Int? =
-    topic.unreadPosts.takeIf { it > 0 }?.let { topic.firstUnreadPostNumber() }
+    com.arkdo.android.feature.search.topicUnreadTarget(topic)
 
 internal fun homeHasMetadata(
     topic: HomeTopic,
     category: HomeCategory?,
     relativeTime: String
-): Boolean = category != null || topic.tags.isNotEmpty() || relativeTime.isNotEmpty()
+): Boolean = com.arkdo.android.feature.search.topicHasMetadata(topic, category, relativeTime)
 
 /**
  * Resolve the category the same way as the legacy list: prefer the category
@@ -39,20 +37,11 @@ internal fun homeCategoryForTopic(
     return null
 }
 
-internal fun homeAvatarCandidates(user: HomeUser?, baseUrl: String): List<String> = buildList {
-    if (user == null) return@buildList
-    user.animatedAvatar?.takeIf(String::isNotBlank)?.let { add(resolveHomeAsset(it, baseUrl)) }
-    user.avatarTemplate?.takeIf(String::isNotBlank)?.let {
-        add(resolveHomeAsset(it.replace("{size}", HOME_AVATAR_SIZE), baseUrl))
-    }
-}
+internal fun homeAvatarCandidates(user: HomeUser?, baseUrl: String): List<String> =
+    com.arkdo.android.feature.search.topicAvatarCandidates(user, baseUrl)
 
-internal fun resolveHomeAsset(value: String, baseUrl: String): String = when {
-    value.startsWith("http://") || value.startsWith("https://") -> value
-    value.startsWith("//") -> "https:$value"
-    value.startsWith("/") -> baseUrl.trimEnd('/') + value
-    else -> baseUrl.trimEnd('/') + "/" + value
-}
+internal fun resolveHomeAsset(value: String, baseUrl: String): String =
+    com.arkdo.android.feature.search.resolveAsset(value, baseUrl)
 
 internal const val INCOMING_INSERT_MS: Int = 360
 internal const val INCOMING_HIGHLIGHT_MS: Long = 1500
@@ -126,34 +115,8 @@ internal data class HomeTextSegment(val text: String, val hit: Boolean)
 /**
  * 按鸿蒙 TopicListItem.segmentsOf 切分标题/摘要。
  * 大小写不敏感，从光标处取最早出现的词；同一位置多个词时保留列表里更靠前的那个。
+ * 切分本身在搜索模块，首页测试仍走这个名字。
  */
-internal fun homeSearchSegments(text: String, highlights: List<String>): List<HomeTextSegment> {
-    if (text.isEmpty()) return emptyList()
-    val terms = highlights.mapNotNull { term -> term.takeIf(String::isNotEmpty)?.lowercase() }
-    if (terms.isEmpty()) return listOf(HomeTextSegment(text, hit = false))
-
-    val lower = text.lowercase()
-    val segments = mutableListOf<HomeTextSegment>()
-    var cursor = 0
-    while (cursor < text.length) {
-        var bestPos = -1
-        var bestLen = 0
-        for (term in terms) {
-            val pos = lower.indexOf(term, cursor)
-            if (pos >= 0 && (bestPos < 0 || pos < bestPos)) {
-                bestPos = pos
-                bestLen = term.length
-            }
-        }
-        if (bestPos < 0) {
-            segments += HomeTextSegment(text.substring(cursor), hit = false)
-            break
-        }
-        if (bestPos > cursor) {
-            segments += HomeTextSegment(text.substring(cursor, bestPos), hit = false)
-        }
-        segments += HomeTextSegment(text.substring(bestPos, bestPos + bestLen), hit = true)
-        cursor = bestPos + bestLen
-    }
-    return segments
-}
+internal fun homeSearchSegments(text: String, highlights: List<String>): List<HomeTextSegment> =
+    com.arkdo.android.feature.search.searchTextSegments(text, highlights)
+        .map { HomeTextSegment(it.text, it.hit) }

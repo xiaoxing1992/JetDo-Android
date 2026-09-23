@@ -102,7 +102,7 @@ private fun acceptsIncomingTopic(query: HomeQuery, event: MessageBusEvent): Bool
     return event.data?.payload?.categoryId == selectedCategory
 }
 
-/** app 主题到首页列表色板的桥接。搜索结果复用同一行时也走这里，避免两套色。 */
+/** app 主题到首页列表色板的桥接。 */
 @Composable
 fun arkdoHomeVisualTokens(): HomeVisualTokens {
     val colors = arkdoColors
