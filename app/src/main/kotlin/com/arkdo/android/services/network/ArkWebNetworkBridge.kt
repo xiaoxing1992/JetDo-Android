@@ -157,6 +157,7 @@ class WebviewJsonExecutor(
     }
 
     override fun onBusEvent(payload: String) {
+        Timber.i("[ArkDO][MessageBus] event len=%d head=%s", payload.length, payload.take(160))
         MessageBusEventBus.publishPayload(payload)
     }
 
@@ -335,6 +336,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                     // Origin 有效，继续初始化
                     attachController(web)
                     markHostReady()
+                    // 宿主页就绪后才注入长轮询。脚本自己幂等，重复 onPageFinished 不会再开一条。
+                    startMessageBus()
                     Timber.i("[ArkDO][Network] attachHost: controller attached, host ready with origin=%s", origin)
 
                     // 检测页面是否是 Cloudflare 挑战页面

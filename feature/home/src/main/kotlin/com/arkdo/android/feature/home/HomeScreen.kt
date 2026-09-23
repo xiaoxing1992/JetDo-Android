@@ -5,9 +5,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,11 +51,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.border
@@ -87,6 +94,7 @@ import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
@@ -120,12 +128,72 @@ fun HomeScreen(
     isCheckingSession: Boolean = false,
     accountUser: HomeUser? = null,
     onFabScroll: (Float, Float) -> Unit = { _, _ -> },
+    onIncomingInsertFinished: (Int) -> Unit = {},
+    onIncomingHighlightFinished: () -> Unit = {},
     colors: HomeVisualTokens = HomeVisualTokens.Default,
     avatarBaseUrl: String = ""
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val categories = state.categories
+    val insertIds = state.incomingInsertIds
+    val insertEpoch = state.incomingInsertEpoch
+    var insertProgress by remember { mutableFloatStateOf(1f) }
+    var insertDistancePx by remember { mutableFloatStateOf(0f) }
+    var insertPlayed by remember { mutableStateOf(true) }
+    val insertHeights = remember { mutableStateMapOf<Long, Int>() }
+    LaunchedEffect(insertEpoch) {
+        if (insertIds.isEmpty()) {
+            insertProgress = 1f
+            insertPlayed = true
+            return@LaunchedEffect
+        }
+        insertHeights.clear()
+        insertPlayed = false
+        insertProgress = 0f
+        // 新行插在表头。人停在下面时看不见滑入，先回到第一条再播。
+        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+            listState.scrollToItem(0)
+        }
+        insertDistancePx = with(density) { (insertIds.size * INCOMING_INSERT_ROW_ESTIMATE_DP).dp.toPx() }
+        withFrameNanos { }
+        if (insertIds.all { it in insertHeights }) {
+            insertDistancePx = insertHeights.values.sum().toFloat()
+        }
+        insertPlayed = true
+        animate(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = INCOMING_INSERT_MS, easing = EaseOut)
+        ) { value, _ ->
+            insertProgress = value
+        }
+        onIncomingInsertFinished(insertEpoch)
+    }
+
+    val highlightUntil = state.incomingHighlightUntil
+    val highlightIds = state.incomingHighlightIds
+    LaunchedEffect(highlightUntil, highlightIds) {
+        if (highlightIds.isEmpty() || highlightUntil <= 0L) return@LaunchedEffect
+        val total = (highlightUntil - System.currentTimeMillis()).coerceAtLeast(0L)
+        delay(incomingHighlightHoldMs(total) + INCOMING_HIGHLIGHT_FADE_MS)
+        onIncomingHighlightFinished()
+    }
+
+    var refreshArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isRefreshing) {
+        if (state.isRefreshing) {
+            refreshArmed = true
+            return@LaunchedEffect
+        }
+        if (refreshArmed && state.topics.isNotEmpty() &&
+            (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
+        ) {
+            listState.scrollToItem(0)
+        }
+        refreshArmed = false
+    }
 
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
         val layoutInfo = listState.layoutInfo
@@ -210,6 +278,7 @@ fun HomeScreen(
                     ) {
                         items(state.topics, key = HomeTopic::id) { topic ->
                             val category = homeCategoryForTopic(topic, categories, state.query)
+                            val inserting = topic.id in insertIds
                             HomeTopicRow(
                                 topic = topic,
                                 category = category,
@@ -219,7 +288,24 @@ fun HomeScreen(
                                 onClick = { onTopicClick(topic.id, null) },
                                 onUnreadClick = { onTopicClick(topic.id, homeUnreadTarget(topic)) },
                                 colors = colors,
-                                avatarBaseUrl = avatarBaseUrl
+                                avatarBaseUrl = avatarBaseUrl,
+                                insertProgress = insertProgress,
+                                insertDistancePx = if (inserting) 0f else insertDistancePx,
+                                insertFadeIn = inserting,
+                                highlightUntil = if (topic.id in state.incomingHighlightIds) {
+                                    state.incomingHighlightUntil
+                                } else {
+                                    0L
+                                },
+                                onInsertMeasured = if (inserting && !insertPlayed) {
+                                    { height ->
+                                        if (topic.id !in insertHeights) {
+                                            insertHeights[topic.id] = height
+                                        }
+                                    }
+                                } else {
+                                    null
+                                }
                             )
                         }
                         item(key = "home-footer") {
@@ -345,28 +431,47 @@ private fun HomeBarButton(
 }
 
 @Composable
-private fun HomeTopicRow(
+fun HomeTopicRow(
     topic: HomeTopic,
     category: HomeCategory?,
     parentCategory: HomeCategory?,
     onClick: () -> Unit,
     onUnreadClick: () -> Unit,
     colors: HomeVisualTokens,
-    avatarBaseUrl: String
+    avatarBaseUrl: String,
+    searchHighlights: List<String> = emptyList(),
+    insertProgress: Float = 1f,
+    insertDistancePx: Float = 0f,
+    insertFadeIn: Boolean = false,
+    highlightUntil: Long = 0L,
+    onInsertMeasured: ((Int) -> Unit)? = null
 ) {
     val click = if (homeUnreadTarget(topic) != null) onUnreadClick else onClick
-    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = click)) {
+    val highlight = rememberIncomingHighlight(highlightUntil, colors)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onSizeChanged { size -> onInsertMeasured?.invoke(size.height) }
+            .graphicsLayer {
+                translationY = incomingInsertOffset(insertProgress, insertDistancePx)
+                alpha = incomingInsertAlpha(insertProgress, insertFadeIn)
+            }
+            .clickable(onClick = click)
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(highlight)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Top
         ) {
             HomeAvatar(topic.author, 48.dp, colors, avatarBaseUrl)
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
-                HomeTitleRow(topic, colors)
+                HomeTitleRow(topic, colors, searchHighlights)
                 topic.searchBlurb?.takeIf(String::isNotEmpty)?.let { blurb ->
                     Spacer(Modifier.height(4.dp))
-                    HomeSearchBlurb(blurb, colors)
+                    HomeSearchBlurb(blurb, colors, searchHighlights)
                 }
                 val postedAt = relativeTime(topic.lastPostedAt)
                 if (homeHasMetadata(topic, category, postedAt)) {
@@ -380,7 +485,22 @@ private fun HomeTopicRow(
 }
 
 @Composable
-private fun HomeTitleRow(topic: HomeTopic, colors: HomeVisualTokens) {
+private fun rememberIncomingHighlight(until: Long, colors: HomeVisualTokens): Color {
+    val shown = until > 0L
+    val color by androidx.compose.animation.animateColorAsState(
+        targetValue = if (shown) colors.incomingHighlight else colors.pageBg,
+        animationSpec = tween(durationMillis = INCOMING_HIGHLIGHT_FADE_MS.toInt(), easing = EaseOut),
+        label = "incomingHighlight"
+    )
+    return color
+}
+
+@Composable
+private fun HomeTitleRow(
+    topic: HomeTopic,
+    colors: HomeVisualTokens,
+    searchHighlights: List<String>
+) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val iconSize = 15.dp
@@ -399,7 +519,8 @@ private fun HomeTitleRow(topic: HomeTopic, colors: HomeVisualTokens) {
     val title = buildAnnotatedString {
         if (topic.bookmarked) appendInlineContent("bookmark", "bookmark")
         if (topic.hasAcceptedAnswer) appendInlineContent("solved", "solved")
-        append(topic.title)
+        // 标题命中只改颜色。字重保持整行 Medium，和鸿蒙 titleFontWeight 落在每一段上一样。
+        appendHomeSearchText(topic.title, searchHighlights, colors.brand, emphasizeHit = false)
         if (unreadCount > 0) {
             withStyle(SpanStyle(fontSize = 12.sp)) { append("  ") }
             appendInlineContent("unread", pillLabel)
@@ -443,15 +564,43 @@ private fun HomeTitleRow(topic: HomeTopic, colors: HomeVisualTokens) {
 }
 
 @Composable
-private fun HomeSearchBlurb(blurb: String, colors: HomeVisualTokens) {
+private fun HomeSearchBlurb(
+    blurb: String,
+    colors: HomeVisualTokens,
+    searchHighlights: List<String>
+) {
+    val text = buildAnnotatedString {
+        // 摘要非命中是常规字重，命中词升到 Medium 并染品牌色。
+        appendHomeSearchText(blurb, searchHighlights, colors.brand, emphasizeHit = true)
+    }
     Text(
-        text = blurb,
+        text = text,
         fontSize = 13.sp,
         color = colors.textSecondary,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+private fun AnnotatedString.Builder.appendHomeSearchText(
+    text: String,
+    highlights: List<String>,
+    hitColor: Color,
+    emphasizeHit: Boolean
+) {
+    for (segment in homeSearchSegments(text, highlights)) {
+        if (!segment.hit) {
+            append(segment.text)
+            continue
+        }
+        val style = if (emphasizeHit) {
+            SpanStyle(color = hitColor, fontWeight = FontWeight.Medium)
+        } else {
+            SpanStyle(color = hitColor)
+        }
+        withStyle(style) { append(segment.text) }
+    }
 }
 
 @Composable

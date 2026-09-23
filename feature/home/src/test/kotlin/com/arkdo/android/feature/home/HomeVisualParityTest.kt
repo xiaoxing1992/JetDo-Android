@@ -71,4 +71,40 @@ class HomeVisualParityTest {
             homeCategoryForTopic(topic.copy(category = embedded), listOf(indexed), query)
         )
     }
+
+    @Test
+    fun search_segments_keep_original_case_and_pick_the_earliest_term() {
+        assertEquals(
+            listOf(HomeTextSegment("还没命中", hit = false)),
+            homeSearchSegments("还没命中", emptyList())
+        )
+        assertEquals(
+            listOf(
+                HomeTextSegment("用 ", hit = false),
+                HomeTextSegment("Kotlin", hit = true),
+                HomeTextSegment(" 写 ", hit = false),
+                HomeTextSegment("协程", hit = true)
+            ),
+            homeSearchSegments("用 Kotlin 写 协程", listOf("kotlin", "", "协程"))
+        )
+        // 同一起点时保留列表里更靠前的词，不改成更长的那个。
+        assertEquals(
+            listOf(HomeTextSegment("kot", hit = true), HomeTextSegment("lin", hit = false)),
+            homeSearchSegments("kotlin", listOf("kot", "kotlin"))
+        )
+        assertEquals(emptyList<HomeTextSegment>(), homeSearchSegments("", listOf("kotlin")))
+    }
+
+    @Test
+    fun incoming_insert_slides_old_rows_down_and_fades_new_rows_in() {
+        assertEquals(0f, incomingInsertOffset(progress = 1f, distance = 180f))
+        assertEquals(-180f, incomingInsertOffset(progress = 0f, distance = 180f))
+        assertEquals(-90f, incomingInsertOffset(progress = 0.5f, distance = 180f))
+        assertEquals(0f, incomingInsertOffset(progress = 0f, distance = 0f))
+        assertEquals(0f, incomingInsertAlpha(progress = 0f, fadeIn = true))
+        assertEquals(1f, incomingInsertAlpha(progress = 1f, fadeIn = true))
+        assertEquals(1f, incomingInsertAlpha(progress = 0f, fadeIn = false))
+        assertEquals(900L, incomingHighlightHoldMs(1500L))
+        assertEquals(0L, incomingHighlightHoldMs(400L))
+    }
 }

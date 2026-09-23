@@ -1,16 +1,23 @@
 package com.arkdo.android.ui.home
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import com.arkdo.android.common.constants.AppConstants
+import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.feature.home.HomeIncomingTopicEvent
 import com.arkdo.android.feature.home.HomeRoute
 import com.arkdo.android.feature.home.HomeVisualTokens
+import com.arkdo.android.services.message.LATEST_TOPICS_CHANNEL
+import com.arkdo.android.services.message.MessageBusEvent
 import com.arkdo.android.services.message.MessageBusEventBus
-import com.arkdo.android.services.message.extractMessageBusTopicId
+import com.arkdo.android.services.message.NEW_TOPICS_CHANNEL
+import com.arkdo.android.services.message.extractIncomingHomeTopicId
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 
@@ -42,9 +49,13 @@ fun HomeFeatureScreen(
         androidx.compose.runtime.mutableStateOf<HomeIncomingTopicEvent?>(null)
     }
     val eventSequence = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    val currentQuery = rememberUpdatedState(query)
     DisposableEffect(Unit) {
+        val main = Handler(Looper.getMainLooper())
         val unsubscribe = MessageBusEventBus.subscribe { event ->
-            extractMessageBusTopicId(event)?.let { topicId ->
+            if (!acceptsIncomingTopic(currentQuery.value, event)) return@subscribe
+            val topicId = extractIncomingHomeTopicId(event) ?: return@subscribe
+            main.post {
                 eventSequence.longValue += 1
                 incomingTopicEvent.value = HomeIncomingTopicEvent(topicId, eventSequence.longValue)
             }
@@ -58,26 +69,7 @@ fun HomeFeatureScreen(
         isLoggedIn = isLoggedIn,
         isCheckingSession = isCheckingSession,
         accountUser = accountUser,
-        colors = HomeVisualTokens(
-            pageBg = arkdoColors.pageBg,
-            textPrimary = arkdoColors.textPrimary,
-            textSecondary = arkdoColors.textSecondary,
-            textBody = arkdoColors.textBody,
-            textTertiary = arkdoColors.textTertiary,
-            brand = arkdoColors.brand,
-            ldAccent = arkdoColors.ldAccent,
-            border = arkdoColors.border,
-            surfaceMuted = arkdoColors.surfaceMuted,
-            fillSubtle = arkdoColors.fillSubtle,
-            infoSoftBg = arkdoColors.infoSoftBg,
-            avatarFg = arkdoColors.avatarFg,
-            avatarBorder = ArkdoFixedColors.AvatarBorder,
-            fabComposeBg = arkdoColors.fabComposeBg,
-            fabTopFg = arkdoColors.fabTopFg,
-            incomingHighlight = arkdoColors.incomingHighlight,
-            unread = ArkdoFixedColors.Unread,
-            amber = ArkdoFixedColors.Amber
-        ),
+        colors = arkdoHomeVisualTokens(),
         avatarBaseUrl = AppConstants.BASE_URL,
         incomingTopicEvent = incomingTopicEvent.value,
         onTopicClick = onTopicClick,
@@ -87,5 +79,47 @@ fun HomeFeatureScreen(
         onDebugClick = onDebugClick,
         onComposeClick = onComposeClick,
         onMenuClick = onMenuClick
+    )
+}
+
+/**
+ * 「最新」听 /latest，「最新发布」听 /new。带标签或热门/未读时不提示，
+ * 那些列表的排序和这两个频道对不上。选了版块时，payload 里的版块必须一致。
+ */
+private fun acceptsIncomingTopic(query: HomeQuery, event: MessageBusEvent): Boolean {
+    val channel = when {
+        !query.tag.isNullOrBlank() -> return false
+        query.feed == HomeFeed.LATEST -> LATEST_TOPICS_CHANNEL
+        query.feed == HomeFeed.CREATED -> NEW_TOPICS_CHANNEL
+        else -> return false
+    }
+    if (event.channel != channel) return false
+    val selectedCategory = query.categoryId ?: return true
+    return event.data?.payload?.categoryId == selectedCategory
+}
+
+/** app 主题到首页列表色板的桥接。搜索结果复用同一行时也走这里，避免两套色。 */
+@Composable
+fun arkdoHomeVisualTokens(): HomeVisualTokens {
+    val colors = arkdoColors
+    return HomeVisualTokens(
+        pageBg = colors.pageBg,
+        textPrimary = colors.textPrimary,
+        textSecondary = colors.textSecondary,
+        textBody = colors.textBody,
+        textTertiary = colors.textTertiary,
+        brand = colors.brand,
+        ldAccent = colors.ldAccent,
+        border = colors.border,
+        surfaceMuted = colors.surfaceMuted,
+        fillSubtle = colors.fillSubtle,
+        infoSoftBg = colors.infoSoftBg,
+        avatarFg = colors.avatarFg,
+        avatarBorder = ArkdoFixedColors.AvatarBorder,
+        fabComposeBg = colors.fabComposeBg,
+        fabTopFg = colors.fabTopFg,
+        incomingHighlight = colors.incomingHighlight,
+        unread = ArkdoFixedColors.Unread,
+        amber = ArkdoFixedColors.Amber
     )
 }

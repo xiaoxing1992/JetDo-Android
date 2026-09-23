@@ -32,6 +32,12 @@ data class HomeUiState(
     val isLoadingIncoming: Boolean = false,
     val pendingIncomingRefresh: Boolean = false,
     val incomingPromptVisible: Boolean = false,
+    /** 正在插入的新行。动画由界面播完后调用 [HomeViewModel.finishIncomingInsert]。 */
+    val incomingInsertIds: List<Long> = emptyList(),
+    val incomingInsertEpoch: Int = 0,
+    /** 插入开始就铺上的底色。界面按截止时间淡回页面底色后调用 [HomeViewModel.finishIncomingHighlight]。 */
+    val incomingHighlightIds: List<Long> = emptyList(),
+    val incomingHighlightUntil: Long = 0L,
     val categories: List<HomeCategory> = emptyList(),
     val isCategoriesLoading: Boolean = false
 )
@@ -147,7 +153,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Loads pending realtime topics and prepends only topics not already visible. */
+    /**
+     * 拉取提示条记下的话题，整批插到表头。
+     * 已在列表里的（更新）先从原位置摘掉再以新数据归位，不只追加全新的。
+     */
     fun loadIncomingTopics() {
         val state = _uiState.value
         if (state.incomingTopicIds.isEmpty()) return
@@ -164,26 +173,57 @@ class HomeViewModel @Inject constructor(
             if (requestEpoch != incomingRequestEpoch) return@launch
             when (result) {
                 is HomePageResult.Success -> {
-                    _uiState.update { current ->
-                        val existing = current.topics.mapTo(HashSet(), HomeTopic::id)
-                        val incoming = result.page.items.filter { it.id !in existing }
-                        current.copy(
-                            topics = incoming + current.topics,
-                            isLoadingIncoming = false,
-                            incomingTopicIds = emptyList(),
-                            incomingPromptVisible = false
-                        )
+                    val incoming = result.page.items.distinctBy(HomeTopic::id)
+                    if (incoming.isEmpty()) {
+                        // 空结果保留提示条，用户可以再点一次。对齐鸿蒙：toast 后不摘掉待处理 id。
+                        _uiState.update { it.copy(isLoadingIncoming = false, error = "暂未获取到新话题，请稍后重试") }
+                    } else {
+                        _uiState.update { current ->
+                            val incomingIds = incoming.mapTo(HashSet(), HomeTopic::id)
+                            val remaining = current.topics.filter { it.id !in incomingIds }
+                            current.copy(
+                                topics = incoming + remaining,
+                                isLoadingIncoming = true,
+                                incomingTopicIds = emptyList(),
+                                incomingPromptVisible = false,
+                                incomingInsertIds = incoming.map(HomeTopic::id),
+                                incomingInsertEpoch = current.incomingInsertEpoch + 1,
+                                incomingHighlightIds = incoming.map(HomeTopic::id),
+                                incomingHighlightUntil = System.currentTimeMillis() +
+                                    INCOMING_INSERT_MS + INCOMING_HIGHLIGHT_MS,
+                                error = null
+                            )
+                        }
                     }
                 }
                 is HomePageResult.Failure -> _uiState.update {
-                    it.copy(
-                        isLoadingIncoming = false,
-                        incomingTopicIds = emptyList(),
-                        incomingPromptVisible = false
-                    )
+                    it.copy(isLoadingIncoming = false, error = result.message)
                 }
             }
             runPendingIncomingRefresh()
+        }
+    }
+
+    /**
+     * 插入动画结束。底色在插入开始时就已经铺上，这里只收起插入态。
+     * epoch 对不上说明中途被刷新或下一次插入打断。
+     */
+    fun finishIncomingInsert(epoch: Int) {
+        _uiState.update { state ->
+            if (state.incomingInsertEpoch != epoch || state.incomingInsertIds.isEmpty()) return@update state
+            state.copy(
+                isLoadingIncoming = false,
+                incomingInsertIds = emptyList()
+            )
+        }
+        runPendingIncomingRefresh()
+    }
+
+    /** 浅蓝已经淡回页面底色，清掉高亮，避免行一直停在浅蓝色。 */
+    fun finishIncomingHighlight() {
+        _uiState.update { state ->
+            if (state.incomingHighlightIds.isEmpty()) return@update state
+            state.copy(incomingHighlightIds = emptyList(), incomingHighlightUntil = 0L)
         }
     }
 
@@ -194,7 +234,11 @@ class HomeViewModel @Inject constructor(
                 isLoadingIncoming = false,
                 pendingIncomingRefresh = false,
                 incomingTopicIds = emptyList(),
-                incomingPromptVisible = false
+                incomingPromptVisible = false,
+                incomingInsertIds = emptyList(),
+                incomingInsertEpoch = it.incomingInsertEpoch + 1,
+                incomingHighlightIds = emptyList(),
+                incomingHighlightUntil = 0L
             )
         }
     }

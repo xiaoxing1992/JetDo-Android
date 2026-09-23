@@ -158,7 +158,7 @@ object MessageBusScriptTemplate {
                 clientId: uniqueId(),
                 baseUrl: '',
                 sharedSessionKey: '',
-                channels: { '/latest': -1 },
+                channels: { '/latest': -1, '/new': -1 },
                 seq: 0,
                 running: true,
                 retryDelayMs: 1000
