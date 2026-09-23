@@ -284,6 +284,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** 关掉「首页新话题提醒」时清掉提示条、待拉 id 和还没播完的插入。 */
+    fun dismissIncomingTopics() {
+        clearIncomingTopicsState()
+    }
+
     /** Called by the host when MessageBus reports activity on a topic channel. */
     fun addIncomingTopic(topicId: Long) {
         if (topicId <= 0) return
