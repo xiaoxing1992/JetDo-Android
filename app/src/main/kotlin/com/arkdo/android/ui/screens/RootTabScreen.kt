@@ -43,10 +43,12 @@ import com.arkdo.android.ui.components.ArkDoBottomBarItem
 import com.arkdo.android.ui.components.AvatarTabIcon
 import com.arkdo.android.ui.components.TabVectorIcon
 import com.arkdo.android.ui.components.UserAvatar
-import com.arkdo.android.ui.home.HomeDrawerHost
 import com.arkdo.android.ui.home.HomeFeatureScreen
+import com.arkdo.android.ui.home.arkdoHomeVisualTokens
 import com.arkdo.android.ui.home.toHomeUser
+import com.arkdo.android.feature.home.HomeDrawerOverlay
 import com.arkdo.android.feature.home.HomeViewModel
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.ui.notification.NotificationScreen
 
@@ -123,9 +125,11 @@ fun RootTabScreen(
         onDispose { unsubscribe() }
     }
 
-    HomeDrawerHost(
-        uiState = homeState,
+    HomeDrawerOverlay(
+        state = homeState,
         isLoggedIn = currentUser != null,
+        colors = arkdoHomeVisualTokens(),
+        assetBaseUrl = AppConstants.BASE_URL,
         onOpen = { homeViewModel.openDrawer(currentUser != null) },
         onClose = homeViewModel::closeDrawer,
         onDraftChange = { homeViewModel.updateDraft(it, currentUser != null) },

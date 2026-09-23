@@ -23,7 +23,8 @@ data class HomeVisualTokens(
     val fabTopFg: Color,
     val incomingHighlight: Color,
     val unread: Color,
-    val amber: Color
+    val amber: Color,
+    val scrim: Color
 ) {
     companion object {
         val Default = HomeVisualTokens(
@@ -44,7 +45,8 @@ data class HomeVisualTokens(
             fabTopFg = Color(0xFF5A6169),
             incomingHighlight = Color(0xFFE8F1FE),
             unread = Color(0xFF66CCFF),
-            amber = Color(0xFFF5A623)
+            amber = Color(0xFFF5A623),
+            scrim = Color(0x33000000)
         )
     }
 }

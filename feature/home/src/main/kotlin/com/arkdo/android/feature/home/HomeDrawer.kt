@@ -1,10 +1,12 @@
-package com.arkdo.android.ui.components
+package com.arkdo.android.feature.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,11 +64,6 @@ import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.TagSuggestion
-import com.arkdo.android.data.models.TopicCategory
-import com.arkdo.android.feature.home.describeHomeQuery
-import com.arkdo.android.feature.home.isDefaultHomeQuery
-import com.arkdo.android.feature.home.sameHomeQuery
-import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.core.designsystem.FaIcon
 
 // ==========================================================================
@@ -88,7 +85,7 @@ private const val TAB_CATEGORY = 0
 private const val TAB_TAG = 1
 
 @Composable
-fun CategoryDrawer(
+fun HomeDrawer(
     draft: HomeQuery,
     applied: HomeQuery,
     categories: List<HomeCategory>,
@@ -107,9 +104,10 @@ fun CategoryDrawer(
     onToggleExpand: (Long) -> Unit,
     onTagQueryChange: (String) -> Unit,
     onTagTabShown: () -> Unit,
+    colors: HomeVisualTokens,
+    assetBaseUrl: String,
     modifier: Modifier = Modifier
 ) {
-    val colors = arkdoColors
     var activeTab by remember { mutableIntStateOf(TAB_CATEGORY) }
 
     // 抽屉铺满整屏（含系统栏），底色因此能盖住状态栏与导航栏；
@@ -126,6 +124,7 @@ fun CategoryDrawer(
     ) {
         DrawerHeader(
             showReset = !draft.isDefaultHomeQuery(),
+            colors = colors,
             onReset = onReset,
             onClose = onClose
         )
@@ -133,6 +132,7 @@ fun CategoryDrawer(
         FilterSection(
             draft = draft,
             isLoggedIn = isLoggedIn,
+            colors = colors,
             onPick = { onDraftChange(draft.copy(feed = it)) },
             onClose = onClose
         )
@@ -147,6 +147,7 @@ fun CategoryDrawer(
             activeTab = activeTab,
             categoryPicked = draft.categoryId != null,
             tagPicked = !draft.tag.isNullOrBlank(),
+            colors = colors,
             onSelect = { activeTab = it }
         )
 
@@ -166,6 +167,8 @@ fun CategoryDrawer(
                     categories = categories,
                     isLoggedIn = isLoggedIn,
                     expandedIds = expandedIds,
+                    colors = colors,
+                    assetBaseUrl = assetBaseUrl,
                     loading = categoriesLoading,
                     error = categoriesError,
                     onRetry = onRetryCategories,
@@ -186,6 +189,7 @@ fun CategoryDrawer(
                     tagQuery = tagQuery,
                     tagResults = tagResults,
                     tagLoading = tagLoading,
+                    colors = colors,
                     onQueryChange = onTagQueryChange,
                     onPick = { tag ->
                         onDraftChange(
@@ -205,6 +209,7 @@ fun CategoryDrawer(
             draft = draft,
             isDirty = !sameHomeQuery(draft, applied),
             bottomInset = bottomInset,
+            colors = colors,
             onApply = onApply,
             onClose = onClose
         )
@@ -216,10 +221,10 @@ fun CategoryDrawer(
 @Composable
 private fun DrawerHeader(
     showReset: Boolean,
+    colors: HomeVisualTokens,
     onReset: () -> Unit,
     onClose: () -> Unit
 ) {
-    val colors = arkdoColors
 
     Row(
         modifier = Modifier
@@ -266,6 +271,7 @@ private fun DrawerHeader(
 private fun FilterSection(
     draft: HomeQuery,
     isLoggedIn: Boolean,
+    colors: HomeVisualTokens,
     onPick: (HomeFeed) -> Unit,
     onClose: () -> Unit
 ) {
@@ -289,11 +295,11 @@ private fun FilterSection(
     ) {
         feeds.forEach { feed ->
             val locked = feed.requiresLogin && !isLoggedIn
-            ChoiceChip(
+            DrawerChoiceChip(
                 label = feed.label,
                 selected = draft.feed == feed,
-                // 未登录时未读入口置灰，点了只关抽屉，不改排序。
-                chipDisabled = locked,
+                disabled = locked,
+                colors = colors,
                 onTap = { onPick(feed) },
                 onBlockedTap = onClose
             )
@@ -308,6 +314,7 @@ private fun ScopeTabBar(
     activeTab: Int,
     categoryPicked: Boolean,
     tagPicked: Boolean,
+    colors: HomeVisualTokens,
     onSelect: (Int) -> Unit
 ) {
     Row(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -315,6 +322,7 @@ private fun ScopeTabBar(
             label = "版块",
             active = activeTab == TAB_CATEGORY,
             showDot = categoryPicked,
+            colors = colors,
             onClick = { onSelect(TAB_CATEGORY) },
             modifier = Modifier.weight(1f)
         )
@@ -322,6 +330,7 @@ private fun ScopeTabBar(
             label = "标签",
             active = activeTab == TAB_TAG,
             showDot = tagPicked,
+            colors = colors,
             onClick = { onSelect(TAB_TAG) },
             modifier = Modifier.weight(1f)
         )
@@ -333,10 +342,10 @@ private fun ScopeTab(
     label: String,
     active: Boolean,
     showDot: Boolean,
+    colors: HomeVisualTokens,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = arkdoColors
 
     // 两个 tab 各有一条恒占位的指示条，切换时原地"长出来/缩回去"，
     // 不是一条滑块在左右平移 —— 别改成位移动画。
@@ -396,6 +405,8 @@ private fun CategoryTab(
     categories: List<HomeCategory>,
     isLoggedIn: Boolean,
     expandedIds: List<Long>,
+    colors: HomeVisualTokens,
+    assetBaseUrl: String,
     loading: Boolean,
     error: String?,
     onRetry: () -> Unit,
@@ -408,12 +419,13 @@ private fun CategoryTab(
         iconId = "layer-group",
         label = "不限版块",
         selected = draft.categoryId == null,
+        colors = colors,
         onClick = { onPick(null) }
     )
 
     // 版块一个都没有时，把原因显示出来 —— 留白会让人以为是抽屉坏了。
     if (categories.isEmpty()) {
-        CategoryPlaceholder(loading = loading, error = error, onRetry = onRetry)
+        CategoryPlaceholder(loading = loading, error = error, colors = colors, onRetry = onRetry)
         return
     }
 
@@ -423,6 +435,8 @@ private fun CategoryTab(
         draft = draft,
         isLoggedIn = isLoggedIn,
         expandedIds = expandedIds,
+        colors = colors,
+        assetBaseUrl = assetBaseUrl,
         onPick = onPick,
         onToggleExpand = onToggleExpand
     )
@@ -433,10 +447,9 @@ private fun CategoryTab(
 private fun CategoryPlaceholder(
     loading: Boolean,
     error: String?,
+    colors: HomeVisualTokens,
     onRetry: () -> Unit
 ) {
-    val colors = arkdoColors
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -484,6 +497,8 @@ private fun CategoryTree(
     draft: HomeQuery,
     isLoggedIn: Boolean,
     expandedIds: List<Long>,
+    colors: HomeVisualTokens,
+    assetBaseUrl: String,
     onPick: (HomeCategory?) -> Unit,
     onToggleExpand: (Long) -> Unit
 ) {
@@ -497,6 +512,8 @@ private fun CategoryTree(
             isLoggedIn = isLoggedIn,
             expandable = children.isNotEmpty(),
             expanded = root.id in expandedIds,
+            colors = colors,
+            assetBaseUrl = assetBaseUrl,
             onPick = onPick,
             onToggleExpand = { onToggleExpand(root.id) }
         )
@@ -512,6 +529,8 @@ private fun CategoryTree(
                         isLoggedIn = isLoggedIn,
                         expandable = false,
                         expanded = false,
+                        colors = colors,
+                        assetBaseUrl = assetBaseUrl,
                         onPick = onPick,
                         onToggleExpand = {}
                     )
@@ -530,18 +549,19 @@ private fun CategoryRow(
     isLoggedIn: Boolean,
     expandable: Boolean,
     expanded: Boolean,
+    colors: HomeVisualTokens,
+    assetBaseUrl: String,
     onPick: (HomeCategory?) -> Unit,
     onToggleExpand: () -> Unit
 ) {
     val context = LocalContext.current
-    val colors = arkdoColors
 
     val restricted = category.readRestricted && !isLoggedIn
-    val badge = category.asTopicCategory()
-    val parentBadge = parent?.asTopicCategory()
-    val accent = TopicBadgeUtils.categoryColor(badge)
-    val iconId = TopicBadgeUtils.categoryIcon(context, badge, parentBadge)
-    val logo = TopicBadgeUtils.categoryLogo(badge, parentBadge)
+    val accent = parseHexColor(category.color) ?: Color(0xFF6B7280)
+    val iconId = homeCategoryIcon(context, category, parent)
+    val logo = category.uploadedLogo?.takeIf(String::isNotBlank)
+        ?: parent?.uploadedLogo?.takeIf(String::isNotBlank)
+        ?: ""
 
     Row(
         modifier = Modifier
@@ -563,7 +583,7 @@ private fun CategoryRow(
             when {
                 iconId != null -> FaIcon(iconId, accent, 15.dp)
                 logo.isNotEmpty() -> AsyncImage(
-                    model = TopicBadgeUtils.resolveBadgeAssetUrl(logo),
+                    model = resolveHomeAsset(logo, assetBaseUrl),
                     contentDescription = null,
                     modifier = Modifier.size(15.dp),
                     contentScale = ContentScale.Fit
@@ -588,7 +608,7 @@ private fun CategoryRow(
         )
 
         if (restricted) {
-            FaIcon("lock", colors.textFaint, 12.dp, Modifier.padding(start = 6.dp, end = 4.dp))
+            FaIcon("lock", colors.textTertiary, 12.dp, Modifier.padding(start = 6.dp, end = 4.dp))
         } else if (selected) {
             FaIcon("check", colors.brand, 13.dp, Modifier.padding(start = 6.dp))
         }
@@ -606,7 +626,7 @@ private fun CategoryRow(
                     .clickable(onClick = onToggleExpand),
                 contentAlignment = Alignment.Center
             ) {
-                Chevron(expanded = expanded, size = 16.dp)
+                Chevron(expanded = expanded, size = 16.dp, colors = colors)
             }
         }
     }
@@ -620,11 +640,10 @@ private fun TagTab(
     tagQuery: String,
     tagResults: List<TagSuggestion>,
     tagLoading: Boolean,
+    colors: HomeVisualTokens,
     onQueryChange: (String) -> Unit,
     onPick: (HomeTag?) -> Unit
 ) {
-    val colors = arkdoColors
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -673,13 +692,14 @@ private fun TagTab(
         iconId = "tags",
         label = "不限标签",
         selected = draft.tag.isNullOrBlank(),
+        colors = colors,
         onClick = { onPick(null) }
     )
 
     val searching = tagQuery.trim().isNotEmpty()
     if (tagResults.isNotEmpty()) {
         tagResults.forEach { suggestion ->
-            TagRow(name = suggestion.name, selected = draft.tag == suggestion.name) {
+            TagRow(name = suggestion.name, selected = draft.tag == suggestion.name, colors = colors) {
                 onPick(HomeTag(name = suggestion.name, id = suggestion.id))
             }
         }
@@ -700,10 +720,14 @@ private fun TagTab(
 private fun TagRow(
     name: String,
     selected: Boolean,
+    colors: HomeVisualTokens,
     onClick: () -> Unit
 ) {
-    val colors = arkdoColors
-    val iconId = TopicBadgeUtils.tagIconId(name) ?: "tag"
+    val context = LocalContext.current
+    val styles = remember { loadHomeTagStyles(context) }
+    val style = styles[name.trim().lowercase()]
+    val iconId = style?.iconId ?: "tag"
+    val iconColor = style?.color ?: Color(0xFF6B7280)
 
     Row(
         modifier = Modifier
@@ -720,7 +744,7 @@ private fun TagRow(
                 .padding(end = 10.dp),
             contentAlignment = Alignment.Center
         ) {
-            FaIcon(iconId, TopicBadgeUtils.tagColor(name), 14.dp)
+            FaIcon(iconId, iconColor, 14.dp)
         }
 
         Text(
@@ -745,10 +769,9 @@ private fun ScopeAllRow(
     iconId: String,
     label: String,
     selected: Boolean,
+    colors: HomeVisualTokens,
     onClick: () -> Unit
 ) {
-    val colors = arkdoColors
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -779,56 +802,15 @@ private fun ScopeAllRow(
     }
 }
 
-@Composable
-private fun GroupHeader(
-    label: String,
-    count: Int,
-    expanded: Boolean,
-    onToggle: () -> Unit
-) {
-    val colors = arkdoColors
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(ROW_HEIGHT)
-            .clickable(onClick = onToggle)
-            .padding(start = 12.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .width(18.dp)
-                .padding(end = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Chevron(expanded = expanded, size = 15.dp)
-        }
-
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = colors.textPrimary,
-            modifier = Modifier.weight(1f)
-        )
-
-        if (count > 0) {
-            Text(text = "$count", fontSize = 12.sp, color = colors.textTertiary)
-        }
-    }
-}
-
 /** 右向箭头，展开时转 90°。 */
 @Composable
-private fun Chevron(expanded: Boolean, size: androidx.compose.ui.unit.Dp) {
-    val colors = arkdoColors
+private fun Chevron(expanded: Boolean, size: androidx.compose.ui.unit.Dp, colors: HomeVisualTokens) {
     val angle by animateFloatAsState(
         targetValue = if (expanded) 90f else 0f,
         animationSpec = tween(EXPAND_MS),
         label = "chevron"
     )
-    FaIcon("chevron-right", colors.textFaint, size, Modifier.rotate(angle))
+    FaIcon("chevron-right", colors.textTertiary, size, Modifier.rotate(angle))
 }
 
 /** 展开内容只做淡入淡出，非对称时长；后续行的位移由布局本身完成。 */
@@ -850,11 +832,10 @@ private fun ConfirmBar(
     draft: HomeQuery,
     isDirty: Boolean,
     bottomInset: androidx.compose.ui.unit.Dp,
+    colors: HomeVisualTokens,
     onApply: () -> Unit,
     onClose: () -> Unit
 ) {
-    val colors = arkdoColors
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -892,23 +873,52 @@ private fun ConfirmBar(
     }
 }
 
-private fun HomeCategory.asTopicCategory(): TopicCategory = TopicCategory(
-    id = id,
-    name = name,
-    color = color,
-    textColor = textColor,
-    slug = slug,
-    parentCategoryId = parentCategoryId,
-    uploadedLogo = uploadedLogo,
-    icon = icon,
-    readRestricted = readRestricted
-)
-
 private fun List<HomeCategory>.topLevel(): List<HomeCategory> =
     filter { it.parentCategoryId == null && !it.isUncategorized() }
 
 private fun List<HomeCategory>.childrenOf(parentId: Long): List<HomeCategory> =
     filter { it.parentCategoryId == parentId }
+
+@Composable
+private fun DrawerChoiceChip(
+    label: String,
+    selected: Boolean,
+    disabled: Boolean,
+    colors: HomeVisualTokens,
+    onTap: () -> Unit,
+    onBlockedTap: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val highlighted = selected && !disabled
+    val textColor = when {
+        disabled -> colors.textTertiary
+        highlighted -> colors.brand
+        else -> colors.textBody
+    }
+    Box(
+        modifier = Modifier
+            .padding(end = 8.dp, bottom = 8.dp)
+            .height(32.dp)
+            .alpha(if (pressed && !disabled) 0.7f else 1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (highlighted) colors.infoSoftBg else colors.surfaceMuted)
+            .clickable(interactionSource = interactionSource, indication = null) {
+                if (disabled) onBlockedTap() else onTap()
+            }
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = if (highlighted) FontWeight.Medium else FontWeight.Normal,
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
 
 private fun HomeCategory.isUncategorized(): Boolean {
     val slug = slug?.trim()?.lowercase().orEmpty()

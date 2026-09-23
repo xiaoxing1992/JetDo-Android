@@ -860,7 +860,7 @@ private fun HomeCategoryBadge(
     }
 }
 
-private data class HomeTagStyle(val iconId: String, val color: Color)
+internal data class HomeTagStyle(val iconId: String, val color: Color)
 
 @Composable
 private fun HomeTagBadge(tag: HomeTag, style: HomeTagStyle?, colors: HomeVisualTokens) {
@@ -887,7 +887,7 @@ private fun HomeTagBadge(tag: HomeTag, style: HomeTagStyle?, colors: HomeVisualT
     }
 }
 
-private fun homeCategoryIcon(
+internal fun homeCategoryIcon(
     context: android.content.Context,
     category: HomeCategory,
     parentCategory: HomeCategory?
@@ -913,7 +913,7 @@ private fun homeCategoryIcon(
     return find(category.icon) ?: find(parentCategory?.icon)
 }
 
-private fun normalizeHomeIcon(value: String?): String {
+internal fun normalizeHomeIcon(value: String?): String {
     if (value.isNullOrBlank()) return ""
     var result = ""
     value.trim().lowercase().split(Regex("\\s+")).forEach { token ->
@@ -924,7 +924,7 @@ private fun normalizeHomeIcon(value: String?): String {
     return result
 }
 
-private fun loadHomeTagStyles(context: android.content.Context): Map<String, HomeTagStyle> = runCatching {
+internal fun loadHomeTagStyles(context: android.content.Context): Map<String, HomeTagStyle> = runCatching {
     val resourceId = context.resources.getIdentifier("linuxdo_tag_icons", "raw", context.packageName)
     if (resourceId == 0) return@runCatching emptyMap()
     val json = context.resources.openRawResource(resourceId).bufferedReader().use { it.readText() }
@@ -1129,7 +1129,7 @@ private fun HomeAvatar(
     }
 }
 
-private fun parseHexColor(value: String): Color? = runCatching {
+internal fun parseHexColor(value: String): Color? = runCatching {
     val hex = value.removePrefix("#")
     if (hex.length != 6) return@runCatching null
     Color(
