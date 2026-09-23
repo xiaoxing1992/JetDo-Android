@@ -105,6 +105,7 @@ import java.io.ByteArrayOutputStream
 fun NewTopicScreen(
     categories: List<TopicCategory> = emptyList(),
     seedCategoryId: Long? = null,
+    resume: NewTopicResume? = null,
     onBack: () -> Unit,
     onPublished: (topicId: Long) -> Unit,
     viewModel: NewTopicViewModel = hiltViewModel()
@@ -131,8 +132,8 @@ fun NewTopicScreen(
     }
 
     var editMode by remember { mutableStateOf(true) }
-    var title by remember { mutableStateOf("") }
-    var bodyField by remember { mutableStateOf(TextFieldValue("")) }
+    var title by remember { mutableStateOf(resume?.title.orEmpty()) }
+    var bodyField by remember { mutableStateOf(TextFieldValue(resume?.body.orEmpty())) }
     var categoryPickerVisible by remember { mutableStateOf(false) }
     var tagPickerVisible by remember { mutableStateOf(false) }
     var expandedParentId by remember { mutableLongStateOf(-1L) }
@@ -185,17 +186,21 @@ fun NewTopicScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.onOpened(seedCategoryId)
+        viewModel.onOpened(seedCategoryId, resume)
     }
 
-    BackHandler { onBack() }
+    BackHandler {
+        viewModel.flushDraft()
+        onBack()
+    }
 
     // 离屏 markdown 编译 WebView(1×1、近透明,不可见;必须挂在视图树里才会加载完成)。
     val markdownEngine = remember(context) { viewModel.ensureRenderEngine(context.applicationContext) }
     DisposableEffect(markdownEngine) {
         onDispose {
             previewJob?.cancel()
-            // 页面卸载即释放引擎:在途/排队请求全部失败,WebView destroy。
+            // 关掉时补存还没到防抖点的改动，再释放引擎。
+            viewModel.flushDraft()
             viewModel.close()
         }
     }
@@ -223,7 +228,10 @@ fun NewTopicScreen(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CloseButton { onBack() }
+                CloseButton {
+                    viewModel.flushDraft()
+                    onBack()
+                }
                 Row(
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.Center
@@ -346,7 +354,7 @@ fun NewTopicScreen(
                         },
                         textStyle = TextStyle(
                             fontSize = 16.sp,
-                            lineHeight = 24.sp,
+                            lineHeight = 16.sp,
                             color = colors.textBody
                         ),
                         cursorBrush = SolidColor(colors.textBody),
@@ -356,8 +364,8 @@ fun NewTopicScreen(
                                     Text(
                                         "正文(支持 Markdown)",
                                         fontSize = 16.sp,
-                                        color = colors.textTertiary,
-                                        modifier = Modifier.padding(16.dp)
+                                        lineHeight = 16.sp,
+                                        color = colors.textTertiary
                                     )
                                 }
                                 inner()
@@ -365,7 +373,7 @@ fun NewTopicScreen(
                         },
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp)
+                            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
                     )
                 }
                 MarkdownToolbar(

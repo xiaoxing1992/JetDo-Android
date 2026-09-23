@@ -11,6 +11,7 @@ import com.arkdo.android.BuildConfig
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.auth.AuthService
 import com.arkdo.android.services.notification.NotificationApi
+import com.arkdo.android.services.draft.DraftService
 import com.arkdo.android.services.topic.TopicService
 import com.arkdo.android.services.user.UserProfileService
 import dagger.Module
@@ -81,6 +82,12 @@ object AppModule {
     @Singleton
     fun provideTopicService(): TopicService {
         return TopicService(ArkWebNetworkBridge)
+    }
+
+    @Provides
+    @Singleton
+    fun provideDraftService(): DraftService {
+        return DraftService(ArkWebNetworkBridge)
     }
 
     @Provides

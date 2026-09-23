@@ -20,6 +20,8 @@ import com.arkdo.android.services.challenge.ChallengeRecoveryState
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.services.draft.DraftService
+import com.arkdo.android.ui.drafts.DraftResume
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -54,6 +56,7 @@ private const val DELETED_BY_AUTHOR_HTML = "<p>(帖子已被作者删除)</p>"
 @HiltViewModel
 class TopicDetailViewModel @Inject constructor(
     private val topicService: TopicService,
+    private val draftService: DraftService,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -80,13 +83,26 @@ class TopicDetailViewModel @Inject constructor(
 
     private var currentTopicId: Long? = null
     private var currentSlug: String? = null
+    /** 从草稿列表带进来的续写。发表成功后删掉，只删一次。 */
+    private var resumedDraft: DraftResume? = null
+    private var draftComposerOpened = false
 
-    fun loadTopic(topicId: Long, slug: String?, title: String?, targetPostNumber: Int? = null) {
+    fun loadTopic(
+        topicId: Long,
+        slug: String?,
+        title: String?,
+        targetPostNumber: Int? = null,
+        draft: DraftResume? = null
+    ) {
+        if (draft != null && resumedDraft == null) {
+            resumedDraft = draft
+        }
         if (currentTopicId == topicId) {
             // 同一话题再次进入（如引用跳楼）：走跳楼分流，不重复首屏加载。
             if (targetPostNumber != null) {
                 jumpToPostNumber(targetPostNumber)
             }
+            maybeOpenDraftComposer()
             return
         }
         currentTopicId = topicId
@@ -105,6 +121,7 @@ class TopicDetailViewModel @Inject constructor(
                 if (targetPostNumber != null) {
                     jumpToPostNumber(targetPostNumber)
                 }
+                maybeOpenDraftComposer()
             } else {
                 _uiState.update {
                     it.copy(
@@ -433,6 +450,51 @@ class TopicDetailViewModel @Inject constructor(
     // ========== 回复输入栏（切片 7，逐行对齐鸿蒙 openComposerForTopic / openComposerForPost） ==========
 
     /**
+     * 草稿列表点进来：详情加载完后自动打开已有回复/编辑浮层，不再请求原文。
+     * 编辑必须带楼 id 和原文基线，缺一不可，否则会把旧正文当成新回复发出去。
+     */
+    private fun maybeOpenDraftComposer() {
+        val draft = resumedDraft ?: return
+        if (draftComposerOpened || draft.reply.isEmpty()) return
+        draftComposerOpened = true
+        val editPostId = draft.editPostId
+        val original = draft.originalText
+        if (editPostId != null && editPostId > 0 && original != null) {
+            resetComposerModes()
+            _uiState.update {
+                it.copy(
+                    editingPostId = editPostId,
+                    editingOriginalRaw = original,
+                    composerPlaceholder = "编辑这条回复",
+                    composerVisible = true,
+                    pendingReplyText = draft.reply
+                )
+            }
+            return
+        }
+        resetComposerModes()
+        _uiState.update {
+            it.copy(
+                composerPlaceholder = "回复当前话题",
+                composerReplyToPostNumber = null,
+                composerVisible = true,
+                pendingReplyText = draft.reply
+            )
+        }
+    }
+
+    /** 续写来的草稿发表成功后删掉。回帖自动草稿的 key 是 topic_<id>，那条由回复自动保存管，这里不重复删。 */
+    private fun deleteResumedDraftIfAny() {
+        val draft = resumedDraft ?: return
+        resumedDraft = null
+        val topicId = _uiState.value.topic?.id
+        if (topicId != null && draft.draftKey == "topic_$topicId") return
+        viewModelScope.launch {
+            draftService.deleteDraft(draft.draftKey, draft.sequence)
+        }
+    }
+
+    /**
      * 点击右下角悬浮回复按钮。与鸿蒙同序：未登录先拦（ensureLoggedIn 会广播请求登录，
      * 登录页弹出属登录切片）→ 复位 composer 各模式 → 定占位文字 → 再展开浮层。
      */
@@ -547,6 +609,7 @@ class TopicDetailViewModel @Inject constructor(
             _uiState.update { it.copy(isSubmittingReply = false) }
             if (result.success && result.data != null) {
                 applyEditedPost(result.data)
+                deleteResumedDraftIfAny()
                 _uiState.update {
                     it.copy(
                         composerVisible = false,
@@ -710,6 +773,7 @@ class TopicDetailViewModel @Inject constructor(
             if (result.success && result.data != null) {
                 val outcome = result.data
                 if (outcome.pending) {
+                    deleteResumedDraftIfAny()
                     _uiState.update {
                         it.copy(
                             isSubmittingReply = false,
@@ -720,6 +784,7 @@ class TopicDetailViewModel @Inject constructor(
                         )
                     }
                 } else if (outcome.post != null) {
+                    deleteResumedDraftIfAny()
                     dataSource.appendPosts(listOf(outcome.post))
                     _uiState.update {
                         it.copy(

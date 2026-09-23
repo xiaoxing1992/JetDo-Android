@@ -23,10 +23,13 @@ import com.arkdo.android.navigation.slidePopEnterTransition
 import com.arkdo.android.navigation.slidePopExitTransition
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.CurrentUserHolder
+import com.arkdo.android.ui.composer.NewTopicResume
 import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.composer.canUseComposer
 import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.common.constants.AppConstants
+import com.arkdo.android.ui.drafts.DraftResume
+import com.arkdo.android.ui.drafts.DraftsScreen
 import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.ExperimentalSettingsScreen
 import com.arkdo.android.ui.screens.LoginScreen
@@ -120,6 +123,7 @@ fun ArkDoNavHost(
                         )
                     }
                 },
+                onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
                 onOpenWeb = { url, title ->
                     if (url.isNotEmpty()) {
                         val q = title?.takeIf { it.isNotEmpty() }
@@ -177,12 +181,16 @@ fun ArkDoNavHost(
             val slug = backStackEntry.arguments?.getString("slug")
             val title = backStackEntry.arguments?.getString("title")
             val target = backStackEntry.arguments?.getString("target")?.toIntOrNull()
+            val draftResume = navController.previousBackStackEntry
+                ?.savedStateHandle
+                ?.get<DraftResume>(DRAFT_REPLY_RESUME_KEY)
 
             TopicDetailScreen(
                 topicId = topicId,
                 slug = slug,
                 title = title,
                 targetPostNumber = target,
+                draftResume = draftResume,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToTopic = { navTopicId, navSlug, navTarget ->
                     val parts = mutableListOf<String>()
@@ -322,6 +330,27 @@ fun ArkDoNavHost(
             )
         }
 
+        // 我的草稿。新主题续写走原生发帖页，其余类型仍打开网页。
+        composable(Routes.DRAFTS) {
+            DraftsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                username = CurrentUserHolder.currentUser.value?.username.orEmpty(),
+                onResumeTopic = { resume ->
+                    navController.currentBackStackEntry?.savedStateHandle?.set(DRAFT_RESUME_KEY, resume)
+                    navController.navigate(Routes.NEW_TOPIC)
+                },
+                onResumeReply = { topicId, title, resume ->
+                    openTopicWithDraft(navController, topicId, title, resume)
+                },
+                onResumeEdit = { topicId, title, resume ->
+                    openTopicWithDraft(navController, topicId, title, resume)
+                },
+                onOpenWeb = { url ->
+                    navController.navigate("${Routes.WEBVIEW}/${java.net.URLEncoder.encode(url, "UTF-8")}?title=${java.net.URLEncoder.encode("我的草稿", "UTF-8")}")
+                }
+            )
+        }
+
         // 发新主题页(首页 FAB 进入;发帖成功跳进新帖详情)。
         composable(
             route = Routes.NEW_TOPIC + "?categoryId={categoryId}",
@@ -330,11 +359,13 @@ fun ArkDoNavHost(
             )
         ) { entry ->
             val seedCategory = entry.arguments?.getLong("categoryId")?.takeIf { it > 0 }
+            val resume = navController.previousBackStackEntry?.savedStateHandle?.get<NewTopicResume>(DRAFT_RESUME_KEY)
             val currentUser by CurrentUserHolder.currentUser.collectAsState()
             val context = androidx.compose.ui.platform.LocalContext.current
             if (canUseComposer(currentUser, LoginGate.isLoggedIn(context))) {
                 NewTopicScreen(
                     seedCategoryId = seedCategory,
+                    resume = resume,
                     onBack = { navController.popBackStack() },
                     onPublished = { topicId ->
                         // 发帖成功:广播会话变化让首页列表刷新,弹掉发帖页再进新帖详情,
@@ -433,4 +464,18 @@ object Routes {
     const val ACTIVITY_LIST = "activity_list"
     const val NEW_TOPIC = "new_topic"
     const val WEBVIEW = "webview"
+}
+
+private const val DRAFT_RESUME_KEY = "draft_resume"
+private const val DRAFT_REPLY_RESUME_KEY = "draft_reply_resume"
+
+private fun openTopicWithDraft(
+    navController: NavHostController,
+    topicId: Long,
+    title: String,
+    resume: DraftResume
+) {
+    navController.currentBackStackEntry?.savedStateHandle?.set(DRAFT_REPLY_RESUME_KEY, resume)
+    val encoded = java.net.URLEncoder.encode(title, "UTF-8")
+    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId?title=$encoded")
 }

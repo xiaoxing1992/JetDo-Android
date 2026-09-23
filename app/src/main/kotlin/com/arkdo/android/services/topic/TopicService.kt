@@ -1516,7 +1516,7 @@ data class TagSuggestion(
     val text: String,
     val count: Int,
     val description: String? = null
-)
+) : java.io.Serializable
 
 @Serializable
 data class DiscourseTagFilterResponse(

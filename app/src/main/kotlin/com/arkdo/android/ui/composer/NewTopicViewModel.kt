@@ -3,9 +3,15 @@ package com.arkdo.android.ui.composer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import com.arkdo.android.services.draft.DraftService
+import com.arkdo.android.services.draft.SaveTopicDraftInput
+import com.arkdo.android.services.draft.draftHasContent
+import com.arkdo.android.services.draft.resolveDraftKey
 import com.arkdo.android.services.network.NetworkResult
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.data.models.DraftTagRef
+import java.io.Serializable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -27,17 +33,20 @@ import javax.inject.Inject
 const val COMPOSER_MAX_TAGS = 8
 /** 标签联想防抖,对齐鸿蒙 ComposerPage 的 250ms。 */
 const val TAG_QUERY_DEBOUNCE_MS = 250L
+/** 自动存草稿防抖,对齐鸿蒙 ComposerPage 的 2 秒。 */
+const val DRAFT_SAVE_DEBOUNCE_MS = 2000L
 
 /**
  * 发新主题 ViewModel —— 首页发帖浮层的数据流(对齐鸿蒙 HomePage.openComposer →
  * ComposerPage(composeTopic) → CreateTopicFlow.submitNewTopic)。
  *
- * 本轮范围:标题/正文/分类/标签 + 提交(POST /posts)+ 图片上传 + 结果提示与回调。
- * 自动存草稿(DraftService)与视频/附件属后续切片。
+ * 本轮范围:标题/正文/分类/标签 + 提交(POST /posts)+ 图片上传 + 新主题自动存草稿。
+ * 视频/附件属后续切片。回帖草稿不在这条链路上。
  */
 @HiltViewModel
 class NewTopicViewModel @Inject constructor(
     private val topicService: TopicService,
+    private val draftService: DraftService,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -49,6 +58,15 @@ class NewTopicViewModel @Inject constructor(
     private var tagDebounceJob: Job? = null
     private var tagQuerySeq = 0
     private var tagLoadingJob: Job? = null
+    private var draftSaveJob: Job? = null
+
+    // 草稿运行态不进 UI:key 首次保存才生成,续写沿用带进来的;序号必须用服务端回的下一次值。
+    private var draftKey = ""
+    private var draftSequence = 0L
+    private var draftDirty = false
+    private var draftSaving = false
+    private var draftPublished = false
+    private var draftPersisted = false
 
     // 离屏 markdown 引擎:跟随首帧加载,页面销毁释放。仅当渲染真正需要时才懒建。
     private var renderEngine: MarkdownRenderEngine? = null
@@ -61,12 +79,25 @@ class NewTopicViewModel @Inject constructor(
         return engine
     }
 
-    // 遥测:展开时刻;composerMs 结算用。
+    // 遥测:展开时刻 / 首次输入时刻。composerMs、typingMs 结算用。
     private var appearTimeMs = 0L
+    private var firstTypeTimeMs = 0L
 
-    fun onOpened(initialCategoryId: Long?) {
+    fun onOpened(initialCategoryId: Long?, resume: NewTopicResume? = null) {
         appearTimeMs = System.currentTimeMillis()
-        if (initialCategoryId != null && _uiState.value.categoryId == null) {
+        if (resume != null) {
+            draftKey = resume.draftKey
+            draftSequence = resume.sequence
+            draftPersisted = resume.draftKey.isNotEmpty()
+            _uiState.update {
+                it.copy(
+                    title = resume.title,
+                    body = resume.body,
+                    categoryId = resume.categoryId,
+                    tags = resume.tags
+                )
+            }
+        } else if (initialCategoryId != null && _uiState.value.categoryId == null) {
             _uiState.update { it.copy(categoryId = initialCategoryId) }
         }
         if (_uiState.value.categoryId != null) {
@@ -77,11 +108,15 @@ class NewTopicViewModel @Inject constructor(
     // ========== 字段编辑 ==========
 
     fun setTitle(title: String) {
+        noteTyping(title)
         _uiState.update { it.copy(title = title) }
+        scheduleDraftSave()
     }
 
     fun setBody(body: String) {
+        noteTyping(body)
         _uiState.update { it.copy(body = body) }
+        scheduleDraftSave()
     }
 
     fun selectCategory(categoryId: Long?) {
@@ -93,6 +128,7 @@ class NewTopicViewModel @Inject constructor(
                 tagResults = emptyList()
             )
         }
+        scheduleDraftSave()
         if (categoryId != null) loadTags("")
     }
 
@@ -109,6 +145,7 @@ class NewTopicViewModel @Inject constructor(
             if (state.tags.size >= COMPOSER_MAX_TAGS) return false
             _uiState.update { it.copy(tags = it.tags + tag) }
         }
+        scheduleDraftSave()
         return true
     }
 
@@ -264,16 +301,19 @@ class NewTopicViewModel @Inject constructor(
         }
         _uiState.update { it.copy(isSubmitting = true) }
         val composerMs = if (appearTimeMs > 0) System.currentTimeMillis() - appearTimeMs else 0L
+        val typingMs = if (firstTypeTimeMs > 0) System.currentTimeMillis() - firstTypeTimeMs else 0L
         viewModelScope.launch {
             val result = topicService.createTopic(
                 title = state.title.trim(),
                 categoryId = state.categoryId ?: 0L,
                 raw = state.body.trim(),
                 tags = state.tags.map { it.name },
+                typingDurationMs = typingMs,
                 composerOpenDurationMs = composerMs
             )
             _uiState.update { it.copy(isSubmitting = false) }
             if (result.success && result.data != null) {
+                deleteDraftAfterPublish()
                 val outcome = result.data
                 if (outcome.pending) {
                     done(true, null, "帖子已提交,等待审核")
@@ -292,6 +332,76 @@ class NewTopicViewModel @Inject constructor(
         tagLoadingJob?.cancel()
         renderEngine?.release()
         renderEngine = null
+    }
+
+    // ========== 自动存草稿 ==========
+
+    private fun noteTyping(value: String) {
+        if (firstTypeTimeMs == 0L && value.isNotEmpty()) {
+            firstTypeTimeMs = System.currentTimeMillis()
+        }
+    }
+
+    /** 标题、正文、分类、标签任一变化:标脏,停手 2 秒后再存。 */
+    private fun scheduleDraftSave() {
+        if (draftPublished) return
+        draftDirty = true
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch {
+            delay(DRAFT_SAVE_DEBOUNCE_MS)
+            saveDraftNow()
+        }
+    }
+
+    /** 关闭页面时补存一次。已发出的不补,避免刚删掉的草稿又写回来。 */
+    fun flushDraft() {
+        if (draftPublished || !draftDirty) return
+        draftSaveJob?.cancel()
+        draftSaveJob = null
+        viewModelScope.launch { saveDraftNow() }
+    }
+
+    private suspend fun saveDraftNow() {
+        if (draftPublished || draftSaving) return
+        val state = _uiState.value
+        if (!draftHasContent(state.title, state.body)) return
+        draftSaving = true
+        draftDirty = false
+        val now = System.currentTimeMillis()
+        draftKey = resolveDraftKey(draftKey, now)
+        val result = draftService.saveTopicDraft(
+            SaveTopicDraftInput(
+                draftKey = draftKey,
+                sequence = draftSequence,
+                title = state.title.trim(),
+                categoryId = state.categoryId,
+                tags = state.tags.map { DraftTagRef(it.id, it.name) },
+                reply = state.body,
+                composerTimeMs = if (appearTimeMs > 0) now - appearTimeMs else 0L,
+                typingTimeMs = if (firstTypeTimeMs > 0) now - firstTypeTimeMs else 0L
+            )
+        )
+        draftSaving = false
+        if (result.success && result.data != null) {
+            draftSequence = result.data
+            draftPersisted = true
+            Timber.i("[ArkDO][Composer] draft saved key=%s seq=%d", draftKey, draftSequence)
+        } else {
+            draftDirty = true
+            Timber.i("[ArkDO][Composer] draft save failed status=%d", result.statusCode)
+        }
+    }
+
+    private suspend fun deleteDraftAfterPublish() {
+        draftPublished = true
+        draftSaveJob?.cancel()
+        draftSaveJob = null
+        if (draftKey.isEmpty()) return
+        val result = draftService.deleteDraft(draftKey, draftSequence)
+        if (result.success && draftPersisted) {
+            draftPersisted = false
+            Timber.i("[ArkDO][Composer] draft deleted after publish key=%s", draftKey)
+        }
     }
 }
 
@@ -313,3 +423,14 @@ data class NewTopicUiState(
     val uploadFailures: List<String> = emptyList(),
     val isSubmitting: Boolean = false
 )
+
+/** 从草稿列表续写新主题时带进来的内容。空 key 表示新开一篇。 */
+data class NewTopicResume(
+    val draftKey: String,
+    val sequence: Long,
+    val title: String,
+    val body: String,
+    val categoryId: Long?,
+    val tags: List<TagSuggestion>
+) : Serializable
+

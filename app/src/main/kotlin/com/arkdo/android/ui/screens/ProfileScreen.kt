@@ -122,6 +122,7 @@ fun ProfileScreen(
     onOpenWeb: (String, String?) -> Unit = { _, _ -> },
     onOpenActivity: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenBadges: (String, Int) -> Unit = { _, _ -> },
+    onOpenDrafts: () -> Unit = {},
     showTopBar: Boolean = true,
     immersive: Boolean = false,
     modifier: Modifier = Modifier,
@@ -182,6 +183,7 @@ fun ProfileScreen(
                         onOpenWeb = onOpenWeb,
                         onOpenActivity = onOpenActivity,
                         onOpenBadges = onOpenBadges,
+                        onOpenDrafts = onOpenDrafts,
                         onRequestLogout = { showLogoutDialog = true }
                     )
                 } else {
@@ -240,6 +242,7 @@ private fun LoggedInContent(
     onOpenWeb: (String, String?) -> Unit,
     onOpenActivity: (String, String, String) -> Unit,
     onOpenBadges: (String, Int) -> Unit,
+    onOpenDrafts: () -> Unit,
     onRequestLogout: () -> Unit
 ) {
     val colors = arkdoColors
@@ -360,7 +363,7 @@ private fun LoggedInContent(
             onOpenActivity(username, "1", "我的点赞")
         }
         QuickEntryNative(icon = "pen-to-square", label = "我的草稿") {
-            onOpenWeb("https://linux.do/u/$username/activity/drafts", "我的草稿")
+            onOpenDrafts()
         }
     }
 

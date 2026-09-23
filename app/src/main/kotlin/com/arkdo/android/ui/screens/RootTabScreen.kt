@@ -322,6 +322,7 @@ fun RootTabScreen(
                             )
                         }
                     },
+                    onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
                     onOpenWeb = { url, title ->
                         if (url.isNotEmpty()) {
                             val q = title?.takeIf { it.isNotEmpty() }
