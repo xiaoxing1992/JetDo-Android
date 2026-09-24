@@ -21,6 +21,8 @@ data class HomeVisualTokens(
     val avatarBorder: Color,
     val fabComposeBg: Color,
     val fabTopFg: Color,
+    /** 玻璃态蒙版。浅色 20% 的 #F2F3F5，深色 20% 的 #2A2E33。 */
+    val fabGlassTint: Color,
     val incomingHighlight: Color,
     val unread: Color,
     val amber: Color,
@@ -43,6 +45,7 @@ data class HomeVisualTokens(
             avatarBorder = Color(0x4D00AEFF),
             fabComposeBg = Color(0xFF0088CC),
             fabTopFg = Color(0xFF5A6169),
+            fabGlassTint = Color(0x33F2F3F5),
             incomingHighlight = Color(0xFFE8F1FE),
             unread = Color(0xFF66CCFF),
             amber = Color(0xFFF5A623),
