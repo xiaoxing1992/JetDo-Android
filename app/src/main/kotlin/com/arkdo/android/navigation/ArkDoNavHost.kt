@@ -40,6 +40,8 @@ import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.screens.WebViewPage
 import com.arkdo.android.ui.bookmarks.BookmarksScreen
 import com.arkdo.android.ui.bookmarks.ReadTopicsScreen
+import com.arkdo.android.ui.level.LevelProgressScreen
+import com.arkdo.android.ui.credit.LdcCreditScreen
 import com.arkdo.android.ui.user.BadgesScreen
 import com.arkdo.android.ui.user.ActivityScreen
 import com.arkdo.android.ui.user.UserProfileScreen
@@ -128,6 +130,10 @@ fun ArkDoNavHost(
                 onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
                 onOpenBookmarks = { navController.navigate(Routes.BOOKMARKS) },
                 onOpenReadTopics = { navController.navigate(Routes.READ_TOPICS) },
+                onOpenLevelProgress = { navController.navigate(Routes.LEVEL_PROGRESS) },
+                onOpenLdcCredit = { startLogin ->
+                    navController.navigate("${Routes.LDC_CREDIT}?startLogin=$startLogin")
+                },
                 onOpenWeb = { url, title ->
                     if (url.isNotEmpty()) {
                         val q = title?.takeIf { it.isNotEmpty() }
@@ -361,6 +367,29 @@ fun ArkDoNavHost(
             )
         }
 
+        composable(Routes.LEVEL_PROGRESS) {
+            LevelProgressScreen(
+                isLoggedIn = CurrentUserHolder.currentUser.value != null,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenWeb = { url, title ->
+                    val q = "?title=${java.net.URLEncoder.encode(title, "UTF-8")}"
+                    navController.navigate("${Routes.WEBVIEW}/${java.net.URLEncoder.encode(url, "UTF-8")}$q")
+                }
+            )
+        }
+
+        composable(
+            route = Routes.LDC_CREDIT + "?startLogin={startLogin}",
+            arguments = listOf(
+                navArgument("startLogin") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { entry ->
+            LdcCreditScreen(
+                startLogin = entry.arguments?.getBoolean("startLogin") ?: false,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
         // 我的草稿。新主题续写走原生发帖页，其余类型仍打开网页。
         composable(Routes.DRAFTS) {
             DraftsScreen(
@@ -492,6 +521,7 @@ object Routes {
 
     // 其他功能页面
     const val LEVEL_PROGRESS = "level_progress"
+    const val LDC_CREDIT = "ldc_credit"
     const val BADGES = "badges"
     const val ACTIVITY_LIST = "activity_list"
     const val NEW_TOPIC = "new_topic"

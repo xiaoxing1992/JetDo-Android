@@ -10,14 +10,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +67,9 @@ import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.services.credit.LdcCreditSession
+import com.arkdo.android.services.credit.formatLdcAmount
+import com.arkdo.android.ui.theme.isArkdoInDarkTheme
 import com.arkdo.android.ui.utils.daysSince
 import com.arkdo.android.ui.utils.formatCount
 import com.arkdo.android.ui.utils.formatTimeRead
@@ -83,6 +91,7 @@ private val CardRadius = 16.dp
 private val CardPadding = 16.dp
 private val CardGap = 12.dp
 private val StatsAreaHeight = 126.dp
+private val UserMetaHeight = 26.dp
 
 /** 顶栏:返回 + 「我的」 + 设置。 */
 @Composable
@@ -125,6 +134,8 @@ fun ProfileScreen(
     onOpenDrafts: () -> Unit = {},
     onOpenBookmarks: () -> Unit = {},
     onOpenReadTopics: () -> Unit = {},
+    onOpenLevelProgress: () -> Unit = {},
+    onOpenLdcCredit: (Boolean) -> Unit = {},
     showTopBar: Boolean = true,
     immersive: Boolean = false,
     modifier: Modifier = Modifier,
@@ -188,6 +199,8 @@ fun ProfileScreen(
                         onOpenDrafts = onOpenDrafts,
                         onOpenBookmarks = onOpenBookmarks,
                         onOpenReadTopics = onOpenReadTopics,
+                        onOpenLevelProgress = onOpenLevelProgress,
+                        onOpenLdcCredit = onOpenLdcCredit,
                         onRequestLogout = { showLogoutDialog = true }
                     )
                 } else {
@@ -249,6 +262,8 @@ private fun LoggedInContent(
     onOpenDrafts: () -> Unit,
     onOpenBookmarks: () -> Unit,
     onOpenReadTopics: () -> Unit,
+    onOpenLevelProgress: () -> Unit,
+    onOpenLdcCredit: (Boolean) -> Unit,
     onRequestLogout: () -> Unit
 ) {
     val colors = arkdoColors
@@ -293,23 +308,34 @@ private fun LoggedInContent(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable(onClick = openProfileWeb)
                 )
-                val trust = trustLabelWithTitleOf(profile)
-                if (trust.isNotEmpty()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(top = 3.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(colors.surfaceMuted)
-                            .padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 2.dp)
-                    ) {
-                        Text(
-                            text = trust,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = colors.ldAccent
-                        )
-                        FaIcon("chevron-right", colors.ldAccent, 11.dp, Modifier.padding(start = 1.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 3.dp)
+                ) {
+                    if (username.isNotEmpty()) {
+                        Text("@$username", fontSize = 13.sp, color = colors.textSecondary)
+                    }
+                    val trust = trustLabelWithTitleOf(profile)
+                    if (trust.isNotEmpty()) {
+                        if (username.isNotEmpty()) {
+                            Text(" · ", fontSize = 13.sp, color = colors.textSecondary)
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.surfaceMuted)
+                                .clickable(onClick = onOpenLevelProgress)
+                                .padding(start = 8.dp, end = 6.dp, top = 2.dp, bottom = 2.dp)
+                        ) {
+                            Text(
+                                text = trust,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = colors.ldAccent
+                            )
+                            FaIcon("chevron-right", colors.ldAccent, 11.dp, Modifier.padding(start = 1.dp))
+                        }
                     }
                 }
             }
@@ -321,17 +347,18 @@ private fun LoggedInContent(
             )
         }
         val meta = buildProfileMeta(profile)
-        if (meta.isNotEmpty()) {
-            Text(
-                text = meta,
-                fontSize = 12.sp,
-                color = colors.textFaint,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = CardPadding, end = CardPadding, top = 4.dp, bottom = 2.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = meta,
+            fontSize = 12.sp,
+            color = colors.textFaint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(UserMetaHeight)
+                .padding(start = CardPadding, end = CardPadding)
+                .wrapContentHeight(Alignment.CenterVertically)
+        )
         HorizontalDivider(color = colors.border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = CardPadding))
         if (state.stats != null) {
             StatsGrid(state.stats)
@@ -368,10 +395,12 @@ private fun LoggedInContent(
         QuickEntryNative(icon = "heart", label = "我的点赞", love = true) {
             onOpenActivity(username, "1", "我的点赞")
         }
-        QuickEntryNative(icon = "pen-to-square", label = "我的草稿") {
+        QuickEntryNative(icon = "pen-to-square", label = "我的草稿", badgeCount = accountUser.draftCount ?: 0) {
             onOpenDrafts()
         }
     }
+
+    LdcEntryCard(onOpen = onOpenLdcCredit)
 
     // 卡片 3:徽章
     Column(
@@ -386,20 +415,23 @@ private fun LoggedInContent(
             onMore = { onOpenBadges(username, profile?.badgeCount ?: 0) }
         )
         if (state.topBadges.isNotEmpty()) {
-            state.topBadges.chunked(3).forEach { row ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = CardPadding, end = CardPadding, top = 10.dp)
-                ) {
-                    row.forEach { badge ->
-                        ProfileBadgeTile(badge)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = CardPadding, end = CardPadding, top = 10.dp, bottom = CardPadding)
+            ) {
+                state.topBadges.chunked(3).forEachIndexed { index, row ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = if (index > 0) 8.dp else 0.dp)
+                    ) {
+                        row.forEach { badge -> ProfileBadgeTile(badge) }
+                        repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
                     }
-                    repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
                 }
             }
-            Spacer(modifier = Modifier.height(CardPadding))
         } else {
             Text(
                 text = "暂无徽章",
@@ -531,12 +563,45 @@ private fun androidx.compose.foundation.layout.RowScope.StatCellProfile(value: S
     }
 }
 
+/** LINUX DO Credit 入口行。余额来自 credit 会话缓存;没有会话时显示「去登录」。 */
+@Composable
+private fun LdcEntryCard(onOpen: (Boolean) -> Unit) {
+    val colors = arkdoColors
+    val cached = LdcCreditSession.getCachedInfo()
+    val anonymous = !LdcCreditSession.hasSession()
+    val gold = if (isArkdoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
+    val subtitle = if (anonymous) "使用 LINUX DO 账号登录后查看" else "查看最近 7 天获取记录"
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = CardGap)
+            .clip(RoundedCornerShape(CardRadius))
+            .background(colors.surfaceCard)
+            .clickable { onOpen(anonymous) }
+            .padding(horizontal = CardPadding, vertical = 14.dp)
+    ) {
+        FaIcon("coins", gold, 20.dp)
+        Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
+            Text("LINUX DO Credit", fontSize = 15.sp, color = colors.textPrimary)
+            Text(subtitle, fontSize = 12.sp, color = colors.textFaint, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (cached != null && !anonymous) {
+            Text(formatLdcAmount(cached.availableBalance), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+        } else {
+            Text(if (anonymous) "去登录" else "重试", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.ldAccent)
+        }
+        FaIcon("chevron-right", colors.textFaint, 14.dp, Modifier.padding(start = 6.dp))
+    }
+}
+
 /** 快捷入口一格(对齐鸿蒙 QuickEntryNative)。 */
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.QuickEntryNative(
     icon: String,
     label: String,
     love: Boolean = false,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     Column(
@@ -545,7 +610,34 @@ private fun androidx.compose.foundation.layout.RowScope.QuickEntryNative(
             .weight(1f)
             .clickable(onClick = onClick)
     ) {
-        FaIcon(icon, if (love) Color(0xFFFA6C8D) else arkdoColors.textPrimary, 24.dp)
+        Box {
+            FaIcon(icon, if (love) Color(0xFFFA6C8D) else arkdoColors.textPrimary, 24.dp)
+            if (badgeCount > 0) {
+                val count = if (badgeCount > 99) "99+" else badgeCount.toString()
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 8.dp, y = (-6).dp)
+                        .height(16.dp)
+                        .defaultMinSize(minWidth = 16.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(arkdoColors.ldAccent)
+                        .padding(horizontal = 4.dp)
+                ) {
+                    Text(
+                        text = count,
+                        fontSize = 10.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            platformStyle = PlatformTextStyle(includeFontPadding = false),
+                            lineHeight = 10.sp
+                        )
+                    )
+                }
+            }
+        }
         Text(label, fontSize = 12.sp, color = arkdoColors.textPrimary, modifier = Modifier.padding(top = 7.dp))
     }
 }
@@ -583,25 +675,48 @@ private fun androidx.compose.foundation.layout.RowScope.ProfileBadgeTile(badge: 
 @Composable
 private fun ProfileActivityRow(item: UserActivityItem, state: ProfileViewModel.UiState) {
     val colors = arkdoColors
-    Row(modifier = Modifier.fillMaxWidth().padding(start = CardPadding, end = CardPadding, top = 12.dp, bottom = 11.dp),
-        verticalAlignment = Alignment.Top) {
-        if (item.actionType == com.arkdo.android.data.models.UserActionType.REPLY.value) {
-            FaIcon("reply", colors.textFaint, 13.dp, Modifier.padding(top = 3.dp))
+    val isReply = item.actionType == com.arkdo.android.data.models.UserActionType.REPLY.value
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = CardPadding, end = CardPadding, top = 12.dp, bottom = 11.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            if (isReply) {
+                FaIcon("reply", colors.textFaint, 13.dp, Modifier.padding(top = 3.dp))
+            }
+            Text(
+                item.title,
+                fontSize = 15.sp,
+                color = colors.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = if (isReply) 6.dp else 0.dp)
+            )
         }
-        Text(item.title, fontSize = 15.sp, color = colors.textPrimary, maxLines = 2,
-            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = if (item.actionType == com.arkdo.android.data.models.UserActionType.REPLY.value) 6.dp else 0.dp))
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = CardPadding, end = CardPadding)) {
-        val cat = state.categories.firstOrNull { it.id == item.categoryId }
-        if (cat != null) {
-            TopicMetadataBadges(category = cat, tags = item.tags, modifier = Modifier.weight(1f))
-        } else if (item.tags.isNotEmpty()) {
-            TopicMetadataBadges(tags = item.tags, modifier = Modifier.weight(1f))
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
-        }
-        RelativeTime.fromNow(item.createdAt).takeIf { it.isNotEmpty() }?.let {
-            Text(it, fontSize = 12.sp, color = colors.textFaint, modifier = Modifier.padding(start = 8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 5.dp)
+        ) {
+            val cat = state.categories.firstOrNull { it.id == item.categoryId }
+            val parent = cat?.parentCategoryId?.let { id -> state.categories.firstOrNull { it.id == id } }
+            if (cat != null || item.tags.isNotEmpty()) {
+                TopicMetadataBadges(
+                    category = cat,
+                    parentCategory = parent,
+                    tags = item.tags,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+            RelativeTime.fromNow(item.createdAt).takeIf { it.isNotEmpty() }?.let {
+                Text(it, fontSize = 12.sp, color = colors.textFaint, modifier = Modifier.padding(start = 8.dp))
+            }
         }
     }
 }
