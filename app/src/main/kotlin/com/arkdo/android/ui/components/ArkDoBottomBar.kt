@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -267,11 +268,14 @@ fun ArkDoBottomBar(
             onDrag = { _, _ -> }
         )
     }
-    // 以 selectedIndex 作 key:它是普通 Int 参数(按值捕获),不是 State ——
-    // 用 snapshotFlow { selectedIndex } 只会读到首次组合的常量,点击切页时永不发射
-    // (实测:拖拽正常、点击后胶囊不跟随)。改 key 后每次外部选中变化都补一段滑动动画;
-    // 拖拽路径已自己 animateToValue,这里用目标值判等避免打架。
+    // 手指拖过或点过之后，选中项变化才滑动。页面返回造成的落位直接跳过去，
+    // 否则底栏重建时会从临时的首页位置滑到原来的 tab。
+    var seenGesture by remember { mutableStateOf(false) }
     LaunchedEffect(selectedIndex) {
+        if (!seenGesture) {
+            capsule.snapToValue(selectedIndex.toFloat())
+            return@LaunchedEffect
+        }
         if (capsule.targetValue.fastRoundToInt() != selectedIndex) {
             capsule.animateToValue(selectedIndex.toFloat())
         }
@@ -346,7 +350,10 @@ fun ArkDoBottomBar(
                     // 槽位宽度直接由节点实测尺寸算(pointerInput 链上拿不到内容层的 slotWidth)。
                     val slotWidthPx = size.width.toFloat() / tabCount
                     detectDragGestures(
-                        onDragStart = { capsule.press() },
+                        onDragStart = {
+                            seenGesture = true
+                            capsule.press()
+                        },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             capsule.updateValue(capsule.targetValue + dragAmount.x / slotWidthPx)
@@ -375,6 +382,7 @@ fun ArkDoBottomBar(
                     val slotWidthPx = size.width.toFloat() / tabCount
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        seenGesture = true
                         capsule.press()
                         val slot = (down.position.x / slotWidthPx).toInt().fastCoerceIn(0, tabCount - 1)
                         if (capsule.targetValue.fastRoundToInt() != slot) {

@@ -15,11 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
@@ -69,6 +72,17 @@ fun RootTabScreen(
     val tabNavController = rememberNavController()
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    // currentBackStackEntryAsState 第一帧固定是 null，选中项会被当成首页。
+    // 独立页盖住 ROOT 时底栏会拆掉，回来就从首页滑到离开前的 tab。这里记住上次的 tab，
+    // 目的地还没回来时先用它，胶囊直接停在原位。
+    var rememberedTab by rememberSaveable { mutableIntStateOf(0) }
+    val matchedTab = rootTabDestinations.indexOfFirst { tab ->
+        currentDestination?.hierarchy?.any { it.route == tab.route } == true
+    }
+    val selectedTabIndex = if (matchedTab >= 0) matchedTab else rememberedTab
+    SideEffect {
+        if (matchedTab >= 0) rememberedTab = matchedTab
+    }
 
     // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和首页共用同一个实例。
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
@@ -163,10 +177,6 @@ fun RootTabScreen(
             // 自定义标签栏(ui/components/ArkDoBottomBar),不用 M3 NavigationBar:
             // 固定 80dp 容器高度和内置 ripple 都与这套视觉冲突;选中胶囊由容器统一画,
             // 切换时整枚平移过去(doer 截图实测的系统行为)。
-            val selectedTabIndex = rootTabDestinations.indexOfFirst { tab ->
-                currentDestination?.hierarchy?.any { it.route == tab.route } == true
-            }.let { if (it >= 0) it else 0 }
-
             // tab 切换统一入口:点击与胶囊拖拽换页都走这里(导航参数与原实现一致)。
             val selectTab: (Int) -> Unit = { index ->
                 rootTabDestinations.getOrNull(index)?.let { tab ->
