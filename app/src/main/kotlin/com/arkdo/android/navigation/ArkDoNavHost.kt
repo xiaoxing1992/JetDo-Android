@@ -44,6 +44,7 @@ import com.arkdo.android.ui.level.LevelProgressScreen
 import com.arkdo.android.ui.credit.LdcCreditScreen
 import com.arkdo.android.ui.user.BadgesScreen
 import com.arkdo.android.ui.user.ActivityScreen
+import com.arkdo.android.ui.user.SolvedPostsScreen
 import com.arkdo.android.ui.user.UserProfileScreen
 import com.arkdo.android.ui.topic.TopicDetailScreen
 
@@ -283,6 +284,9 @@ fun ArkDoNavHost(
                 onOpenActivity = { uname, filter, title ->
                     navController.navigate("${Routes.ACTIVITY_LIST}/$uname?filter=${java.net.URLEncoder.encode(filter, "UTF-8")}&title=${java.net.URLEncoder.encode(title, "UTF-8")}")
                 },
+                onOpenSolved = { uname, count ->
+                    navController.navigate("${Routes.SOLVED}/$uname?solvedCount=$count")
+                },
                 onOpenWeb = { url, title ->
                     // 私信/网页打开:走原生通用 WebView 页(对齐鸿蒙 openWebPage → AppRouteName.WEB)。
                     // 目标整段 URL 都要作为单个路径段编码(& / ? 会让导航把它拆成 query 参数)。
@@ -336,6 +340,27 @@ fun ArkDoNavHost(
                     postNum?.let { parts.add("target=$it") }
                     val q = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
                     navController.navigate("${Routes.TOPIC_DETAIL}/$tid$q")
+                }
+            )
+        }
+
+        composable(
+            route = Routes.SOLVED + "/{username}?solvedCount={solvedCount}",
+            arguments = listOf(
+                navArgument("username") { type = NavType.StringType },
+                navArgument("solvedCount") { type = NavType.IntType; defaultValue = 0 }
+            )
+        ) { entry ->
+            val args = entry.arguments
+            SolvedPostsScreen(
+                username = args?.getString("username").orEmpty(),
+                solvedCount = args?.getInt("solvedCount") ?: 0,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTopic = { tid, title, postNum ->
+                    val parts = mutableListOf<String>()
+                    title.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                    parts.add("target=$postNum")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$tid?" + parts.joinToString("&"))
                 }
             )
         }
@@ -524,6 +549,7 @@ object Routes {
     const val LDC_CREDIT = "ldc_credit"
     const val BADGES = "badges"
     const val ACTIVITY_LIST = "activity_list"
+    const val SOLVED = "solved"
     const val NEW_TOPIC = "new_topic"
     const val WEBVIEW = "webview"
 }
