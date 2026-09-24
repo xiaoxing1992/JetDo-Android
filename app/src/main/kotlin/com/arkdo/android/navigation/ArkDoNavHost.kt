@@ -38,6 +38,8 @@ import com.arkdo.android.ui.screens.SettingsScreen
 import com.arkdo.android.ui.screens.TopicListStyleSettingsScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.screens.WebViewPage
+import com.arkdo.android.ui.bookmarks.BookmarksScreen
+import com.arkdo.android.ui.bookmarks.ReadTopicsScreen
 import com.arkdo.android.ui.user.BadgesScreen
 import com.arkdo.android.ui.user.ActivityScreen
 import com.arkdo.android.ui.user.UserProfileScreen
@@ -124,6 +126,8 @@ fun ArkDoNavHost(
                     }
                 },
                 onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
+                onOpenBookmarks = { navController.navigate(Routes.BOOKMARKS) },
+                onOpenReadTopics = { navController.navigate(Routes.READ_TOPICS) },
                 onOpenWeb = { url, title ->
                     if (url.isNotEmpty()) {
                         val q = title?.takeIf { it.isNotEmpty() }
@@ -330,6 +334,33 @@ fun ArkDoNavHost(
             )
         }
 
+        composable(Routes.BOOKMARKS) {
+            BookmarksScreen(
+                username = CurrentUserHolder.currentUser.value?.username.orEmpty(),
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTopic = { topicId, title, postNumber ->
+                    val parts = mutableListOf<String>()
+                    title.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                    postNumber?.let { parts.add("target=$it") }
+                    val query = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$query")
+                }
+            )
+        }
+
+        composable(Routes.READ_TOPICS) {
+            ReadTopicsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTopic = { topicId, title, postNumber ->
+                    val parts = mutableListOf<String>()
+                    title?.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                    postNumber?.let { parts.add("target=$it") }
+                    val query = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$query")
+                }
+            )
+        }
+
         // 我的草稿。新主题续写走原生发帖页，其余类型仍打开网页。
         composable(Routes.DRAFTS) {
             DraftsScreen(
@@ -445,6 +476,7 @@ object Routes {
     const val TOPIC_DETAIL = "topic_detail"
     const val USER_PROFILE = "user_profile"
     const val BOOKMARKS = "bookmarks"
+    const val READ_TOPICS = "read_topics"
     const val DRAFTS = "drafts"
     const val SETTINGS = "settings"
     const val LOGIN = "login"

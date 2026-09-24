@@ -1,5 +1,6 @@
 package com.arkdo.android.di
 
+import com.arkdo.android.core.data.bookmark.DefaultBookmarkRepository
 import com.arkdo.android.core.data.home.DefaultHomeRepository
 import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.site.CategoryRepository
@@ -21,6 +22,11 @@ object HomeModule {
     @Singleton
     fun provideHomeRepository(client: JsonNetworkClient): HomeRepository =
         DefaultHomeRepository(client)
+
+    @Provides
+    @Singleton
+    fun provideBookmarkRepository(client: JsonNetworkClient): DefaultBookmarkRepository =
+        DefaultBookmarkRepository(client)
 
     @Provides
     @Singleton

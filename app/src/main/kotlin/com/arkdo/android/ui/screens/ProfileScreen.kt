@@ -123,6 +123,8 @@ fun ProfileScreen(
     onOpenActivity: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenBadges: (String, Int) -> Unit = { _, _ -> },
     onOpenDrafts: () -> Unit = {},
+    onOpenBookmarks: () -> Unit = {},
+    onOpenReadTopics: () -> Unit = {},
     showTopBar: Boolean = true,
     immersive: Boolean = false,
     modifier: Modifier = Modifier,
@@ -184,6 +186,8 @@ fun ProfileScreen(
                         onOpenActivity = onOpenActivity,
                         onOpenBadges = onOpenBadges,
                         onOpenDrafts = onOpenDrafts,
+                        onOpenBookmarks = onOpenBookmarks,
+                        onOpenReadTopics = onOpenReadTopics,
                         onRequestLogout = { showLogoutDialog = true }
                     )
                 } else {
@@ -243,6 +247,8 @@ private fun LoggedInContent(
     onOpenActivity: (String, String, String) -> Unit,
     onOpenBadges: (String, Int) -> Unit,
     onOpenDrafts: () -> Unit,
+    onOpenBookmarks: () -> Unit,
+    onOpenReadTopics: () -> Unit,
     onRequestLogout: () -> Unit
 ) {
     val colors = arkdoColors
@@ -354,10 +360,10 @@ private fun LoggedInContent(
             .padding(top = CardPadding, bottom = 14.dp)
     ) {
         QuickEntryNative(icon = "clock-rotate-left", label = "浏览历史", love = false) {
-            onOpenWeb("https://linux.do/read", "浏览历史")
+            onOpenReadTopics()
         }
         QuickEntryNative(icon = "bookmark", label = "我的书签", love = false) {
-            onOpenWeb("https://linux.do/u/$username/activity/bookmarks", "我的书签")
+            onOpenBookmarks()
         }
         QuickEntryNative(icon = "heart", label = "我的点赞", love = true) {
             onOpenActivity(username, "1", "我的点赞")
