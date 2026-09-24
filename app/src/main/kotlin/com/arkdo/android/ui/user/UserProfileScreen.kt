@@ -99,6 +99,7 @@ fun UserProfileScreen(
     onOpenUser: (username: String, displayName: String?, avatarTemplate: String?) -> Unit = { _, _, _ -> },
     onOpenBadges: (username: String, badgeCount: Int) -> Unit = { _, _ -> },
     onOpenActivity: (username: String, filter: String, title: String) -> Unit = { _, _, _ -> },
+    onOpenSolved: (username: String, solvedCount: Int) -> Unit = { _, _ -> },
     onOpenWeb: (url: String, title: String?) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: UserProfileViewModel = hiltViewModel()
@@ -148,7 +149,12 @@ fun UserProfileScreen(
                 .padding(horizontal = PageMargin)
         ) {
             Spacer(modifier = Modifier.height(CardGap))
-            IdentityCard(state = state, viewModel = viewModel, onOpenWeb = onOpenWeb)
+            IdentityCard(
+                state = state,
+                viewModel = viewModel,
+                onOpenWeb = onOpenWeb,
+                onOpenSolved = onOpenSolved
+            )
             if (state.summary != null) {
                 BadgesCard(state = state, onAllBadges = { onOpenBadges(state.username, state.profile?.badgeCount ?: 0) })
                 CircleCard(state = state, onOpenUser = onOpenUser)
@@ -306,7 +312,8 @@ private fun SegmentAllFilterAndTitle(segment: Int, nameLabel: String): Pair<Stri
 private fun IdentityCard(
     state: UserProfileViewModel.UiState,
     viewModel: UserProfileViewModel,
-    onOpenWeb: (String, String?) -> Unit = { _, _ -> }
+    onOpenWeb: (String, String?) -> Unit = { _, _ -> },
+    onOpenSolved: (String, Int) -> Unit = { _, _ -> }
 ) {
     val colors = arkdoColors
     val profile = state.profile
@@ -492,7 +499,9 @@ private fun IdentityCard(
                     // 对齐鸿蒙 SolvedCell:唯一可点的统计格,数值绿色 + 右侧绿色 chevron。
                     // solvedCount>0 才走绿色箭头入口;0/未知则普通灰格。
                     if ((stats.solvedCount ?: 0) > 0) {
-                        SolvedCell(formatCount(stats.solvedCount ?: 0))
+                        SolvedCell(formatCount(stats.solvedCount ?: 0)) {
+                            onOpenSolved(state.username, stats.solvedCount ?: 0)
+                        }
                     } else {
                         StatCell(
                             if (stats.solvedCount != null) formatCount(stats.solvedCount) else "—",
@@ -523,11 +532,18 @@ private fun IdentityCard(
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.SolvedCell(value: String) {
-    // 对齐鸿蒙 SolvedCell:数值 17 Bold 绿色 + chevron_right 11 绿色(间距1),垂直居中,
-    // 整格可点进「解决方案」页(页面未迁移,onClick 预留)。
+private fun androidx.compose.foundation.layout.RowScope.SolvedCell(
+    value: String,
+    onClick: () -> Unit
+) {
+    // 对齐鸿蒙 SolvedCell:数值 17 Bold 绿色 + chevron_right 绿色，整格进解决方案列表。
     val success = if (com.arkdo.android.ui.theme.isArkdoInDarkTheme()) Color(0xFF4CAF50) else Color(0xFF009900)
-    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = value,

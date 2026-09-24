@@ -208,8 +208,7 @@ private data class DiscourseUserBadgeRecord(
 
 @Serializable
 private data class DiscourseSolvedResponse(
-    val posts: List<DiscourseSolvedPost>? = null,
-    val count: Int? = null
+    @SerialName("user_solved_posts") val userSolvedPosts: List<DiscourseSolvedPost>? = null
 )
 
 @Serializable
@@ -462,8 +461,8 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         return item
     }
 
-    /** 已解决列表：/solution/by_user.json。 */
-    suspend fun getSolvedPosts(username: String, offset: Int, limit: Int): NetworkResult<SolvedPostPage> {
+    /** 已解决列表：/solution/by_user.json，对齐鸿蒙 getSolvedPosts。 */
+    suspend fun getSolvedPosts(username: String, offset: Int, limit: Int = SOLVED_PAGE_SIZE): NetworkResult<SolvedPostPage> {
         val response = bridge.getJson(
             "/solution/by_user.json?username=${java.net.URLEncoder.encode(username, "UTF-8")}&offset=$offset&limit=$limit"
         )
@@ -472,32 +471,34 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点已解决列表响应为空。"
+                response.statusCode, response.challengeState, "站点解决方案响应为空。"
             )
         return try {
             val payload = json.decodeFromString<DiscourseSolvedResponse>(data)
-            val items = payload.posts.orEmpty().mapNotNull { p ->
-                if (p.postId == null || p.topicId == null) return@mapNotNull null
+            val source = payload.userSolvedPosts.orEmpty()
+            val items = source.mapNotNull { p ->
+                val title = p.topicTitle
+                if (p.topicId == null || title.isNullOrEmpty()) return@mapNotNull null
                 SolvedPostItem(
-                    postId = p.postId,
+                    postId = p.postId ?: 0,
                     topicId = p.topicId,
                     postNumber = p.postNumber ?: 1,
-                    topicTitle = p.topicTitle ?: "",
-                    slug = p.slug,
-                    excerpt = p.excerpt ?: "",
+                    topicTitle = title,
+                    slug = p.slug?.takeIf { it.isNotEmpty() },
+                    excerpt = solvedPlainText(p.excerpt),
                     categoryId = p.categoryId,
-                    createdAt = p.createdAt
+                    createdAt = p.createdAt?.takeIf { it.isNotEmpty() }
                 )
             }
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
                 challengeState = response.challengeState,
-                data = SolvedPostPage(items = items, hasMore = items.size >= limit)
+                data = SolvedPostPage(items = items, hasMore = source.size >= limit)
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点已解决列表响应不是有效 JSON。"
+                response.statusCode, response.challengeState, "站点解决方案响应不是有效 JSON。"
             )
         }
     }
@@ -672,4 +673,32 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             count = count ?: 0
         )
     }
+}
+
+private const val SOLVED_PAGE_SIZE = 20
+
+/** 对齐鸿蒙 HtmlText.toPlainText：去标签、解实体、空白压成一格。 */
+internal fun solvedPlainText(html: String?): String {
+    if (html.isNullOrBlank()) return ""
+    var text = html.replace(Regex("<[^>]*>"), "")
+    if (text.contains('&')) {
+        text = text
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+            .replace("&nbsp;", " ")
+            .replace("&hellip;", "…")
+            .replace("&mdash;", "—")
+            .replace("&ndash;", "–")
+        text = Regex("&#(\\d+);").replace(text) { match ->
+            match.groupValues[1].toIntOrNull()?.toChar()?.toString().orEmpty()
+        }
+        text = Regex("&#[xX]([0-9a-fA-F]+);").replace(text) { match ->
+            match.groupValues[1].toIntOrNull(16)?.toChar()?.toString().orEmpty()
+        }
+        text = text.replace("&amp;", "&")
+    }
+    return text.replace(Regex("\\s+"), " ").trim()
 }
