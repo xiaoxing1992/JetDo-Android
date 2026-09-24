@@ -333,6 +333,8 @@ fun RootTabScreen(
                         }
                     },
                     onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
+                    onOpenBookmarks = { navController.navigate(Routes.BOOKMARKS) },
+                    onOpenReadTopics = { navController.navigate(Routes.READ_TOPICS) },
                     onOpenWeb = { url, title ->
                         if (url.isNotEmpty()) {
                             val q = title?.takeIf { it.isNotEmpty() }
