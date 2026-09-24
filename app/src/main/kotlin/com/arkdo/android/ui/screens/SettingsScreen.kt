@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DarkMode
@@ -44,6 +45,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -65,13 +70,15 @@ import com.arkdo.android.BuildConfig
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.common.theme.AppThemeMode
 import com.arkdo.android.common.theme.ThemeModeStore
+import com.arkdo.android.core.designsystem.FAB_GLASS_RADIUS_MAX
+import com.arkdo.android.core.designsystem.FAB_GLASS_RADIUS_MIN
+import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.ui.theme.arkdoColors
 
 // 设置页,对齐鸿蒙 SettingsPage:灰底无描边卡片。
 // 外观三档会立刻改主题。关于里的反馈、版本、免责声明、诊断日志是真入口。
 // 论坛 / 通知 / 网络 / 我的站点在 Android 上还没有子页,
 // 点了只提示,不造一个空页面冒充已经做好。实验性功能只放了首页新话题提醒。
-// 悬浮按钮玻璃效果没有消费方,先不放开关。
 
 private val PageMargin = 12.dp
 private val CardRadius = 16.dp
@@ -96,6 +103,8 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val themeMode by ThemeModeStore.mode.collectAsState()
+    val fabGlassEnabled by FabGlassStore.enabled.collectAsState()
+    val fabGlassRadius by FabGlassStore.radius.collectAsState()
     var showAbout by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
     val versionLabel = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
@@ -137,6 +146,12 @@ fun SettingsScreen(
                     label = "帖子列表样式",
                     onClick = onOpenTopicListStyle
                 )
+                Hairline()
+                FabGlassRow(enabled = fabGlassEnabled)
+                if (fabGlassEnabled) {
+                    Hairline()
+                    FabGlassRadiusRow(radius = fabGlassRadius)
+                }
             }
 
             SettingsCard {
@@ -276,6 +291,73 @@ private fun AppearanceRow(mode: AppThemeMode) {
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FabGlassRow(enabled: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = CardPadding, vertical = 12.dp)
+    ) {
+        Icon(
+            Icons.Outlined.BlurOn,
+            contentDescription = null,
+            tint = arkdoColors.textSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+        Column(
+            modifier = Modifier
+                .padding(start = 14.dp, end = 12.dp)
+                .weight(1f)
+        ) {
+            Text("悬浮按钮玻璃效果", fontSize = 15.sp, color = arkdoColors.textPrimary)
+            Text(
+                "首页与详情页右下角按钮显示液态玻璃",
+                fontSize = 12.sp,
+                color = arkdoColors.textFaint,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = FabGlassStore::setEnabled,
+            colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
+        )
+    }
+}
+
+/** 只在开关打开时露出：关着时这个值不产生任何效果。拖动只改内存，松手才写盘。 */
+@Composable
+private fun FabGlassRadiusRow(radius: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = CardPadding, end = CardPadding, top = 12.dp, bottom = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("磨砂强度", fontSize = 15.sp, color = arkdoColors.textPrimary, modifier = Modifier.weight(1f))
+            Text(radius.toString(), fontSize = 13.sp, color = arkdoColors.textFaint)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(FAB_GLASS_RADIUS_MIN.toString(), fontSize = 11.sp, color = arkdoColors.textFaint)
+            Slider(
+                value = radius.toFloat(),
+                onValueChange = { FabGlassStore.setRadius(it) },
+                onValueChangeFinished = FabGlassStore::flushRadius,
+                valueRange = FAB_GLASS_RADIUS_MIN.toFloat()..FAB_GLASS_RADIUS_MAX.toFloat(),
+                steps = FAB_GLASS_RADIUS_MAX - FAB_GLASS_RADIUS_MIN - 1,
+                colors = SliderDefaults.colors(
+                    thumbColor = arkdoColors.ldAccent,
+                    activeTrackColor = arkdoColors.ldAccent,
+                    inactiveTrackColor = arkdoColors.surfaceMuted
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            Text(FAB_GLASS_RADIUS_MAX.toString(), fontSize = 11.sp, color = arkdoColors.textFaint)
         }
     }
 }

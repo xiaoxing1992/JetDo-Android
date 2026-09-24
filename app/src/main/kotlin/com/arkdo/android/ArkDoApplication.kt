@@ -4,6 +4,7 @@ import android.app.Application
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.arkdo.android.common.theme.ThemeModeStore
+import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.core.designsystem.TopicListStyleStore
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
@@ -51,6 +52,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         // 主题三态要在首帧之前读出来，否则设置页选的浅色/深色要等下一次重组才生效。
         ThemeModeStore.init(this)
         TopicListStyleStore.init(this)
+        FabGlassStore.init(this)
         RealtimeTopicsPrefs.init(this)
 
         // 初始化 DoH (DNS over HTTPS)：从 DohManager 读配置构造解析器。

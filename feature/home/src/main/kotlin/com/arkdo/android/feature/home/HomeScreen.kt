@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -73,7 +73,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.PlatformTextStyle
 import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.core.designsystem.FabGlassStore
+import com.arkdo.android.core.designsystem.GlassFab
 import com.arkdo.android.core.designsystem.bottomBarClearance
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeQuery
 import com.arkdo.android.core.model.HomeTopic
@@ -86,7 +91,6 @@ import kotlinx.coroutines.launch
 
 private val BarButtonSize = 42.dp
 private val BarHeight = 56.dp
-private val FabSize = 52.dp
 private val FooterHeight = 54.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -155,6 +159,10 @@ internal fun HomeScreen(
 
     val highlightUntil = state.incomingHighlightUntil
     val highlightIds = state.incomingHighlightIds
+    val glassEnabled by FabGlassStore.enabled.collectAsState()
+    val glassRadius by FabGlassStore.radius.collectAsState()
+    // 只在开关打开时录列表。按钮在这层外面取样，避免采到自己所在的祖先层。
+    val contentBackdrop = if (glassEnabled) rememberLayerBackdrop() else null
     LaunchedEffect(highlightUntil, highlightIds) {
         if (highlightIds.isEmpty() || highlightUntil <= 0L) return@LaunchedEffect
         val total = (highlightUntil - System.currentTimeMillis()).coerceAtLeast(0L)
@@ -208,24 +216,27 @@ internal fun HomeScreen(
         },
         floatingActionButton = {
             if (state.topics.isNotEmpty()) {
+                val backToTop = state.showBackToTopFab
+                val iconColor = if (backToTop) colors.fabTopFg else colors.fabComposeBg
                 // 底栏是悬浮胶囊:FAB 上移一个避让高度,避免与底栏重叠。
-                Box(modifier = Modifier.padding(bottom = bottomBarClearance)) {
-                FloatingActionButton(
-                    onClick = if (state.showBackToTopFab) {
+                GlassFab(
+                    icon = {
+                        FaIcon(
+                            iconId = if (backToTop) "arrow-up" else "pen-to-square",
+                            color = iconColor,
+                            size = 22.dp
+                        )
+                    },
+                    onClick = if (backToTop) {
                         { scope.launch { listState.animateScrollToItem(0) }; Unit }
                     } else onComposeClick,
-                    modifier = Modifier.size(FabSize),
-                    shape = CircleShape,
-                    containerColor = colors.pageBg,
-                    contentColor = if (state.showBackToTopFab) colors.fabTopFg else colors.fabComposeBg
-                ) {
-                    FaIcon(
-                        iconId = if (state.showBackToTopFab) "arrow-up" else "pen-to-square",
-                        color = if (state.showBackToTopFab) colors.fabTopFg else colors.fabComposeBg,
-                        size = 22.dp
-                    )
-                }
-                }
+                    glassEnabled = glassEnabled,
+                    glassRadius = glassRadius,
+                    backdrop = contentBackdrop,
+                    fallbackColor = colors.pageBg,
+                    glassTint = colors.fabGlassTint,
+                    modifier = Modifier.padding(bottom = bottomBarClearance)
+                )
             }
         }
     ) { paddingValues ->
@@ -244,7 +255,14 @@ internal fun HomeScreen(
                     colors = colors
                 )
             } else {
-                Column(modifier = Modifier.fillMaxSize()) {
+                val listBackdrop = contentBackdrop
+                Column(
+                    modifier = if (listBackdrop != null) {
+                        Modifier.fillMaxSize().layerBackdrop(listBackdrop)
+                    } else {
+                        Modifier.fillMaxSize()
+                    }
+                ) {
                     IncomingTopicsPrompt(
                         visible = state.incomingPromptVisible,
                         count = state.incomingTopicIds.size,

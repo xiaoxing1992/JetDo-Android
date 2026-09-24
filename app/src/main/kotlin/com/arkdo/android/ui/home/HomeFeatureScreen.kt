@@ -128,6 +128,7 @@ fun arkdoHomeVisualTokens(): HomeVisualTokens {
         avatarBorder = ArkdoFixedColors.AvatarBorder,
         fabComposeBg = colors.fabComposeBg,
         fabTopFg = colors.fabTopFg,
+        fabGlassTint = colors.floatingActionBg,
         incomingHighlight = colors.incomingHighlight,
         unread = ArkdoFixedColors.Unread,
         amber = ArkdoFixedColors.Amber,

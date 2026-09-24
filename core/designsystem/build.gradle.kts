@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.coil.svg)
     implementation(libs.coil.network.okhttp)
     implementation(libs.okhttp)
+    implementation(libs.backdrop)
     implementation(libs.timber)
     testImplementation(libs.junit)
 }
