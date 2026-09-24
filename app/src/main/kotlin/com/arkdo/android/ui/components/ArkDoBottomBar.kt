@@ -231,7 +231,8 @@ fun ArkDoBottomBar(
             tabCount = tabCount,
             selectedIndex = selectedIndex,
             modifier = modifier,
-            item = item
+            item = item,
+            onTabSelected = onTabSelected
         )
         return
     }
@@ -584,10 +585,15 @@ private fun SolidFallbackBottomBar(
     tabCount: Int,
     selectedIndex: Int,
     modifier: Modifier = Modifier,
-    item: @Composable RowScope.(index: Int, selected: Boolean, iconVisible: Boolean) -> Unit
+    item: @Composable RowScope.(index: Int, selected: Boolean, iconVisible: Boolean) -> Unit,
+    onTabSelected: (Int) -> Unit = {}
 ) {
     val colors = arkdoColors
     val capsuleShape = RoundedCornerShape(percent = 50)
+    // 和玻璃路径同一条规则：手指点过或拖过之前，选中项变化直接落位。
+    // 低版本没有 DampedDragAnimation，胶囊位置是 animateDpAsState，
+    // 底栏重建时会从首页 0 滑到离开前的 tab。
+    var seenGesture by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
         modifier = modifier
@@ -595,12 +601,41 @@ private fun SolidFallbackBottomBar(
             .navigationBarsPadding()
             .padding(horizontal = BottomBarDefaults.ContainerHorizontalMargin)
             .padding(bottom = BottomBarDefaults.ContainerBottomGap)
+            .pointerInput(tabCount) {
+                val slotWidthPx = size.width.toFloat() / tabCount
+                detectDragGestures(
+                    onDragStart = { seenGesture = true },
+                    onDragEnd = { },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val slot = ((change.position.x + dragAmount.x) / slotWidthPx)
+                            .toInt()
+                            .fastCoerceIn(0, tabCount - 1)
+                        if (slot != selectedIndex) onTabSelected(slot)
+                    }
+                )
+            }
+            .pointerInput(tabCount) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    seenGesture = true
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        if (e.changes.all { !it.pressed }) break
+                    }
+                }
+            }
     ) {
         val slotWidth = maxWidth / tabCount
         val capsuleWidth = minOf(77.dp, slotWidth - BottomBarDefaults.ContentPadding * 2)
+        val targetX = slotWidth * selectedIndex.coerceIn(0, tabCount - 1) + (slotWidth - capsuleWidth) / 2
         val capsuleX by animateDpAsState(
-            targetValue = slotWidth * selectedIndex.coerceIn(0, tabCount - 1) + (slotWidth - capsuleWidth) / 2,
-            animationSpec = spring(dampingRatio = 1f, stiffness = 300f),
+            targetValue = targetX,
+            animationSpec = if (seenGesture) {
+                spring(dampingRatio = 1f, stiffness = 300f)
+            } else {
+                tween(durationMillis = 0)
+            },
             label = "bottomBarCapsuleX"
         )
 
