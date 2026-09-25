@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.arkdo.android.navigation.ArkDoNavHost
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryCoordinator
+import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.AppStateEventBus
 import com.arkdo.android.services.session.observeLifecycle
@@ -87,8 +88,12 @@ class MainActivity : ComponentActivity() {
                 var showPrivateDnsGuide by remember { mutableStateOf(false) }
                 var showChallengeSheet by remember { mutableStateOf(false) }
 
-                // 初始化 Challenge 恢复协调器
-                LaunchedEffect(Unit) {
+                // 初始化 Challenge 恢复协调器 + 订阅挑战信号 / 手动验证请求。
+                //
+                // 用 DisposableEffect 而不是 LaunchedEffect：两个总线都是进程级单例，订阅句柄必须
+                // 在 Activity 重建（切暗色、旋转）时退订，否则每次重建都往总线里多挂一份，
+                // 点一次「手动验证」会同时跑多份回调，其中还夹着已销毁 Activity 的旧协调器。
+                DisposableEffect(Unit) {
                     challengeCoordinator = ChallengeRecoveryCoordinator(
                         onRecovered = {
                             Timber.i("[ArkDO][MainActivity] Challenge resolved, reloading WebView")
@@ -110,6 +115,25 @@ class MainActivity : ComponentActivity() {
                     val unsubscribeChallengeEvent = ChallengeEventBus.subscribe { event ->
                         Timber.i("[ArkDO][MainActivity] Challenge detected: source=${event.source} status=${event.statusCode}")
                         challengeCoordinator?.handleChallengeSignal(event.source)
+                    }
+
+                    // 用户点详情页顶栏「手动验证」：停掉后台静默轮询，直接把验证页交给用户。
+                    // 对齐鸿蒙 RootTabPage.onOpenChallenge = challengeRecovery.forceEscalate() + openChallengeSheet()。
+                    // forceEscalate 在 COOLDOWN（刚过完盾 30s 内）会拒绝启动新一轮恢复，但验证页照开 ——
+                    // 用户主动要求看一眼验证页，不该被冷却期挡回去。
+                    val unsubscribeManualChallenge = ChallengeRecoveryEventBus.subscribeManual {
+                        Timber.i("[ArkDO][MainActivity] manual challenge requested")
+                        challengeCoordinator?.forceEscalate()
+                        showChallengeSheet = true
+                    }
+
+                    onDispose {
+                        unsubscribeChallengeEvent()
+                        unsubscribeManualChallenge()
+                        // 旧协调器必须销毁：它自身持有轮询协程，不 dispose 的话轮询会一直跑下去，
+                        // 回调和状态却落在这份已经作废的 composition 上。
+                        challengeCoordinator?.dispose()
+                        challengeCoordinator = null
                     }
                 }
 
@@ -154,6 +178,10 @@ class MainActivity : ComponentActivity() {
                             com.arkdo.android.ui.screens.CfChallengeScreen(
                                 bridge = com.arkdo.android.services.network.ArkWebNetworkBridge,
                                 onClose = {
+                                    // 必须告知协调器用户放弃了：否则状态机停在 AWAITING_SHEET，
+                                    // 而 forceEscalate() 恰好拒绝 AWAITING_SHEET —— 手动入口接上后
+                                    // 「关一次验证页 = 手动验证永久失效」。这行是和入口配套的，不能少。
+                                    challengeCoordinator?.notifySheetDismissed()
                                     showChallengeSheet = false
                                     Timber.i("[ArkDO][MainActivity] Challenge sheet closed by user")
                                 },
