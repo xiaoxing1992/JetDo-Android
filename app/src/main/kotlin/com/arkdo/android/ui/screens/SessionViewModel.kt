@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.services.session.SessionChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,9 +21,22 @@ class SessionViewModel @Inject constructor(
     private val sessionChecker: SessionChecker
 ) : ViewModel() {
 
+    private val _isChecking = MutableStateFlow(false)
+    /**
+     * 会话检查进行中。首页右上角账号入口据此转圈（对齐鸿蒙 HomePage.ets:1307 的
+     * isCheckingSession 分支）。此前 RootTabScreen 恒传 false，那个分支是死的——
+     * 启动瞬间未登录图标会闪一下再变头像。
+     */
+    val isChecking: StateFlow<Boolean> = _isChecking.asStateFlow()
+
     fun checkCurrentUser() {
         viewModelScope.launch {
-            sessionChecker.checkCurrentUser()
+            _isChecking.value = true
+            try {
+                sessionChecker.checkCurrentUser()
+            } finally {
+                _isChecking.value = false
+            }
         }
     }
 }

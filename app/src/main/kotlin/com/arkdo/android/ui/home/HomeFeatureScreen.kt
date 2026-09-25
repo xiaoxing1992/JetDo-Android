@@ -40,6 +40,8 @@ fun HomeFeatureScreen(
     isLoggedIn: Boolean,
     isCheckingSession: Boolean,
     accountUser: HomeUser?,
+    // 通知未读数：顶栏铃铛角标（真源 NotificationEventBus，由 RootTabScreen 订阅后下发）。
+    unreadCount: Int = 0,
     onTopicClick: (Long, Int?) -> Unit,
     onProfileClick: () -> Unit,
     onNotificationsClick: () -> Unit,
@@ -78,6 +80,7 @@ fun HomeFeatureScreen(
         isLoggedIn = isLoggedIn,
         isCheckingSession = isCheckingSession,
         accountUser = accountUser,
+        unreadCount = unreadCount,
         colors = arkdoHomeVisualTokens(),
         avatarBaseUrl = AppConstants.BASE_URL,
         incomingTopicEvent = incomingTopicEvent.value,
