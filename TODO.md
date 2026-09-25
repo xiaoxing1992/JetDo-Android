@@ -63,7 +63,7 @@
   - [ ] TopicDetailScreen
   - [ ] 帖子列表渲染
   - [ ] 分页加载（窗口式）
-  - [ ] 楼层跳转 Scrubber
+  - [x] 楼层跳转 Scrubber（`ui/topic/TopicScrubber.kt`）
 
 - [ ] **Cooked HTML 解析器**
   - [ ] HTML → AnnotatedString
