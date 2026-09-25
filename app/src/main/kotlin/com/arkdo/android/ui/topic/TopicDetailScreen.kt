@@ -57,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -234,6 +235,45 @@ fun TopicDetailScreen(
         )
     }
 
+    // ── 楼层 scrubber（对齐鸿蒙 TopicScrubber + TopicDetailPage 的 scrubber 状态） ──
+    // 手柄位置 = 视口首楼楼号。项序与阅读计时共用同一套偏移：0 = 摘要卡，
+    // hasEarlier 时 1 = 更早加载器，其后才是楼层，底部是加载态行。
+    val scrubberBounds by remember(ui.posts, ui.hasEarlier, ui.hasMore, ui.topic?.highestPostNumber) {
+        derivedStateOf {
+            // 上限优先取话题最高楼号；缺失时回退到已加载末楼（对齐鸿蒙 getHighestPostNumber）。
+            val highest = (ui.topic?.highestPostNumber ?: 0).takeIf { it > 0 }
+                ?: ui.posts.lastOrNull()?.postNumber
+                ?: 0
+            val firstIndex = listState.firstVisibleItemIndex
+            val postsOffset = if (ui.hasEarlier) 2 else 1
+            val current = when {
+                highest <= 1 -> 1
+                // 钉底：滚到列表物理底部**且末楼已加载完**时手柄钉在底，否则每屏最下面
+                // 几楼在轨道上永远到不了。两个条件缺一不可——少了 !hasMore，在"还有几百楼
+                // 没拉"时人一触底手柄就贴到最高楼，等于骗用户说已经读完了
+                // （对齐鸿蒙 onReachEnd && !hasMorePosts 的双条件）。
+                !listState.canScrollForward && !ui.hasMore -> highest
+                firstIndex <= 0 -> 1
+                else -> ui.posts.getOrNull(firstIndex - postsOffset)?.postNumber ?: 1
+            }
+            ScrubberBounds(current = current, highest = highest)
+        }
+    }
+    // 整屏放得下（不可滚动）时不挂载：只有几楼的帖子它是纯噪声。
+    // 与鸿蒙「摘要项与末尾项同时可见 → 隐藏」的判定同义。
+    val scrubberScrollable by remember {
+        derivedStateOf { listState.canScrollForward || listState.canScrollBackward }
+    }
+    // 松手后的跳转窗口：气泡转 loading 直到滚动请求被消费（已加载楼几乎瞬间，
+    // 未加载楼要等 rewindow 拉完）。超时兜底，避免定位失败时永久卡在高亮态
+    // （对齐鸿蒙 jumpTimerId 的 5s 兜底）。
+    var pendingJump by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pendingJump) {
+        val target = pendingJump ?: return@LaunchedEffect
+        delay(SCRUBBER_JUMP_TIMEOUT_MS)
+        if (pendingJump == target) pendingJump = null
+    }
+
     LaunchedEffect(topicId, targetPostNumber) {
         viewModel.loadTopic(topicId, slug, title, targetPostNumber, draftResume)
     }
@@ -302,7 +342,12 @@ fun TopicDetailScreen(
                                         flashTargetPostId = ui.flashTargetPostId,
                                         // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
                                         scrollRequestPostNumber = ui.scrollRequestPostNumber,
-                                        onScrollRequestConsumed = { viewModel.consumeScrollRequest() },
+                                        onScrollRequestConsumed = {
+                                            viewModel.consumeScrollRequest()
+                                            // 跳楼滚动落地 → 收回气泡 loading
+                                            // （对齐鸿蒙 onJump 的 Promise resolve 收尾）。
+                                            pendingJump = null
+                                        },
                                         hasEarlier = ui.hasEarlier,
                                         earlierCount = ui.earlierCount,
                                         isLoadingEarlier = ui.isLoadingEarlier,
@@ -347,6 +392,31 @@ fun TopicDetailScreen(
                     }
                 }
             }
+        }
+
+        // 楼层 scrubber：内容层之上、顶栏（zIndex 2）之下，绘制顺序在回复 FAB 之前
+        // （对齐鸿蒙：TopicScrubber 声明在悬浮回复按钮之前）。
+        // 挂载条件逐条对齐鸿蒙 TopicDetailPage：`detail &&` → topic 非空、highest > 1、
+        // listScrollable、`!showComposer`；额外多一个 viewerState 判断——Android 的图片
+        // 浏览器是同层全屏覆盖，不像鸿蒙那样另开图层，不挡的话 scrubber 会浮在图片上。
+        if (ui.topic != null && viewerState == null && !ui.composerVisible &&
+            scrubberBounds.highest > 1 && scrubberScrollable
+        ) {
+            TopicScrubber(
+                currentPostNumber = scrubberBounds.current,
+                highestPostNumber = scrubberBounds.highest,
+                jumpTarget = pendingJump,
+                onJump = { postNumber ->
+                    pendingJump = postNumber
+                    viewModel.jumpToPostNumber(postNumber)
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    // 不再额外内收：轨道贴屏右缘（内距由组件按鸿蒙几何算 4/8dp），
+                    // 正好落在卡片外的页边距上而不是压着正文；触摸条仍有 24dp 宽，
+                    // 手指在离边缘十几 dp 处按下同样能抓到，不必去挤系统返回手势最外一条。
+                    .zIndex(1.5f)
+            )
         }
 
         // 顶栏最后绘制：盖在共享元素覆盖层之上（zIndex 置顶），模糊材质统一罩住
@@ -427,6 +497,17 @@ fun TopicDetailScreen(
     }
 }
 
+/** 跳楼气泡的 loading 兜底时长：超过这个时间还没落地就收回高亮（对齐鸿蒙 5s jumpTimer）。 */
+private const val SCRUBBER_JUMP_TIMEOUT_MS = 5000L
+
+/**
+ * 楼层 scrubber 的派生状态。
+ *
+ * 打包成一个不可变值，让 Screen 的一次重组里读到的 current/highest 必然同源——
+ * 分别 derivedStateOf 会在两次读之间看到不同的 posts 快照。
+ */
+private data class ScrubberBounds(val current: Int, val highest: Int)
+
 @Composable
 private fun TopicDetailContent(
     hazeState: HazeState,
@@ -501,12 +582,24 @@ private fun TopicDetailContent(
             }
     }
 
-    // VM 发起的跳楼（引用跳楼/换窗定位）：一次性请求，滚完立刻消费清除。
+    // VM 发起的跳楼（帖内链接定位 / 引用跳楼 / 换窗定位 / 楼层 scrubber）：
+    // 一次性请求，处理完立刻消费清除。
     LaunchedEffect(scrollRequestPostNumber) {
         val target = scrollRequestPostNumber ?: return@LaunchedEffect
         val index = posts.indexOfFirst { it.postNumber == target }
         if (index >= 0) {
-            listState.animateScrollToItem(index + 1)
+            val listIndex = index + 1
+            // 目标楼已**完整**在视口内 → 原地不动，只靠落地高亮提示。
+            // 对齐鸿蒙 ScrollAlign.AUTO 的语义：不把用户已经看得见的楼层无谓拽到屏顶。
+            // scrubber 拖到相邻楼时这个差别很明显——不判的话每跳一次内容都要往上顶一下。
+            val layout = listState.layoutInfo
+            val info = layout.visibleItemsInfo.firstOrNull { it.index == listIndex }
+            val fullyVisible = info != null &&
+                info.offset >= layout.viewportStartOffset &&
+                info.offset + info.size <= layout.viewportEndOffset
+            if (!fullyVisible) {
+                listState.animateScrollToItem(listIndex)
+            }
         }
         onScrollRequestConsumed()
     }
