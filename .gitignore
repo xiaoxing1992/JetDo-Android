@@ -28,3 +28,7 @@ app/src/main/assets/relay-config.json
 
 ## Logs
 *.log
+
+## Local workspace artifacts（APK 分发临时目录、AI 工作目录）
+/.tmp/
+/.workbuddy/
