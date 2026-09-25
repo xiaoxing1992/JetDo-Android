@@ -92,11 +92,6 @@ private const val LIKE_RED = "#EF4444"
 /** 「上次访问」红线色值（对齐官网 last visit #e45735 系）。 */
 private const val LAST_VISIT_RED = "#E45735"
 
-/** 被回复胶囊：折叠 #E6E8EB / 展开 #D9DDE2，文字色 #575D66（对比度修正值，源注释）。 */
-private val REPLY_PILL_BG = Color(0xFFE6E8EB)
-private val REPLY_PILL_BG_ACTIVE = Color(0xFFD9DDE2)
-private val REPLY_PILL_FG = Color(0xFF575D66)
-
 @Composable
 fun TopicPostItem(
     post: TopicPost,
@@ -502,8 +497,7 @@ private fun PostFooter(
     postActionLoading: Boolean = false
 ) {
     val colors = arkdoColors
-    // icon_muted（浅 #BDBDBD / 深 #5C626B，源 Palette 值）。
-    val iconMuted = if (isArkdoInDarkTheme()) Color(0xFF5C626B) else Color(0xFFBDBDBD)
+    val iconMuted = colors.iconMuted
     val context = LocalContext.current
 
     // 「俺也一样」本地显示态：初始取 props（话题级值），toggle 后用服务端权威新态覆盖。
@@ -577,8 +571,7 @@ private fun PostFooter(
                         Text(
                             text = "${post.reactionUsersCount ?: 0}",
                             fontSize = 16.sp,
-                            // 浅色下 icon_muted 对白底对比不达标，单列 reaction_count_fg #888888。
-                            color = parseHexColor("#888888"),
+                            color = colors.reactionCountFg,
                             modifier = Modifier.padding(start = 8.dp)
                         )
                     }
@@ -590,15 +583,15 @@ private fun PostFooter(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(if (repliesExpanded) REPLY_PILL_BG_ACTIVE else REPLY_PILL_BG)
+                            .background(if (repliesExpanded) colors.postReplyControlActiveBg else colors.postReplyControlBg)
                             .clickable { onRepliesToggle() }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text(text = "${post.replyCount}", fontSize = 16.sp, color = REPLY_PILL_FG)
+                        Text(text = "${post.replyCount}", fontSize = 16.sp, color = colors.postReplyControlFg)
                         when {
                             repliesLoading -> LoadingDot()
-                            repliesExpanded -> FaIcon("chevron-up", REPLY_PILL_FG, 14.dp)
-                            else -> FaIcon("chevron-down", REPLY_PILL_FG, 14.dp)
+                            repliesExpanded -> FaIcon("chevron-up", colors.postReplyControlFg, 14.dp)
+                            else -> FaIcon("chevron-down", colors.postReplyControlFg, 14.dp)
                         }
                     }
                 }
@@ -774,7 +767,7 @@ private fun RepliesSection(
                 .padding(start = 19.5.dp)
                 .width(1.dp)
                 .fillMaxHeight()
-                .background(Color(0xFFE9E9E9))
+                .background(arkdoColors.surfaceMuted)
         )
         Column(modifier = Modifier.fillMaxWidth()) {
         if (repliesLoading) {
@@ -1008,7 +1001,7 @@ private fun BoostRow(
                         .clickable(onClick = onAddBoost),
                     contentAlignment = Alignment.Center
                 ) {
-                    FaIcon("rocket", Color(0xFFBDBDBD), 16.dp)
+                    FaIcon("rocket", arkdoColors.iconMuted, 16.dp)
                 }
             }
         }

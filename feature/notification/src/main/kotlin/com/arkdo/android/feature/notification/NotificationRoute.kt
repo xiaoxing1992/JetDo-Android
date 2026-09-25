@@ -13,6 +13,7 @@ fun NotificationRoute(
     onOpenTopic: (Long, String?, String?, Int?) -> Unit,
     onOpenUser: (String, String?, String?) -> Unit,
     showTopBar: Boolean = true,
+    colors: NotificationColors = NotificationColors.Light,
     viewModel: NotificationViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -30,6 +31,7 @@ fun NotificationRoute(
         onMarkAllRead = viewModel::markAllRead,
         onMarkRead = viewModel::markItemRead,
         onOpenTopic = onOpenTopic,
-        onOpenUser = onOpenUser
+        onOpenUser = onOpenUser,
+        colors = colors
     )
 }

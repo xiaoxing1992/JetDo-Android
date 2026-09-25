@@ -225,6 +225,23 @@ fun ArkDoNavHost(
                         }
                         navController.navigate("${Routes.USER_PROFILE}/$username$q")
                     }
+                },
+                // 正文里的站内非帖子页 / 外站链接 → 内置 WebView 页（对齐鸿蒙 openWebPage）。
+                // 目标是完整 URL，必须整段作为单个路径段编码：& / ? 不编码会被导航拆成 query 参数。
+                onOpenWeb = { url, title ->
+                    if (url.isNotEmpty()) {
+                        val q = title?.takeIf { it.isNotEmpty() }
+                            ?.let { "?title=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+                            .orEmpty()
+                        navController.navigate("${Routes.WEBVIEW}/${java.net.URLEncoder.encode(url, "UTF-8")}$q")
+                    }
+                },
+                // 正文 @提及 / /u/<username> 链接 → 原生他人主页。LinkRouter 只给出 username，
+                // 没有展示名与头像可透传，主页自己按 username 拉数据。
+                onOpenUserProfile = { username ->
+                    if (username.isNotEmpty()) {
+                        navController.navigate("${Routes.USER_PROFILE}/$username")
+                    }
                 }
             )
         }
@@ -470,6 +487,8 @@ fun ArkDoNavHost(
         }
 
         // 通用 WebView 页(对齐鸿蒙 AppRouteName.WEB:私信 / 外站 / 站内非帖子页)。
+        // 不声明任何 enter/exit/pop:沿用 NavHost 级的横向 push,与进入帖子详情同向同时长。
+        // (曾试过纵向专属转场,实测全 App 只此一处纵向会被读成「方向不对」,已回退。)
         composable(
             route = Routes.WEBVIEW + "/{url}?title={title}",
             arguments = listOf(

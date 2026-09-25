@@ -42,11 +42,34 @@ import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.NotificationAvatar
 import com.arkdo.android.core.model.NotificationItem
 
-private val PageBackground = Color.White
-private val TextPrimary = Color(0xFF111827)
-private val TextSecondary = Color(0xFF6B7280)
-private val Brand = Color(0xFF0088CC)
-private val UnreadBackground = Color(0xFFE8F1FE)
+/**
+ * 通知页色板，由宿主按当前主题注入。默认值是浅色，避免预览和漏传时退回白底黑字。
+ * 深浅色对齐鸿蒙 page_bg / text_primary / text_secondary / info_soft_bg / ld_accent。
+ */
+@androidx.compose.runtime.Immutable
+data class NotificationColors(
+    val pageBg: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val accent: Color,
+    val unreadBg: Color,
+    val divider: Color,
+    val badgeReadBg: Color,
+    val badgeReadFg: Color
+) {
+    companion object {
+        val Light = NotificationColors(
+            pageBg = Color.White,
+            textPrimary = Color(0xFF111827),
+            textSecondary = Color(0xFF6B7280),
+            accent = Color(0xFF0088CC),
+            unreadBg = Color(0xFFE8F1FE),
+            divider = Color(0xFFE5E7EB),
+            badgeReadBg = Color.White,
+            badgeReadFg = Color(0xFF222222)
+        )
+    }
+}
 
 @Composable
 internal fun NotificationScreen(
@@ -60,14 +83,15 @@ internal fun NotificationScreen(
     onMarkAllRead: () -> Unit,
     onMarkRead: (NotificationItem) -> Unit,
     onOpenTopic: (Long, String?, String?, Int?) -> Unit,
-    onOpenUser: (String, String?, String?) -> Unit
+    onOpenUser: (String, String?, String?) -> Unit,
+    colors: NotificationColors = NotificationColors.Light
 ) {
     if (!loggedIn) {
-        CenterMessage("登录后查看通知", "立即登录", onRequestLogin)
+        CenterMessage("登录后查看通知", "立即登录", onRequestLogin, colors)
         return
     }
 
-    Column(Modifier.fillMaxSize().background(PageBackground)) {
+    Column(Modifier.fillMaxSize().background(colors.pageBg)) {
         if (showTopBar) {
             Row(
                 modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
@@ -75,20 +99,20 @@ internal fun NotificationScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("通知", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                Text("通知", color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 if (state.items.any { !it.read }) {
-                    Text("全部已读", color = Brand, modifier = Modifier.clickable(onClick = onMarkAllRead))
+                    Text("全部已读", color = colors.accent, modifier = Modifier.clickable(onClick = onMarkAllRead))
                 }
             }
-            HorizontalDivider()
+            HorizontalDivider(color = colors.divider)
         }
 
         if (state.items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 when {
-                    state.initialLoading -> CircularProgressIndicator(color = Brand)
-                    state.error != null -> CenterMessage(state.error, "重试", onRetry)
-                    else -> Text("暂无通知", color = TextSecondary)
+                    state.initialLoading -> CircularProgressIndicator(color = colors.accent)
+                    state.error != null -> CenterMessage(state.error, "重试", onRetry, colors)
+                    else -> Text("暂无通知", color = colors.textSecondary)
                 }
             }
             return@Column
@@ -107,8 +131,10 @@ internal fun NotificationScreen(
                 contentPadding = PaddingValues(bottom = bottomBarClearance)
             ) {
                 itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
-                    NotificationRow(item, onMarkRead, onOpenTopic, onOpenUser)
-                    if (index < state.items.lastIndex) HorizontalDivider(modifier = Modifier.padding(start = 70.dp))
+                    NotificationRow(item, colors, onMarkRead, onOpenTopic, onOpenUser)
+                    if (index < state.items.lastIndex) {
+                        HorizontalDivider(modifier = Modifier.padding(start = 70.dp), color = colors.divider)
+                    }
                 }
                 item(key = "footer") {
                     LaunchedEffect(state.items.size) {
@@ -121,10 +147,10 @@ internal fun NotificationScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (state.loadingMore) {
-                            CircularProgressIndicator(Modifier.size(18.dp), color = Brand, strokeWidth = 2.dp)
+                            CircularProgressIndicator(Modifier.size(18.dp), color = colors.accent, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (state.hasMore) "上拉加载更多" else "已到底", fontSize = 13.sp, color = TextSecondary)
+                        Text(if (state.hasMore) "上拉加载更多" else "已到底", fontSize = 13.sp, color = colors.textSecondary)
                     }
                 }
             }
@@ -135,6 +161,7 @@ internal fun NotificationScreen(
 @Composable
 private fun NotificationRow(
     item: NotificationItem,
+    colors: NotificationColors,
     onMarkRead: (NotificationItem) -> Unit,
     onOpenTopic: (Long, String?, String?, Int?) -> Unit,
     onOpenUser: (String, String?, String?) -> Unit
@@ -146,7 +173,7 @@ private fun NotificationRow(
         else if (item.actorUsername.isNotEmpty()) onOpenUser(item.actorUsername, item.actorName, item.avatarTemplate)
     }
     Row(
-        Modifier.fillMaxWidth().background(if (item.read) PageBackground else UnreadBackground)
+        Modifier.fillMaxWidth().background(if (item.read) colors.pageBg else colors.unreadBg)
             .clickable(onClick = open).padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -154,8 +181,12 @@ private fun NotificationRow(
         if (item.actorName.isNotEmpty()) {
             Box(Modifier.size(42.dp), contentAlignment = Alignment.BottomEnd) {
                 NotificationAvatar(item.actorName, item.actorUsername, item.avatarTemplate, 42.dp)
-                Box(Modifier.size(20.dp).clip(CircleShape).background(if (item.read) Color.White else Brand), contentAlignment = Alignment.Center) {
-                    FaIcon(item.iconId, if (item.read) Color(0xFF222222) else Color.White, 11.sp)
+                Box(
+                    Modifier.size(20.dp).clip(CircleShape)
+                        .background(if (item.read) colors.badgeReadBg else colors.accent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    FaIcon(item.iconId, if (item.read) colors.badgeReadFg else Color.White, 11.sp)
                 }
             }
         } else {
@@ -165,26 +196,48 @@ private fun NotificationRow(
         }
         Column(Modifier.weight(1f)) {
             if (item.actorName.isNotEmpty()) {
-                Text(item.actorName, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (item.actionText.isNotEmpty()) Text(item.actionText, color = TextSecondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.actorName, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (item.actionText.isNotEmpty()) Text(item.actionText, color = colors.textSecondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             } else {
-                Text(item.actionText, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.actionText, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (item.title.isNotEmpty()) Text(item.title, color = if (item.read) TextSecondary else TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (item.title.isNotEmpty()) {
+                Text(
+                    item.title,
+                    color = if (item.read) colors.textSecondary else colors.textPrimary,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(RelativeTime.fromNow(item.createdAt), color = TextSecondary, fontSize = 12.sp)
-            if (!item.read) Box(Modifier.size(9.dp).clip(CircleShape).background(Brand))
+            Text(RelativeTime.fromNow(item.createdAt), color = colors.textSecondary, fontSize = 12.sp)
+            if (!item.read) Box(Modifier.size(9.dp).clip(CircleShape).background(colors.accent))
         }
     }
 }
 
 @Composable
-private fun CenterMessage(message: String, action: String?, onAction: (() -> Unit)?) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(message, color = TextSecondary)
+private fun CenterMessage(
+    message: String,
+    action: String?,
+    onAction: (() -> Unit)?,
+    colors: NotificationColors
+) {
+    Column(
+        Modifier.fillMaxSize().background(colors.pageBg),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(message, color = colors.textSecondary)
         if (action != null && onAction != null) {
-            Text(action, color = Brand, modifier = Modifier.padding(top = 16.dp).clip(RoundedCornerShape(19.dp)).clickable(onClick = onAction).padding(horizontal = 18.dp, vertical = 9.dp))
+            Text(
+                action,
+                color = colors.accent,
+                modifier = Modifier.padding(top = 16.dp).clip(RoundedCornerShape(19.dp))
+                    .clickable(onClick = onAction).padding(horizontal = 18.dp, vertical = 9.dp)
+            )
         }
     }
 }

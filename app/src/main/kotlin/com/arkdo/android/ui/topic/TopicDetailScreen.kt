@@ -72,7 +72,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,8 +88,10 @@ import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.data.models.User
+import com.arkdo.android.services.content.DownloadEventBus
 import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
+import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.CommentInputOverlay
 import com.arkdo.android.core.designsystem.FaIcon
@@ -129,6 +130,12 @@ fun TopicDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToTopic: (topicId: Long, slug: String?, targetPostNumber: Int?) -> Unit = { _, _, _ -> },
     onNavigateToUser: (User) -> Unit = {},
+    // 正文里的站内非帖子页 / 外站链接 → 内置 WebView 页（对齐鸿蒙 RootTabPage.openWebPage）。
+    // 不能交系统浏览器:站内页面要靠 App 的会话 Cookie 才有登录态,外部浏览器打开就是未登录。
+    onOpenWeb: (url: String, title: String?) -> Unit = { _, _ -> },
+    // 正文 @提及 / 用户主页链接。LinkRouter 的 User 路由只给出 username，没有 User 对象，
+    // 所以不能复用 onNavigateToUser，单开一个按 username 跳原生主页的入口。
+    onOpenUserProfile: (username: String) -> Unit = {},
     viewModel: TopicDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -139,11 +146,16 @@ fun TopicDetailScreen(
     val ui = uiState
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
-    val uriHandler = LocalUriHandler.current
     // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
     var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
-    // 链接路由（LinkRouter，对齐鸿蒙四类）：TOPIC → 原生详情页（本帖内则直接定位）；
-    // DOWNLOAD / USER / WEB 的原生页面未迁移前暂交系统浏览器，日志留痕。
+    // 链接路由（LinkRouter，对齐鸿蒙 RootTabPage.handleOpenLink 的四类分流）：
+    //   TOPIC    → 原生详情页（本帖内则直接滚动定位，不压栈）
+    //   USER     → 原生他人主页
+    //   DOWNLOAD → host WebView 的原生下载（带会话 Cookie，能过 Cloudflare）
+    //   WEB      → 内置 WebViewPage（站内页面共享 App 的 Cookie，登录态在）
+    // 此前后三类一律交 uriHandler.openUri，结果是站内页面在系统浏览器里没有登录态，
+    // 点一条站内引用就掉到「请登录」。鸿蒙同一入口（RootTabPage.handleOpenLink）
+    // 没有任何一类交给系统浏览器，这里按同样语义对齐。
     // 点作者/评论楼层/boost 头像 → 他人主页(对齐鸿蒙 openUserProfileFor)。
     val onOpenUser: (User) -> Unit = { user ->
         if (user.username.isNotEmpty()) {
@@ -162,26 +174,42 @@ fun TopicDetailScreen(
             }
             is LinkRoute.Download -> {
                 Timber.i("[ArkDO][LinkRouter] download url=%s", route.url)
-                try {
-                    uriHandler.openUri(route.url)
-                } catch (_: Exception) {
+                // 附件下载交 host WebView 的下载委托：带 _t / cf_clearance 且跟随重定向。
+                // 宿主未就绪时退回内置 WebView，总之不进系统浏览器丢登录态。
+                if (ArkWebNetworkBridge.startDownload(route.url)) {
+                    Toast.makeText(context, "开始下载…", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "宿主未就绪，改用页面打开", Toast.LENGTH_SHORT).show()
+                    onOpenWeb(route.url, null)
                 }
             }
             is LinkRoute.User -> {
                 Timber.i("[ArkDO][LinkRouter] user=%s url=%s", route.username, route.url)
-                try {
-                    uriHandler.openUri(route.url)
-                } catch (_: Exception) {
-                }
+                onOpenUserProfile(route.username)
             }
             is LinkRoute.Web -> {
                 Timber.i("[ArkDO][LinkRouter] web url=%s", route.url)
-                try {
-                    uriHandler.openUri(route.url)
-                } catch (_: Exception) {
-                }
+                // 站内外一律内置：站内页靠共享 Cookie 保住登录态；外站也与鸿蒙一致留在站内。
+                onOpenWeb(route.url, null)
             }
         }
+    }
+
+    // 附件下载结果反馈。host 下载委托完成/失败都经 DownloadEventBus 上抛，
+    // 在此之前没有任何订阅方，下载完是静默的。
+    DisposableEffect(Unit) {
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val unsubscribe = DownloadEventBus.subscribe { result ->
+            mainHandler.post {
+                val text = if (result.success) {
+                    "已下载 ${result.fileName}"
+                } else {
+                    result.message.ifEmpty { "下载失败" }
+                }
+                Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+            }
+        }
+        onDispose { unsubscribe() }
     }
 
     // 双层标题切换：摘要项（列表第 0 项）仍在视口首屏时显示「帖子详情」，滑出后切

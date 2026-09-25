@@ -57,7 +57,14 @@ data class ArkdoColorTokens(
     val surfaceCard: Color,
     // 认可/关注与警示语义色(对齐鸿蒙 ld_accent / ld_success / ld_danger)。
     val ldSuccess: Color,
-    val ldDanger: Color
+    val ldDanger: Color,
+    // 帖子楼层里不随页面底色走、但要随明暗翻转的控件色。
+    // 对齐鸿蒙 post_reply_control_* / icon_muted / reaction_count_fg。
+    val postReplyControlBg: Color,
+    val postReplyControlActiveBg: Color,
+    val postReplyControlFg: Color,
+    val iconMuted: Color,
+    val reactionCountFg: Color
 ) {
     /** 高亮淡出终点：同色 alpha=0，鸿蒙用 #00E8F1FE / #0013202D 表达的就是这个。 */
     val incomingHighlightFaded: Color get() = incomingHighlight.copy(alpha = 0f)
@@ -102,7 +109,12 @@ val ArkdoLightColors = ArkdoColorTokens(
     immersiveInputBarHighlight = Color(0x66FFFFFF),
     incomingHighlight = Color(0xFFE8F1FE),
     ldSuccess = Color(0xFF009900),
-    ldDanger = Color(0xFFC80001)
+    ldDanger = Color(0xFFC80001),
+    postReplyControlBg = Color(0xFFE6E8EB),
+    postReplyControlActiveBg = Color(0xFFD9DDE2),
+    postReplyControlFg = Color(0xFF575D66),
+    iconMuted = Color(0xFFBDBDBD),
+    reactionCountFg = Color(0xFF888888)
 )
 
 /** 暗色。对应鸿蒙 resources/dark/element/color.json。 */
@@ -140,7 +152,12 @@ val ArkdoDarkColors = ArkdoColorTokens(
     immersiveInputBarHighlight = Color(0x66FFFFFF),
     incomingHighlight = Color(0xFF13202D),
     ldSuccess = Color(0xFF4CAF50),
-    ldDanger = Color(0xFFE85D5D)
+    ldDanger = Color(0xFFE85D5D),
+    postReplyControlBg = Color(0xFF23262C),
+    postReplyControlActiveBg = Color(0xFF30343A),
+    postReplyControlFg = Color(0xFF9DA3AE),
+    iconMuted = Color(0xFF5C626B),
+    reactionCountFg = Color(0xFF5C626B)
 )
 
 /**
@@ -167,9 +184,6 @@ object ArkdoFixedColors {
 
     /** 头像描边。 */
     val AvatarBorder = Color(0x4D00AEFF)
-
-    /** 「我的」Tab 沉浸内容顶到状态栏时,状态栏条区/根底色(亮 #F2F3F5,暗 #000)。 */
-    val ProfileStatusBarBg = Color(0xFFF2F3F5)
 
     /** flair 徽章缺省底色。 */
     val FlairFallbackBg = Color(0xFFBE123C)

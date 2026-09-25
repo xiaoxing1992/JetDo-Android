@@ -37,11 +37,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,9 +68,20 @@ import com.arkdo.android.ui.components.InlineText
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.arkdoColors
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.services.credit.LdcCreditEventBus
 import com.arkdo.android.services.credit.LdcCreditSession
+import com.arkdo.android.services.credit.LdcEntryEvent
+import com.arkdo.android.services.credit.LdcEntryPhase
+import com.arkdo.android.services.credit.LdcEntryState
+import com.arkdo.android.services.credit.fetchLdcUserInfo
 import com.arkdo.android.services.credit.formatLdcAmount
+import com.arkdo.android.services.credit.ldcUserInfoEvent
+import com.arkdo.android.services.credit.reduceLdcEntry
+import com.arkdo.android.services.network.ArkWebJsonExecutor
+import com.arkdo.android.ui.credit.LdcCreditWebHost
+import kotlinx.coroutines.launch
 import com.arkdo.android.ui.theme.isArkdoInDarkTheme
 import com.arkdo.android.ui.utils.daysSince
 import com.arkdo.android.ui.utils.formatCount
@@ -105,7 +118,7 @@ private fun ProfileTopBar(onNavigateBack: () -> Unit, onOpenSettings: () -> Unit
             .padding(horizontal = 4.dp)
     ) {
         IconButton(onClick = onNavigateBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = arkdoColors.textPrimary)
         }
         Text(
             text = "我的",
@@ -115,7 +128,7 @@ private fun ProfileTopBar(onNavigateBack: () -> Unit, onOpenSettings: () -> Unit
             modifier = Modifier.weight(1f)
         )
         IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Filled.Settings, contentDescription = "设置")
+            Icon(Icons.Filled.Settings, contentDescription = "设置", tint = arkdoColors.textPrimary)
         }
     }
 }
@@ -147,6 +160,31 @@ fun ProfileScreen(
     val accountUser: User = currentUser ?: User(id = 0, username = "")
     val context = LocalContext.current
     var showLogoutDialog by remember { mutableStateOf(false) }
+    val ldcVersion by LdcCreditEventBus.version.collectAsState()
+    var ldc by remember { mutableStateOf(LdcEntryState()) }
+    var ldcExecutor by remember { mutableStateOf<ArkWebJsonExecutor?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun refreshLdc() {
+        ldc = reduceLdcEntry(
+            ldc,
+            LdcEntryEvent.Refresh(
+                hasSession = LdcCreditSession.hasSession(),
+                cached = LdcCreditSession.getCachedInfo(),
+                cacheFresh = LdcCreditSession.isCacheFresh()
+            )
+        )
+    }
+
+    fun applyLdcEvent(event: LdcEntryEvent) {
+        if (event is LdcEntryEvent.Loaded) LdcCreditSession.setCachedInfo(event.info)
+        if (event is LdcEntryEvent.Unauthorized) LdcCreditSession.clearCache()
+        ldc = reduceLdcEntry(ldc, event)
+    }
+
+    LaunchedEffect(accountUser.username, ldcVersion) {
+        if (accountUser.username.isNotEmpty()) refreshLdc() else ldc = reduceLdcEntry(ldc, LdcEntryEvent.Reset)
+    }
 
     // 进页/账号变化时按 username 加载资料(对齐鸿蒙 handleAccountChanged)。
     LaunchedEffect(accountUser.username) {
@@ -155,19 +193,29 @@ fun ProfileScreen(
         }
     }
 
-    // 状态栏条区:Tab 沉浸视图顶到状态栏,条区颜色由这里接管(亮 #F2F3F5 同 pageBgGray)。
+    // 状态栏条区:Tab 沉浸视图顶到状态栏,条区颜色由这里接管(pageBgGray:亮 #F2F3F5,暗 #000)。
     // 用 Box 把灰色垫在内容底下,再正常 padding 内容避开状态栏。独立页走系统条默认色。
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                if (immersive && !showTopBar) {
-                    com.arkdo.android.ui.theme.ArkdoFixedColors.ProfileStatusBarBg
-                } else {
-                    arkdoColors.pageBgGray
-                }
-            )
+            .background(arkdoColors.pageBgGray)
     ) {
+        if (ldc.hostActive) {
+            LdcCreditWebHost(
+                initialUrl = AppConstants.CREDIT_BOOTSTRAP_URL,
+                navTarget = "",
+                interactive = false,
+                onReady = {},
+                onLoadFailed = { applyLdcEvent(LdcEntryEvent.LoadFailed) },
+                onPageSettled = { url ->
+                    if (!url.startsWith(AppConstants.CREDIT_BASE_URL)) return@LdcCreditWebHost
+                    val exec = ldcExecutor ?: return@LdcCreditWebHost
+                    scope.launch { applyLdcEvent(ldcUserInfoEvent(fetchLdcUserInfo(exec))) }
+                },
+                onExecutor = { ldcExecutor = it },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         // 顶栏与内容必须竖向排列:同处一个 Box 时,fillMaxSize 的内容层会叠在顶栏之上
         // (Box 内后声明的子节点画在上层),独立页(push 进来)的返回栏会被第一张卡片整个盖住,
         // 表现成「没有标题栏」。改用外层 Column,内容从顶栏下方开始排。
@@ -201,6 +249,8 @@ fun ProfileScreen(
                         onOpenReadTopics = onOpenReadTopics,
                         onOpenLevelProgress = onOpenLevelProgress,
                         onOpenLdcCredit = onOpenLdcCredit,
+                        ldc = ldc,
+                        onRetryLdc = { refreshLdc() },
                         onRequestLogout = { showLogoutDialog = true }
                     )
                 } else {
@@ -225,8 +275,8 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("确定要退出当前账号吗?") },
+            title = { Text("退出登录", color = arkdoColors.textPrimary) },
+            text = { Text("确定要退出当前账号吗?", color = arkdoColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
@@ -243,7 +293,7 @@ fun ProfileScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("取消")
+                    Text("取消", color = arkdoColors.textSecondary)
                 }
             }
         )
@@ -264,6 +314,8 @@ private fun LoggedInContent(
     onOpenReadTopics: () -> Unit,
     onOpenLevelProgress: () -> Unit,
     onOpenLdcCredit: (Boolean) -> Unit,
+    ldc: LdcEntryState,
+    onRetryLdc: () -> Unit,
     onRequestLogout: () -> Unit
 ) {
     val colors = arkdoColors
@@ -400,7 +452,7 @@ private fun LoggedInContent(
         }
     }
 
-    LdcEntryCard(onOpen = onOpenLdcCredit)
+    LdcEntryCard(state = ldc, onOpen = onOpenLdcCredit, onRetry = onRetryLdc)
 
     // 卡片 3:徽章
     Column(
@@ -563,14 +615,17 @@ private fun androidx.compose.foundation.layout.RowScope.StatCellProfile(value: S
     }
 }
 
-/** LINUX DO Credit 入口行。余额来自 credit 会话缓存;没有会话时显示「去登录」。 */
+/** LINUX DO Credit 入口行。有会话就自己取余额；失败时有旧数字就继续显示，没有才给「重试」。 */
 @Composable
-private fun LdcEntryCard(onOpen: (Boolean) -> Unit) {
+private fun LdcEntryCard(state: LdcEntryState, onOpen: (Boolean) -> Unit, onRetry: () -> Unit) {
     val colors = arkdoColors
-    val cached = LdcCreditSession.getCachedInfo()
-    val anonymous = !LdcCreditSession.hasSession()
+    val anonymous = state.phase == LdcEntryPhase.ANON
     val gold = if (isArkdoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
-    val subtitle = if (anonymous) "使用 LINUX DO 账号登录后查看" else "查看最近 7 天获取记录"
+    val subtitle = when (state.phase) {
+        LdcEntryPhase.ANON -> "使用 LINUX DO 账号登录后查看"
+        LdcEntryPhase.ERROR -> "暂时无法获取余额"
+        else -> "查看最近 7 天获取记录"
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -578,7 +633,9 @@ private fun LdcEntryCard(onOpen: (Boolean) -> Unit) {
             .padding(top = CardGap)
             .clip(RoundedCornerShape(CardRadius))
             .background(colors.surfaceCard)
-            .clickable { onOpen(anonymous) }
+            .clickable {
+                if (state.phase == LdcEntryPhase.ERROR) onRetry() else onOpen(anonymous)
+            }
             .padding(horizontal = CardPadding, vertical = 14.dp)
     ) {
         FaIcon("coins", gold, 20.dp)
@@ -586,10 +643,16 @@ private fun LdcEntryCard(onOpen: (Boolean) -> Unit) {
             Text("LINUX DO Credit", fontSize = 15.sp, color = colors.textPrimary)
             Text(subtitle, fontSize = 12.sp, color = colors.textFaint, modifier = Modifier.padding(top = 2.dp))
         }
-        if (cached != null && !anonymous) {
-            Text(formatLdcAmount(cached.availableBalance), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-        } else {
-            Text(if (anonymous) "去登录" else "重试", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.ldAccent)
+        when {
+            state.phase == LdcEntryPhase.LOADING && state.info == null -> {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = colors.ldAccent)
+            }
+            state.info != null -> {
+                Text(formatLdcAmount(state.info.availableBalance), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            }
+            else -> {
+                Text(if (anonymous) "去登录" else "重试", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.ldAccent)
+            }
         }
         FaIcon("chevron-right", colors.textFaint, 14.dp, Modifier.padding(start = 6.dp))
     }

@@ -137,14 +137,15 @@ internal fun HomeScreen(
         insertHeights.clear()
         insertPlayed = false
         insertProgress = 0f
-        // 新行插在表头。人停在下面时看不见滑入，先回到第一条再播。
-        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
-            listState.scrollToItem(0)
-        }
         insertDistancePx = with(density) { (insertIds.size * INCOMING_INSERT_ROW_ESTIMATE_DP).dp.toPx() }
         withFrameNanos { }
         if (insertIds.all { it in insertHeights }) {
             insertDistancePx = insertHeights.values.sum().toFloat()
+        }
+        // 新行插在表头，人停在下面时看不见滑入。滚回第一条必须放在插入布局落地之后：
+        // LazyColumn 按 key 锚定第一条可见帖，表头插入会把「先滚到 0」顶回原位。
+        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+            listState.scrollToItem(0)
         }
         insertPlayed = true
         animate(
@@ -179,6 +180,8 @@ internal fun HomeScreen(
         if (refreshArmed && state.topics.isNotEmpty() &&
             (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
         ) {
+            // 刷新是整表替换，key 锚定同样会顶掉刷新期间发出的滚动。等新布局落地再回顶。
+            withFrameNanos { }
             listState.scrollToItem(0)
         }
         refreshArmed = false
