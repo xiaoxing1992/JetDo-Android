@@ -1123,7 +1123,17 @@ class TopicService(private val bridge: JsonNetworkClient) {
                     createdBy = d.createdBy?.id?.let { id -> CreatedBy(id = id, username = "") },
                     notificationLevel = null
                 )
-            }
+            },
+            // 话题级字段透传（原先整批漏搬，见 DiscourseTopicDetail 里的说明）。
+            lastReadPostNumber = payload.last_read_post_number,
+            highestPostNumber = payload.highest_post_number,
+            unreadPosts = payload.unread_posts,
+            bookmarked = payload.bookmarked,
+            acceptedAnswers = payload.accepted_answers,
+            sharedIssueVisible = payload.shared_issue_visible,
+            canCreateSharedIssue = payload.can_create_shared_issue,
+            userCreatedSharedIssue = payload.user_created_shared_issue,
+            sharedIssueCount = payload.shared_issue_count
         )
     }
 
@@ -1149,8 +1159,8 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 boosts = mapBoosts(source.boosts),
                 canBoost = source.can_boost,
                 polls = mapPolls(source),
-                bookmarked = null,
-                bookmarkId = null,
+                bookmarked = source.bookmarked,
+                bookmarkId = source.bookmark_id,
                 userStatus = null,
                 userId = source.user_id,
                 username = source.username,
@@ -1167,7 +1177,8 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 userDeleted = source.user_deleted,
                 canRecover = source.can_recover
             ).also { post ->
-                // replyToUser 是类体可变字段（非构造参数），构造后赋值。
+                // replyToUser 在主构造里是本地态（@Transient，非服务端字段），这里按
+                // reply_to_user 回填。放主构造是为了让 copy() 能带上它，见 TopicModels.kt 注释。
                 post.replyToUser = source.reply_to_user?.let {
                     User(
                         id = it.id ?: 0,
@@ -1359,7 +1370,23 @@ data class DiscourseTopicDetail(
     val fancy_title: String? = null,
     // 主题作者：details.created_by.id 优先，回退顶层 user_id（对齐鸿蒙 mapCreatedById）。
     val user_id: Long? = null,
-    val details: DiscourseTopicDetails? = null
+    val details: DiscourseTopicDetails? = null,
+
+    // ↓↓↓ 以下是「简化版映射」时期整批漏掉的**话题级**字段。
+    // 注意这些字段原先在 DTO 里**连定义都没有**，所以不是「映射漏搬」，而是连读都读不到 ——
+    // 下游一律拿到 null / 默认值，表现为对应 UI 永不出现（与之前 bookmarkId 同型）。
+    // 受影响的下游：last_read_post_number → 上次访问红线 + 已读预置；
+    // highest_post_number / unread_posts → 未读水位与徽标；bookmarked → 首楼书签初始态；
+    // accepted_answers → 采纳答案面板 + solved 标记；shared_issue_* → 「俺也一样」按钮四要素。
+    val last_read_post_number: Int? = null,
+    val highest_post_number: Int? = null,
+    val unread_posts: Int? = null,
+    val bookmarked: Boolean? = null,
+    val accepted_answers: List<AcceptedAnswer>? = null,
+    val shared_issue_visible: Boolean? = null,
+    val can_create_shared_issue: Boolean? = null,
+    val user_created_shared_issue: Boolean? = null,
+    val shared_issue_count: Int? = null
 )
 
 @Serializable
@@ -1428,6 +1455,11 @@ data class DiscoursePost(
     val can_edit: Boolean? = null,
     // 作者软删除（user_deleted=true 时 cooked 被换成「已被作者删除」占位）。
     val user_deleted: Boolean? = null,
+    // 书签：本楼是否已被当前用户加书签 + 书签 id（取消时用）。posts.json 的 bookmarked/bookmark_id，
+    // 对齐鸿蒙 TopicDetail.ets:106-109。此前 DTO 里根本没有这两个字段、mapPosts 硬写 null，
+    // 导致「取消书签」永远拿不到 bookmarkId → 只能静默成功，服务端从未删除。
+    val bookmarked: Boolean? = null,
+    val bookmark_id: Long? = null,
     // 当前用户能不能恢复这楼（作者在时限内、或管理员）。
     val can_recover: Boolean? = null,
     val deleted_at: String? = null
