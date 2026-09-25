@@ -66,6 +66,7 @@ private class LdcWebHolder(context: android.content.Context) {
     var callbacks = LdcWebCallbacks({}, {}, {})
     private var loadedUrl: String? = null
     private var mainFrameFailed = false
+    private var readyNotified = false
 
     init {
         val web = webView
@@ -85,7 +86,10 @@ private class LdcWebHolder(context: android.content.Context) {
             override fun onPageFinished(view: WebView?, url: String?) {
                 Timber.i("[ArkDO][Ldc] pageEnd url=%s", url)
                 if (!mainFrameFailed && url != null && url.startsWith(AppConstants.CREDIT_BASE_URL)) {
-                    callbacks.onReady()
+                    if (!readyNotified) {
+                        readyNotified = true
+                        callbacks.onReady()
+                    }
                 }
                 if (url != null) callbacks.onPageSettled(url)
             }

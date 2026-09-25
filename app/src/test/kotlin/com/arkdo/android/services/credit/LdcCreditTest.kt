@@ -101,3 +101,100 @@ class LdcCreditSessionTest {
         assertEquals(false, LdcCreditSession.isCacheFresh(now = 2_000L))
     }
 }
+
+class LdcEntryReducerTest {
+
+    @Test
+    fun freshCacheSkipsAnotherFetch() {
+        val info = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "12.5")
+        val next = reduceLdcEntry(LdcEntryState(), LdcEntryEvent.Refresh(hasSession = true, cached = info, cacheFresh = true))
+
+        assertEquals(LdcEntryPhase.READY, next.phase)
+        assertEquals("12.5", next.info?.availableBalance)
+        assertEquals(false, next.hostActive)
+    }
+
+    @Test
+    fun staleSessionKeepsLastBalanceWhileFetching() {
+        val stale = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "3")
+        val next = reduceLdcEntry(LdcEntryState(), LdcEntryEvent.Refresh(hasSession = true, cached = stale, cacheFresh = false))
+
+        assertEquals(LdcEntryPhase.LOADING, next.phase)
+        assertEquals("3", next.info?.availableBalance)
+        assertEquals(true, next.hostActive)
+    }
+
+    @Test
+    fun missingSessionShowsLoginInsteadOfRetry() {
+        val leftover = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "3")
+        val next = reduceLdcEntry(
+            LdcEntryState(phase = LdcEntryPhase.READY, info = leftover),
+            LdcEntryEvent.Refresh(hasSession = false, cached = leftover, cacheFresh = true)
+        )
+
+        assertEquals(LdcEntryPhase.ANON, next.phase)
+        assertEquals(null, next.info)
+        assertEquals(false, next.hostActive)
+    }
+
+    @Test
+    fun loggedOutClearsTheRow() {
+        val next = reduceLdcEntry(
+            LdcEntryState(phase = LdcEntryPhase.READY, info = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "1")),
+            LdcEntryEvent.Reset
+        )
+
+        assertEquals(LdcEntryPhase.LOADING, next.phase)
+        assertEquals(null, next.info)
+        assertEquals(false, next.hostActive)
+    }
+
+    @Test
+    fun failedFetchKeepsCachedBalanceInsteadOfRetry() {
+        val shown = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "8")
+        val next = reduceLdcEntry(
+            LdcEntryState(phase = LdcEntryPhase.LOADING, info = shown, hostActive = true),
+            LdcEntryEvent.LoadFailed
+        )
+
+        assertEquals(LdcEntryPhase.READY, next.phase)
+        assertEquals("8", next.info?.availableBalance)
+        assertEquals(false, next.hostActive)
+    }
+
+    @Test
+    fun failedFetchWithoutCacheBecomesRetry() {
+        val next = reduceLdcEntry(
+            LdcEntryState(phase = LdcEntryPhase.LOADING, hostActive = true),
+            LdcEntryEvent.LoadFailed
+        )
+
+        assertEquals(LdcEntryPhase.ERROR, next.phase)
+        assertEquals(false, next.hostActive)
+    }
+
+    @Test
+    fun unauthorizedClearsBalanceAndShowsLogin() {
+        val next = reduceLdcEntry(
+            LdcEntryState(phase = LdcEntryPhase.LOADING, info = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "8"), hostActive = true),
+            LdcEntryEvent.Unauthorized
+        )
+
+        assertEquals(LdcEntryPhase.ANON, next.phase)
+        assertEquals(null, next.info)
+        assertEquals(false, next.hostActive)
+    }
+
+    @Test
+    fun loadedBalanceStopsTheHost() {
+        val info = com.arkdo.android.data.models.LdcUserInfo(availableBalance = "20")
+        val next = reduceLdcEntry(
+            LdcEntryState(phase = LdcEntryPhase.LOADING, hostActive = true),
+            LdcEntryEvent.Loaded(info)
+        )
+
+        assertEquals(LdcEntryPhase.READY, next.phase)
+        assertEquals("20", next.info?.availableBalance)
+        assertEquals(false, next.hostActive)
+    }
+}

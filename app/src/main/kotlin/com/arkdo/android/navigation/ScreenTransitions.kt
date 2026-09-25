@@ -53,3 +53,19 @@ val tabEnterTransition: AnimatedContentTransitionScope<*>.() -> EnterTransition 
 val tabExitTransition: AnimatedContentTransitionScope<*>.() -> ExitTransition = {
     fadeOut(animationSpec = tween(TAB_TRANSITION_DURATION))
 }
+
+// ==========================================================================
+// 内置浏览器（WebViewPage）不再单独定义转场。
+//
+// 曾经单开过一套纵向（自下方升起 / 向下沉出）的转场，理由是「网页是压在 App 上的
+// 一层外部内容，用轴向区分层级」。实测被否掉了：全 App 只有这一个页面走纵向，
+// 用户点站内链接时读到的是「方向不对」，而不是「这是浏览器」。轴向用来表达层级，
+// 前提是这种区分本身对用户有意义 —— 这里没有，一致性优先。
+//
+// 现在 WEBVIEW 路由不声明任何 enter/exit/pop 参数（见 ArkDoNavHost），
+// 自动落到 NavHost 级的横向 push（slideEnterTransition / slideExitTransition），
+// 与进入帖子详情、他人主页完全同向同时长。
+//
+// 打开浏览器时页面内容的首屏淡入仍保留，那是在 WebViewPage 内部做的，
+// 与路由转场无关（解决的是「白块啪一下变网页」）。
+// ==========================================================================

@@ -45,23 +45,18 @@ import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.data.models.LdcDailyStat
 import com.arkdo.android.data.models.LdcUserInfo
+import com.arkdo.android.services.credit.LdcCreditEventBus
 import com.arkdo.android.services.credit.LdcCreditParser
 import com.arkdo.android.services.credit.LdcCreditSession
+import com.arkdo.android.services.credit.fetchCredit
 import com.arkdo.android.services.credit.formatLdcAmount
 import com.arkdo.android.services.credit.ldcAmountValue
 import com.arkdo.android.services.credit.ldcDayLabel
 import com.arkdo.android.services.network.ArkWebJsonExecutor
-import com.arkdo.android.services.network.HttpHeaderEntry
-import com.arkdo.android.services.network.WebFetchScriptFactory
 import com.arkdo.android.services.web.WebSessionManager
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.roundToInt
 
 // 对齐鸿蒙 LdcCreditPage。最近 7 天,登录靠轮询 linux_do_credit_session_id。
@@ -76,8 +71,6 @@ private const val BAR_MIN_PERCENT = 4.0
 private val LdcIncome = Color(0xFF00C950)
 
 private enum class LdcPhase { LOADING, READY, ANON, ERROR, LOGGING_IN }
-
-private val CreditHeaders = listOf(HttpHeaderEntry("X-Requested-With", "XMLHttpRequest"))
 
 /**
  * LINUX DO Credit 页。credit.linux.do 与 linux.do 不同源,取数走本页自己的同源 WebView。
@@ -116,6 +109,7 @@ fun LdcCreditScreen(
             when {
                 user.status == 401 -> {
                     LdcCreditSession.clearCache()
+                    LdcCreditEventBus.notifyCreditChanged()
                     info = null
                     phase = LdcPhase.ANON
                 }
@@ -125,6 +119,7 @@ fun LdcCreditScreen(
                         info = parsed
                         phase = LdcPhase.READY
                         LdcCreditSession.setCachedInfo(parsed)
+                        LdcCreditEventBus.notifyCreditChanged()
                     } else {
                         errorMessage = "LDC 账户信息解析失败。"
                         phase = LdcPhase.ERROR
@@ -247,21 +242,6 @@ fun LdcCreditScreen(
             }
         }
     }
-}
-
-private data class CreditFetch(val status: Int, val body: String?, val message: String)
-
-private suspend fun fetchCredit(executor: ArkWebJsonExecutor, path: String): CreditFetch {
-    val script = WebFetchScriptFactory.createHeaderedFetchScript(path, CreditHeaders, AppConstants.CREDIT_HOME_URL)
-        .replace("const baseUrl = 'https://linux.do';", "const baseUrl = '${AppConstants.CREDIT_BASE_URL}';")
-    val raw = runCatching { executor.run(script) }.getOrNull()
-        ?: return CreditFetch(0, null, "LDC 请求失败。")
-    val envelope = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull()
-        ?: return CreditFetch(0, null, "LDC 请求失败。")
-    val status = envelope["statusCode"]?.jsonPrimitive?.intOrNull ?: 0
-    val body = envelope["body"]?.jsonPrimitive?.contentOrNull
-    val error = envelope["errorMessage"]?.jsonPrimitive?.contentOrNull.orEmpty()
-    return if (status in 200..299 && body != null) CreditFetch(status, body, "") else CreditFetch(status, null, error)
 }
 
 private fun sortNewestFirst(stats: List<LdcDailyStat>): List<LdcDailyStat> =
