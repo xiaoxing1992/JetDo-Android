@@ -305,6 +305,14 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
+     * 列表非空时的一次性错误提示已被消费（HomeRoute 弹完 toast 调用），清掉避免反复弹。
+     * 空列表场景不调用——那里的 error 由 EmptyState 常驻显示，清了反而让用户看不到重试入口。
+     */
+    fun consumeError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
+    /**
      * 拉取提示条记下的话题，整批插到表头。
      * 已在列表里的（更新）先从原位置摘掉再以新数据归位，不只追加全新的。
      */
@@ -315,7 +323,11 @@ class HomeViewModel @Inject constructor(
             _uiState.update { it.copy(pendingIncomingRefresh = true) }
             return
         }
-        _uiState.update { it.copy(pendingIncomingRefresh = false, isLoadingIncoming = true) }
+        // 开拉先清掉上一条 error：否则同一句失败文案第二次不会再触发提示
+        // （HomeRoute 的 toast 以 state.error 为 key，值不变就不重启）。
+        _uiState.update {
+            it.copy(pendingIncomingRefresh = false, isLoadingIncoming = true, error = null)
+        }
         val requestedIds = state.incomingTopicIds
         val requestEpoch = ++incomingRequestEpoch
         viewModelScope.launch {

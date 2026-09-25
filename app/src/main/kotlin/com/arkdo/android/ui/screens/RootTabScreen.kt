@@ -123,6 +123,7 @@ fun RootTabScreen(
     // 登录态镜像:标签栏「我的」头像据此渲染。和首页顶栏账号入口、个人中心页共用同一个
     // CurrentUserHolder,不额外发请求。
     val currentUser by com.arkdo.android.services.session.CurrentUserHolder.currentUser.collectAsState()
+    val isCheckingSession by sessionViewModel.isChecking.collectAsState()
 
     // 底栏液态玻璃的内容取样源:NavHost 标 layerBackdrop,玻璃与选中透镜都从它取景。
     val bottomBarBackdrop = rememberLayerBackdrop()
@@ -256,8 +257,13 @@ fun RootTabScreen(
                 HomeFeatureScreen(
                     isWebViewReady = isWebViewReady,
                     isLoggedIn = currentUser != null,
-                    isCheckingSession = false,
+                    // 会话检查中：首页右上角转圈（鸿蒙 HomePage.ets:1307 的 isCheckingSession）。
+                    // 此前恒传 false，HomeScreen 里那个分支永远走不到。
+                    isCheckingSession = isCheckingSession,
                     accountUser = currentUser?.toHomeUser(),
+                    // 顶栏铃铛未读角标（鸿蒙 HomePage.ets:980 的 NotificationBell）。
+                    // 未读数真源是 NotificationEventBus，本文件 :130-136 已订阅。
+                    unreadCount = unreadCount,
                     onTopicClick = { topicId, targetPostNumber ->
                         val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")

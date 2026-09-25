@@ -64,6 +64,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -112,6 +115,8 @@ internal fun HomeScreen(
     isLoggedIn: Boolean = false,
     isCheckingSession: Boolean = false,
     accountUser: HomeUser? = null,
+    // 通知未读数：顶栏铃铛角标（真源是 NotificationEventBus，由宿主下发）。
+    unreadCount: Int = 0,
     onFabScroll: (Float, Float) -> Unit = { _, _ -> },
     onIncomingInsertFinished: (Int) -> Unit = {},
     onIncomingHighlightFinished: () -> Unit = {},
@@ -211,6 +216,8 @@ internal fun HomeScreen(
                 onMenuClick = onMenuClick,
                 onSearchClick = onSearchClick,
                 onNotificationsClick = onNotificationsClick,
+                // 顶栏铃铛的未读角标（对齐鸿蒙 NotificationBell 的 unreadCount @Prop）。
+                unreadCount = unreadCount,
                 onProfileClick = onProfileClick,
                 onDebugClick = onDebugClick,
                 colors = colors,
@@ -334,6 +341,7 @@ private fun HomeTitleBar(
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
+    unreadCount: Int = 0,
     onProfileClick: () -> Unit,
     onDebugClick: () -> Unit,
     colors: HomeVisualTokens,
@@ -396,8 +404,56 @@ private fun HomeTitleBar(
             FaIcon("magnifying-glass", colors.textPrimary, 20.dp)
         }
         if (isLoggedIn) {
+            // 通知铃铛：有未读时挂红色数字角标 + 间歇摇铃（对齐鸿蒙 NotificationBell.ets）。
+            // 此前只有一个静态铃铛图标：未读数只喂给了底部 tab，首页顶栏完全看不出有没有未读。
+            val bellAngle = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(unreadCount) {
+                if (unreadCount <= 0) {
+                    bellAngle.animateTo(0f)
+                    return@LaunchedEffect
+                }
+                // 一轮阻尼摇铃 14°→-12°→9°→-6°→3°→0°，之后停顿 3.2s 再下一轮（间歇式）。
+                while (true) {
+                    bellAngle.animateTo(
+                        0f,
+                        androidx.compose.animation.core.keyframes {
+                            durationMillis = 570
+                            14f at 110
+                            -12f at 220
+                            9f at 320
+                            -6f at 410
+                            3f at 490
+                            0f at 570
+                        }
+                    )
+                    delay(3200)
+                }
+            }
             HomeBarButton(onClick = onNotificationsClick, contentDescription = "通知", endMargin = 4.dp) {
-                FaIcon("bell", colors.amber, 24.dp)
+                // 角标要相对铃铛定位，得自己持有一个 BoxScope（HomeBarButton 的 content 是普通 @Composable）。
+                Box(contentAlignment = Alignment.Center) {
+                    FaIcon("bell", colors.amber, 24.dp, Modifier.rotate(bellAngle.value))
+                    if (unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 3.dp, y = (-3).dp)
+                                .defaultMinSize(minWidth = 15.dp, minHeight = 15.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF5222D))
+                                .padding(horizontal = 3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                            )
+                        }
+                    }
+                }
             }
         }
         HomeBarButton(onClick = onProfileClick, contentDescription = "个人中心", endMargin = 0.dp) {

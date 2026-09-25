@@ -1,5 +1,6 @@
 package com.arkdo.android.feature.home
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -84,6 +85,8 @@ private const val TAB_INDICATOR_MS = 180
 
 private const val TAB_CATEGORY = 0
 private const val TAB_TAG = 1
+/** 未登录点受限入口的提示文案（对齐鸿蒙 CategoryDrawer.ets:257 的 onNotice 文案）。 */
+private const val LOGIN_REQUIRED_HINT = "登录后可查看该入口"
 
 @Composable
 internal fun HomeDrawer(
@@ -289,6 +292,8 @@ private fun FilterSection(
         )
     }
 
+    val context = LocalContext.current
+
     FlowRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -302,7 +307,12 @@ private fun FilterSection(
                 disabled = locked,
                 colors = colors,
                 onTap = { onPick(feed) },
-                onBlockedTap = onClose
+                // 未登录点受限排序：给一句提示，不要默默把抽屉关掉。
+                // 此前是 onBlockedTap = onClose —— 用户点了没任何反馈，只看到抽屉收起来，
+                // 完全不知道是「要登录」还是「点了没生效」。对齐鸿蒙 onNotice 语义。
+                onBlockedTap = {
+                    Toast.makeText(context, LOGIN_REQUIRED_HINT, Toast.LENGTH_SHORT).show()
+                }
             )
         }
     }
@@ -570,8 +580,16 @@ private fun CategoryRow(
             .height(ROW_HEIGHT)
             .background(if (selected) colors.surfaceMuted else Color.Transparent)
             .alpha(if (restricted) 0.45f else 1f)
-            // 受限版块整行仍然可点，点了走登录提示。
-            .clickable(enabled = !restricted) { onPick(category) }
+            // 受限版块整行仍然可点，点了给一句登录提示（对齐鸿蒙 handleCategoryTap → onRequireLogin）。
+            // 此前是 clickable(enabled = !restricted)：注释写着「点了走登录提示」，实现却是完全不可点，
+            // 用户看到半透明的版块点不动，不知道为什么。
+            .clickable {
+                if (restricted) {
+                    Toast.makeText(context, LOGIN_REQUIRED_HINT, Toast.LENGTH_SHORT).show()
+                } else {
+                    onPick(category)
+                }
+            }
             .padding(start = if (isChild) 28.dp else 12.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
