@@ -17,6 +17,7 @@ import com.arkdo.android.services.topic.PostStreamPager
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryState
+import com.arkdo.android.services.challenge.ChallengeShortcutEventBus
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
@@ -68,6 +69,25 @@ class TopicDetailViewModel @Inject constructor(
     /** 阅读计时上报（对齐鸿蒙 TopicReadController 的 ReadingTracker 托管）。 */
     private val readingTracker = ReadingTracker(viewModelScope)
 
+    /**
+     * tracker 是否已为本页启动过（对齐鸿蒙 TopicReadController.started）。
+     * 只在 detach 或换话题时复位；applyDetail 因 rewindow 会被反复调用，不能据此重启。
+     */
+    private var trackerStarted = false
+
+    /** 上一次喂给 tracker 的在屏楼号（仅用于日志去重，避免滚动时刷屏）。 */
+    private var lastOnscreenLogged: List<Int> = emptyList()
+
+    /**
+     * 最近一次成功应用的详情快照，供 [ensureReadingTracker] 幂等拉起上报用。
+     *
+     * 为什么需要它：页面重建（配置变更）后 Compose 会重新走 ON_RESUME，而此时 `loadTopic`
+     * 的 LaunchedEffect key 没变、`applyDetail` 不会再执行 —— 如果 tracker 在重建过程中被停掉，
+     * 就没有任何路径能把它起回来。这里留一份详情，让前台信号能重新驱动启动（内部有
+     * [trackerStarted] 闸门，重复调用无害）。
+     */
+    private var lastDetail: TopicDetail? = null
+
     /** 撞盾挂起批次补发的前提：过盾成功（COOLDOWN）信号（对齐鸿蒙 TopicReadController.attach 的订阅）。 */
     private val challengeUnsubscribe = ChallengeRecoveryEventBus.subscribeState { state ->
         if (state == ChallengeRecoveryState.COOLDOWN) {
@@ -75,8 +95,32 @@ class TopicDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 本次阅读的 timings 上报是否正被 Cloudflare 挡着 —— 顶栏右侧「手动验证」入口的显示条件。
+     *
+     * 真源是全局 [ChallengeShortcutEventBus]：ReadingTracker 的后台上报（notifyChallenge:false，
+     * 不弹验证页）撞盾时置真，之后上报通了置假。这里只做镜像，让页面能用 Compose 状态订阅它。
+     *
+     * 语义对齐鸿蒙 TopicDetailPage.challengeBlocked —— 即「入口只在真出事时才亮」，
+     * 不是常驻按钮；鸿蒙另外还要求用户先开 ChallengeShortcutPrefs 开关（默认关），
+     * Android 侧尚未迁移该开关，故这里只保留「真拦下才显示」这一半。
+     */
+    private val _challengeBlocked = MutableStateFlow(false)
+    val challengeBlocked: StateFlow<Boolean> = _challengeBlocked.asStateFlow()
+
+    private val challengeShortcutUnsubscribe = ChallengeShortcutEventBus.subscribe { blocked ->
+        _challengeBlocked.value = blocked
+    }
+
+    /** 用户点顶栏「手动验证」：请求恢复协调器停下来静默重试、把验证页交给用户（对齐鸿蒙 onOpenChallenge）。 */
+    fun requestManualChallenge() {
+        Timber.i("[ArkDO][TopicDetail] manual challenge requested topicId=%s", currentTopicId)
+        ChallengeRecoveryEventBus.requestManual()
+    }
+
     override fun onCleared() {
         challengeUnsubscribe()
+        challengeShortcutUnsubscribe()
         readingTracker.stop()
         super.onCleared()
     }
@@ -86,6 +130,11 @@ class TopicDetailViewModel @Inject constructor(
     /** 从草稿列表带进来的续写。发表成功后删掉，只删一次。 */
     private var resumedDraft: DraftResume? = null
     private var draftComposerOpened = false
+    // 「上次访问」红线：进入时快照的已读水位（只取一次，页内重开窗口 / 本次阅读推高水位都不
+    // 重取，否则线会消失）+ 锚楼 id（快照后第一条未读楼的上一楼，锚一旦确定不再变化）。
+    // 对齐鸿蒙 TopicDetailPage.ets:177-180 / :2114-2132。
+    private var lastVisitedSnapshot: Int = 0
+    private var lastVisitedAnchorPostId: Long = 0L
 
     fun loadTopic(
         topicId: Long,
@@ -107,6 +156,18 @@ class TopicDetailViewModel @Inject constructor(
         }
         currentTopicId = topicId
         currentSlug = slug
+        // 换了话题：上一帖的 tracker 收尾并复位启动标志（对齐鸿蒙换页 = 新 controller 实例）。
+        if (trackerStarted) {
+            readingTracker.stop()
+            trackerStarted = false
+        }
+        // 换了话题：清掉上一帖的撞盾运行态（对齐鸿蒙 aboutToAppear 里的 ChallengeShortcutEventBus.reset）。
+        // reset 不广播，所以镜像状态要自己同步回落，否则新帖首帧会误亮「手动验证」入口。
+        ChallengeShortcutEventBus.reset()
+        _challengeBlocked.value = false
+        // 换了话题：红线水位与锚楼一并复位（否则新帖会沿用上一帖的锚楼 id）。
+        lastVisitedSnapshot = 0
+        lastVisitedAnchorPostId = 0L
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
@@ -421,23 +482,35 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 屏幕消费一次性滚动请求后调用，避免重组时重复触发。 */
 
-    /** 书签 toggle：加书签直接加；移除需要 bookmarkId（详情接口暂未下发，暂不支持移除）。 */
+    /**
+     * 书签 toggle，对齐鸿蒙 `PostActions.toggleBookmark`（PostActions.ets:136-180）：
+     * - 已收藏且带 bookmarkId → removeBookmark，成功后清掉本楼 bookmarked/bookmarkId；
+     * - 其余（未收藏，或已收藏但接口没下发 id）→ addBookmark，成功后把 id 回填到本楼。
+     *
+     * 不再有「拿不到 id 就 done(true)」的静默成功：那样 UI 会收起书签态、Toast 也提示成功，
+     * 但服务端根本没删，刷新后书签又回来（用户视角是「点了没反应 / 又活了」）。
+     */
     fun toggleBookmark(post: TopicPost, done: (Boolean) -> Unit) {
         val topicId = currentTopicId ?: return done(false)
         viewModelScope.launch {
-            if (post.bookmarked == true) {
-                val bookmarkId = post.bookmarkId
-                if (bookmarkId == null) {
-                    done(true)
-                    return@launch
-                }
+            val bookmarkId = post.bookmarkId
+            if (post.bookmarked == true && bookmarkId != null) {
                 val result = topicService.removeBookmark(bookmarkId, topicId)
-                if (result.success && post.postNumber == 1) syncTopicBookmarked(false)
+                if (result.success) {
+                    dataSource.replacePost(post.copy(bookmarked = false, bookmarkId = null))
+                    // 主题级态优先用接口权威值；拿不到时退化为 false（鸿蒙 :155-156 同语义）。
+                    if (post.postNumber == 1) syncTopicBookmarked(result.data ?: false)
+                }
                 done(result.success)
             } else {
                 val result = topicService.addBookmark(post.id, topicId)
-                if (result.success && post.postNumber == 1) syncTopicBookmarked(true)
-                done(result.success)
+                val newId = result.data
+                if (result.success && newId != null) {
+                    dataSource.replacePost(post.copy(bookmarked = true, bookmarkId = newId))
+                    // 新增任一楼层书签 → 主题必然有书签（鸿蒙 :172-173：topicBookmarked = true）。
+                    syncTopicBookmarked(true)
+                }
+                done(result.success && newId != null)
             }
         }
     }
@@ -661,8 +734,8 @@ class TopicDetailViewModel @Inject constructor(
                         canRecover = true
                     )
                 // mapPosts 不回填作者/被回复人/阅读态，就地替换时从原楼接回来。
-                carryLocalFields(from = post, onto = placeholder)
-                dataSource.replacePost(placeholder)
+                val merged = carryLocalFields(from = post, onto = placeholder)
+                dataSource.replacePost(merged)
                 _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
                 done(true)
             } else {
@@ -687,8 +760,8 @@ class TopicDetailViewModel @Inject constructor(
             _uiState.update { it.copy(postActionLoadingId = 0L) }
             if (result.success && result.data != null) {
                 val restored = result.data
-                carryLocalFields(from = post, onto = restored)
-                dataSource.replacePost(restored)
+                val merged = carryLocalFields(from = post, onto = restored)
+                dataSource.replacePost(merged)
                 _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
                 done(true)
             } else {
@@ -698,14 +771,24 @@ class TopicDetailViewModel @Inject constructor(
         }
     }
 
-    /** copy / mapPosts 都会丢掉类体可变字段，写回列表前从原楼接上。 */
-    private fun carryLocalFields(from: TopicPost, onto: TopicPost) {
+    /**
+     * 服务层 mapPosts 新建的 TopicPost 只有构造参数，本地态字段是空的，写回列表前从原楼接上。
+     *
+     * 注意：类体可变字段已全部提升为构造参数（TopicModels.kt 里标 @Transient），所以
+     * **post.copy(...) 现在会自动带上这些本地态**，本函数只服务于「从 DTO 重新映射出的新对象」。
+     * 历史坑：未提升前，`post.copy(read = true)`（已读上报）会把 replyToUser 抹成 null，
+     * 表现为「回复某人的头像在上报已读后消失」。
+     */
+    private fun carryLocalFields(from: TopicPost, onto: TopicPost): TopicPost {
         if (onto.author == null) onto.author = from.author
         if (onto.replyToUser == null) onto.replyToUser = from.replyToUser
         if (onto.plainText.isEmpty()) onto.plainText = from.plainText
         onto.reporting = from.reporting
         if (onto.badgeIcons == null) onto.badgeIcons = from.badgeIcons
         if (onto.linkClicks == null) onto.linkClicks = from.linkClicks
+        // read 是构造参数，不能像上面几个一样就地赋值，只能 copy 出新对象。
+        // 不接的话这一楼的已读态会被服务端响应里的旧值覆盖 —— 蓝点在删/恢复之后又冒出来。
+        return if (onto.read == from.read) onto else onto.copy(read = from.read)
     }
 
     /** boost 提交：走 createBoost；成功回填楼层（气泡追加 + canBoost 置 false）。 */
@@ -907,7 +990,17 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 整体替换数据源并重算双向余量（首屏/换窗共用）。 */
     private fun applyDetail(detail: TopicDetail) {
-        dataSource.reset(detail.postStream?.posts ?: emptyList())
+        // 留存一份：页面重建后靠它把 tracker 幂等拉起（见 ensureReadingTracker）。
+        lastDetail = detail
+        // 换窗会把全部楼层换成服务端新对象。本页已确认已读的楼必须接回——服务端未必已经
+        // 记下（上报还在攒批窗口里、或刚失败重试中），不接的话已读态当场被打回未读，
+        // 而 tracker 的 readPosts 仍认为它已读、不再上报 → 蓝点永久卡住。
+        val locallyRead = readingTracker.confirmedReadPostNumbers()
+        val incoming = detail.postStream?.posts ?: emptyList()
+        val restored = if (locallyRead.isEmpty()) incoming else {
+            incoming.map { if (it.read != true && it.postNumber in locallyRead) it.copy(read = true) else it }
+        }
+        dataSource.reset(restored)
         val stream = detail.postStream?.stream ?: emptyList()
         val earlierCount = PostStreamPager.countEarlier(stream, dataSource.posts)
         val laterCount = PostStreamPager.countLater(stream, dataSource.posts)
@@ -926,7 +1019,49 @@ class TopicDetailViewModel @Inject constructor(
                 loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了"
             )
         }
+        // 诊断：确认服务端到底有没有下发「俺也一样」四要素与已读水位。
+        // 全 false 说明该话题未开启共享问题（服务端不下发 → 按钮本就不该出现，属正常）；
+        // true 而 UI 没有才是客户端接线问题。lastRead 同理解释红线是否该出现。
+        Timber.i(
+            "[ArkDO][TopicDetail] topicId=%s sharedIssue(visible=%s canCreate=%s created=%s count=%s) lastRead=%s accepted=%s",
+            detail.id,
+            detail.sharedIssueVisible,
+            detail.canCreateSharedIssue,
+            detail.userCreatedSharedIssue,
+            detail.sharedIssueCount,
+            detail.lastReadPostNumber,
+            detail.acceptedAnswers?.size
+        )
+        updateLastVisitedAnchor(detail)
         startReadingTrackerIfNeeded(detail)
+        // 换窗后新窗口里新出现的已读楼也要预置进 tracker，否则会对它们重复计时上报。
+        // （首屏那次由 startReadingTrackerIfNeeded 内部的 seedRead 负责，这里补的是已有 tracker 的情况。）
+        if (trackerStarted) {
+            readingTracker.seedRead(collectAlreadyReadPostNumbers(dataSource.posts, detail.lastReadPostNumber))
+        }
+    }
+
+    /**
+     * 确定「上次访问」红线锚楼：快照水位后第一条未读楼的**上一楼**（最后一条已读楼）。
+     * 红线画在锚楼底边、替代该处的灰色分割线 → 楼间只此一条，恰是「已读 | 未读」边界。
+     * 上一楼须已加载（index > 0）才能锚；首条已加载楼即未读时，已读侧还在未加载区，
+     * 留待 prepend 补楼后重试（本方法会被后续 applyDetail 再次调用）。锚一旦确定不再变化。
+     * 对齐鸿蒙 TopicDetailPage.updateLastVisitedAnchor（:2114-2132）。
+     */
+    private fun updateLastVisitedAnchor(detail: TopicDetail) {
+        if (lastVisitedSnapshot == 0) {
+            lastVisitedSnapshot = detail.lastReadPostNumber ?: 0
+        }
+        if (lastVisitedSnapshot <= 0 || lastVisitedAnchorPostId > 0L) return
+        val posts = dataSource.posts
+        for (index in posts.indices) {
+            if (posts[index].postNumber <= lastVisitedSnapshot) continue
+            if (index > 0) {
+                lastVisitedAnchorPostId = posts[index - 1].id
+                _uiState.update { it.copy(lastVisitedAnchorPostId = lastVisitedAnchorPostId) }
+            }
+            return
+        }
     }
 
     // ==================== 阅读计时上报（对齐鸿蒙 TopicReadController） ====================
@@ -934,11 +1069,27 @@ class TopicDetailViewModel @Inject constructor(
     /**
      * 详情加载成功后启动计时上报。未登录一律不启动：匿名 POST /topics/timings 会被后端拒。
      * 已读楼预置进 tracker（seedRead），避免对已读楼重复计时上报。
+     *
+     * **每个页面实例只启动一次**（对齐鸿蒙 TopicReadController 的 `started` 标志）。
+     * 这条不是优化而是正确性：applyDetail 除首屏外还被 rewindow 调用（楼层 scrubber 拖到
+     * 未加载楼、帖内链接定位等都会触发），每次都 start 会 `stop()+reset()`，而 reset 会
+     * ①清空 readPosts（已读记忆丢失，回头重复上报）②cancel 掉还没到点的视觉收尾 job
+     * （那批楼的 onRead 永不执行 → 蓝点卡住不再淡出）。
      */
     private fun startReadingTrackerIfNeeded(detail: TopicDetail) {
-        if (!LoginGate.isLoggedIn(appContext)) return
+        if (trackerStarted) {
+            Timber.i("[ArkDO][ReadingTracker] skip start: already started topicId=%d", detail.id)
+            return
+        }
+        if (!LoginGate.isLoggedIn(appContext)) {
+            Timber.i("[ArkDO][ReadingTracker] skip start: not logged in topicId=%d", detail.id)
+            return
+        }
         val posts = dataSource.posts
-        if (posts.isEmpty()) return
+        if (posts.isEmpty()) {
+            Timber.i("[ArkDO][ReadingTracker] skip start: no posts topicId=%d", detail.id)
+            return
+        }
         readingTracker.start(
             topicId = detail.id,
             reportFn = ReadingTracker.ReportTimings { topicId, timings, topicTime ->
@@ -947,15 +1098,49 @@ class TopicDetailViewModel @Inject constructor(
             onRead = { postNumbers -> markPostsRead(postNumbers) },
             onReporting = { postNumbers, reporting -> markPostsReporting(postNumbers, reporting) }
         )
-        readingTracker.seedRead(posts.filter { it.read == true }.map { it.postNumber })
-        readingTracker.seedRead(posts.map { it.postNumber }.filter { it <= (detail.lastReadPostNumber ?: 0) })
+        readingTracker.seedRead(collectAlreadyReadPostNumbers(posts, detail.lastReadPostNumber))
+        trackerStarted = true
         Timber.i("[ArkDO][ReadingTracker] started topicId=%d posts=%d", detail.id, posts.size)
+    }
+
+    /**
+     * 首屏预置为已读的楼号（对齐鸿蒙 TopicReadController.collectAlreadyReadPostNumbers）。
+     *
+     * 服务端 `read` 是权威：显式 true 才算已读。`last_read_post_number`（水位）只在
+     * `read` 缺失时兜底 —— 匿名响应或站点没下发该字段时，水位是唯一信号。
+     *
+     * 注意别把水位无条件当已读：那会让「水位以内、但服务端明确说 read=false」的楼被预置进
+     * readPosts，从此既不计时也不上报 —— 用户视角就是蓝点永远不消（这里踩过）。
+     */
+    private fun collectAlreadyReadPostNumbers(posts: List<TopicPost>, watermark: Int?): List<Int> {
+        val boundary = watermark ?: -1
+        return posts.filter { post ->
+            post.read == true || (post.read == null && boundary >= 0 && post.postNumber <= boundary)
+        }.map { it.postNumber }
     }
 
     /** 可见楼层变化（详情页滚动时喂入）：更新在屏楼层列表 + 刷新防挂机滚动时间戳。 */
     fun updateVisiblePostNumbers(postNumbers: List<Int>) {
+        if (postNumbers != lastOnscreenLogged) {
+            lastOnscreenLogged = postNumbers
+            Timber.i(
+                "[ArkDO][ReadingTracker] onscreen=%s..%s n=%d topicId=%s",
+                postNumbers.firstOrNull(), postNumbers.lastOrNull(), postNumbers.size, currentTopicId
+            )
+        }
         readingTracker.setOnscreen(postNumbers)
         readingTracker.scrolled()
+    }
+
+    /**
+     * 幂等拉起阅读上报（页面回到前台时调用，见 TopicReadController 的焦点胶水）。
+     *
+     * 正常首屏路径由 [applyDetail] 启动，这里是**重建兜底**：配置变更（切深色模式 / 旋转 /
+     * 改字号）会让 Compose 重建、重新走 ON_RESUME，而 `loadTopic` 的 LaunchedEffect key 未变、
+     * 不会重跑，没有这条就没人能把可能被停掉的 tracker 起回来。
+     */
+    fun ensureReadingTracker() {
+        lastDetail?.let { startReadingTrackerIfNeeded(it) }
     }
 
     /** 页面前后台切换：暂停/恢复阅读计时（对齐鸿蒙 setFocus）。 */
@@ -965,6 +1150,8 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 离开详情页：停表结算 + 把剩余批次发出（对齐鸿蒙 TopicReadController.detach 的两段收尾）。 */
     fun onDetailDetach() {
+        // 复位启动标志：本页已收尾，若该 VM 再次被挂载（同一实例复用）需重新起表。
+        trackerStarted = false
         if (readingTracker.stopTiming()) {
             readingTracker.flushPending()
         }
@@ -985,6 +1172,19 @@ class TopicDetailViewModel @Inject constructor(
             }
             if (!changed) state else state.copy(posts = posts)
         }
+        // 关键：把新对象一并写回数据源。只改 UiState 的话，下一次 `posts = dataSource.snapshotPosts`
+        // （分页 / 换窗 / 投票 / boost / 删恢复 / 编辑）就会把已读打回未读，而 tracker 的 readPosts
+        // 已记住这些楼、不再上报 → 蓝点永久卡住（对齐鸿蒙：那边直接改 @Observed 实例，天然同源）。
+        dataSource.acceptPosts(_uiState.value.posts.filter { it.postNumber in numbers })
+        // 诊断：in = 本批要翻已读的楼数；nowRead = 翻完后 UiState 里这些楼确实 read=true 的数量。
+        // 两手对不上（nowRead < in）说明 postNumber 没落到列表上；这条日志根本不出现则说明
+        // onRead 没被执行（上报未成功，或视觉收尾 job 被 reset 掐掉）。
+        Timber.i(
+            "[ArkDO][ReadingTracker] markRead topicId=%s in=%d nowRead=%d",
+            currentTopicId,
+            numbers.size,
+            _uiState.value.posts.count { it.postNumber in numbers && it.read == true }
+        )
     }
 
     /** 上报期间蓝点"呼吸"（reporting 状态）。 */
@@ -996,12 +1196,14 @@ class TopicDetailViewModel @Inject constructor(
             for (i in posts.indices) {
                 val post = posts[i]
                 if (post.postNumber in numbers && post.reporting != reporting) {
-                    posts[i] = post.copy().also { it.reporting = reporting }
+                    posts[i] = post.copy(reporting = reporting)
                     changed = true
                 }
             }
             if (!changed) state else state.copy(posts = posts)
         }
+        // 同上：reporting 也是本地态，不写回数据源的话，任何一次快照回填都会让"呼吸"提前中断。
+        dataSource.acceptPosts(_uiState.value.posts.filter { it.postNumber in numbers })
     }
 
     /** 武装目标楼落地高亮：3s 后自动清零，避免楼层重建时重播（对齐鸿蒙 armTargetFlash）。 */
@@ -1059,6 +1261,9 @@ data class TopicDetailUiState(
     val boostDeleteTargetId: Long = 0L,
     // boost 目标楼 id：>0 时回复输入浮层处于 boost 模式（对齐鸿蒙 boostTargetPostId）。
     val boostTargetPostId: Long = 0L,
+    // 「上次访问」红线锚楼 id：>0 时该楼底边画红线（对齐鸿蒙 TopicDetailPage.ets:456 的
+    // lastVisitedAnchorPostId）。此前恒 0 → 页面从不传 showLastVisitedLine → 红线从不出现。
+    val lastVisitedAnchorPostId: Long = 0L,
     // 正在删除的 boost id（转圈防重复，对齐鸿蒙 deletingBoostId）。
     val boostDeleteLoadingId: Long = 0L,
     // 编辑模式：目标楼 id（>0 时回复浮层处于编辑态）+ 乐观并发基线原文 + 取原文 loading。

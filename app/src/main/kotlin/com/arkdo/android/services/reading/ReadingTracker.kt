@@ -83,8 +83,18 @@ class ReadingTracker(private val scope: CoroutineScope) {
 
     private var tickJob: Job? = null
 
-    // 收尾 dispatch 用的延迟上报 job（鸿蒙 setTimeout 的等价物）。
-    private var pendingVisualJob: Job? = null
+    /**
+     * 收尾用的延迟任务登记表：Job → 收尾动作（鸿蒙 pendingVisualTimers 的等价物）。
+     *
+     * 必须用集合而不是单槽位：两批上报可以前后脚返回（一批秒回、一批慢一点），
+     * 单槽位下后一批的取消会把前一批还没到点的「清呼吸 + onRead」一起掐掉 ——
+     * 那批楼的蓝点于是永远不再淡出。
+     *
+     * 存下 action 而不是只存 Job，是为了在 [reset] 里能**补跑**：上报成功那一刻
+     * `readPosts` 已经写死（不会再发第二次），如果收尾被丢掉，这批楼的蓝点就永久
+     * 停在未读 —— 这是"漏一次就永久错"的语义，宁可立刻补跑，也不可静默丢弃。
+     */
+    private val pendingVisualJobs = mutableMapOf<Job, () -> Unit>()
 
     fun start(
         topicId: Long,
@@ -174,6 +184,15 @@ class ReadingTracker(private val scope: CoroutineScope) {
         }
     }
 
+    /**
+     * 已确认已读的楼号快照（服务端已读 + 本页上报成功的）。
+     *
+     * 供详情页在换窗整体替换楼层时把本地已读态接回新对象上：服务端未必已经记下这些楼
+     * （上报可能还在攒批窗口里或正在重试），纯用响应里的 read 会让蓝点当场复现，
+     * 而此处仍认为它们已读、不会再上报 —— 蓝点就永久卡住了。
+     */
+    fun confirmedReadPostNumbers(): Set<Int> = readPosts.toSet()
+
     /** 过盾成功：解除撞盾挂起并立刻补发积压批次。 */
     fun notifyChallengeResolved() {
         val wasHeld = challengeHoldUntil > 0L
@@ -201,8 +220,16 @@ class ReadingTracker(private val scope: CoroutineScope) {
         lastReportAt = System.currentTimeMillis()
         seenBlinking.clear()
         deferSends = false
-        pendingVisualJob?.cancel()
-        pendingVisualJob = null
+        // 未到点的视觉收尾不能直接丢掉：那批楼的上报已经成功、readPosts 也已记它们已读
+        // （不会再有第二次上报），丢掉收尾 = 它们的蓝点永久停在未读。
+        // 先取消定时，再把收尾立即跑一遍（setReporting(false) 与 onRead 都是幂等的）。
+        //
+        // 补跑不会误标别的帖子：本方法只在 start()（同页每实例仅一次，此时登记表必空）
+        // 与 flushPending()（离页，UI 已销毁）两处被调用。
+        val pendings = pendingVisualJobs.values.toList()
+        pendingVisualJobs.keys.forEach { it.cancel() }
+        pendingVisualJobs.clear()
+        pendings.forEach { it() }
     }
 
     private fun startInterval() {
@@ -280,9 +307,18 @@ class ReadingTracker(private val scope: CoroutineScope) {
 
         if (highestSeen > 0) {
             lastReportAt = System.currentTimeMillis()
+            Timber.i(
+                "$tag flush batch topicId=$topicId n=${newTimings.size} posts=${newTimings.keys.sorted().take(10)}"
+            )
             consolidate(newTimings)
             sendNextConsolidatedTiming()
             topicTime = 0L
+        } else {
+            // 走到这里说明"在屏楼一个都没计到时间"——最常见的原因是 onscreen 一直为空
+            // （页面没把可见楼喂进来），或长时间没滚动已被暂停分支拦住。
+            Timber.i(
+                "$tag flush produced nothing topicId=$topicId onscreen=${onscreen.size} tracked=${timings.size}"
+            )
         }
         lastFlush = 0L
     }
@@ -305,6 +341,7 @@ class ReadingTracker(private val scope: CoroutineScope) {
         consolidated = null
         val postNumbers = batch.timings.keys.toList()
         inProgress = true
+        Timber.i("$tag sending topicId=$topicId n=${postNumbers.size} posts=${postNumbers.sorted().take(10)}")
         setReporting(postNumbers, true)
         val startedAt = System.currentTimeMillis()
 
@@ -321,22 +358,29 @@ class ReadingTracker(private val scope: CoroutineScope) {
             }
             inProgress = false
             lastFlush = 0L
+            // 网络状态机同步推进：成功即记进 readPosts。这一行**不能**放进下面的延迟回调
+            // （对齐鸿蒙：readPosts.add 写在 then 的 success 分支里，只有 setReporting(false)
+            // 与 onRead 走 afterMinReporting）。放进延迟回调的话，job 一旦被 reset 或后续批次
+            // 顶掉，这批楼的已读记忆就丢了 —— 它们会重新走一遍计时上报，蓝点白闪一圈。
+            if (result.success) {
+                ajaxFailures = 0
+                ChallengeShortcutEventBus.notifyCleared()
+                for (postNumber in postNumbers) readPosts.add(postNumber)
+                Timber.i("$tag report success topicId=$topicId posts=$postNumbers")
+            } else {
+                Timber.i("$tag report failed topicId=$topicId status=${result.statusCode} challenge=${result.challengeState}")
+                if (result.challengeState != ChallengeState.NONE) {
+                    ChallengeShortcutEventBus.notifyBlocked()
+                    handleChallenge(timingPayload, topicTimePayload)
+                } else {
+                    handleFailure(timingPayload, topicTimePayload, result.statusCode)
+                }
+            }
+            // 只有视觉收尾延后：保证"呼吸"至少完整跑一轮再收（对齐鸿蒙 afterMinReporting）。
             afterMinReporting(startedAt) {
                 setReporting(postNumbers, false)
                 if (result.success) {
-                    ajaxFailures = 0
-                    ChallengeShortcutEventBus.notifyCleared()
-                    for (postNumber in postNumbers) readPosts.add(postNumber)
-                    Timber.i("$tag report success topicId=$topicId posts=$postNumbers")
                     onRead?.invoke(postNumbers)
-                } else {
-                    Timber.i("$tag report failed topicId=$topicId status=${result.statusCode} challenge=${result.challengeState}")
-                    if (result.challengeState != ChallengeState.NONE) {
-                        ChallengeShortcutEventBus.notifyBlocked()
-                        handleChallenge(timingPayload, topicTimePayload)
-                    } else {
-                        handleFailure(timingPayload, topicTimePayload, result.statusCode)
-                    }
                 }
             }
         }
@@ -354,10 +398,16 @@ class ReadingTracker(private val scope: CoroutineScope) {
             action()
             return
         }
-        pendingVisualJob?.cancel()
-        pendingVisualJob = scope.launch {
+        var executed = false
+        val job = scope.launch {
             delay(wait)
+            executed = true
             action()
+        }
+        pendingVisualJobs[job] = action
+        // 正常跑完就摘登记；被 reset 取消时不在这里补跑（由 reset 统一补，避免跑两遍）。
+        job.invokeOnCompletion {
+            if (executed) pendingVisualJobs.remove(job)
         }
     }
 

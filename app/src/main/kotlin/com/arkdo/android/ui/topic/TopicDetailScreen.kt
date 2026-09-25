@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -145,6 +146,9 @@ fun TopicDetailScreen(
     // 不这样做的话，VM 在桥回调线程写状态时，两次 uiState 读可能看到不同对象——
     // 「when 判完 topic 非空、下一行 topic!! 就 NPE」的崩溃就是这个撕裂读。
     val ui = uiState
+    // 本次阅读的 timings 上报是否正被 Cloudflare 拦着（真源：ChallengeShortcutEventBus，
+    // 由 ReadingTracker 的撞盾/恢复结果驱动）。为真时顶栏右侧亮「手动验证」入口。
+    val challengeBlocked by viewModel.challengeBlocked.collectAsState()
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
     // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
@@ -283,7 +287,12 @@ fun TopicDetailScreen(
     DisposableEffect(topicId, detailLifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> viewModel.setTrackerFocus(true)
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    viewModel.setTrackerFocus(true)
+                    // 幂等拉起：正常首屏时 detail 还没到，这里是 no-op，由 applyDetail 启动；
+                    // 但页面重建（见 onDispose 注释）后要靠它把停掉的表重新起回来。
+                    viewModel.ensureReadingTracker()
+                }
                 androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> viewModel.setTrackerFocus(false)
                 androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> viewModel.onDetailDetach()
                 else -> Unit
@@ -291,8 +300,20 @@ fun TopicDetailScreen(
         }
         detailLifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            // ⚠️ 这里**只能摘观察者，不能调 onDetailDetach()**。
+            // 本 effect 的 key 含 LocalLifecycleOwner，而配置变更（切深色模式 / 旋转 / 改字号）
+            // 会让 Activity 重建、NavHost 从保存状态恢复出一个**新的** NavBackStackEntry，
+            // 于是 key 变化 → dispose → 误判成"离开详情页"。误调的代价是不可逆的：
+            //   tracker.stopTiming() → flushPending() → reset()
+            //   → ①清空 readPosts（已读记忆丢失）
+            //   → ②cancel 掉还没到点的 pendingVisualJobs（那批楼上报其实已成功，
+            //      只是 onRead 永不执行，UI 蓝点永远等不到淡出）
+            // 更致命的是 LaunchedEffect(topicId) 的 key 没变、loadTopic 不会重跑，
+            // applyDetail 不再执行 → startReadingTrackerIfNeeded 再也不会被调用
+            //   → tracker 永久停表，蓝点永久卡在未读（真机上就是这个现象）。
+            // 真正的销毁由上面的 ON_DESTROY 覆盖；即便个别机型漏发，ViewModel.onCleared()
+            // 里还有 readingTracker.stop() 兜底，不会漏掉最后一次结算。
             detailLifecycleOwner.lifecycle.removeObserver(observer)
-            viewModel.onDetailDetach()
         }
     }
 
@@ -358,6 +379,8 @@ fun TopicDetailScreen(
                                         onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
                                         onCopyPostLink = { p -> viewModel.postLink(p) },
                                         onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
+                                        // 「上次访问」红线锚楼（VM 按进入时的已读水位算一次，锚定后不再变）。
+                                        lastVisitedAnchorPostId = ui.lastVisitedAnchorPostId,
                                         onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
                                         onReply = viewModel::openComposerForPost,
                                         topicCreatedById = topic.createdById ?: -1L,
@@ -435,7 +458,9 @@ fun TopicDetailScreen(
                 bookmarked = ui.topic?.bookmarked == true,
                 hazeState = hazeState,
                 onBack = onNavigateBack,
-                onTitleClick = { viewModel.jumpToPostNumber(1) }
+                onTitleClick = { viewModel.jumpToPostNumber(1) },
+                showChallengeShortcut = challengeBlocked,
+                onOpenChallenge = { viewModel.requestManualChallenge() }
             )
         }
 
@@ -558,6 +583,8 @@ private fun TopicDetailContent(
     postActionLoadingId: Long = 0L,
     onDeletePost: (TopicPost) -> Unit = {},
     onRecoverPost: (TopicPost) -> Unit = {},
+    // 「上次访问」红线锚楼 id：>0 时该楼底边画红线（对齐鸿蒙 TopicDetailPage.ets:456）。
+    lastVisitedAnchorPostId: Long = 0L,
     // 阅读计时上报：可见楼层号变化（滚动/分页）时回调，由上层喂给 ReadingTracker。
     onVisiblePostNumbers: (List<Int>) -> Unit = {}
 ) {
@@ -669,6 +696,8 @@ private fun TopicDetailContent(
                 onOpenImages = onOpenImages,
                 onReply = onReply,
                 onJumpToPost = onJumpToPost,
+                // 「上次访问」红线：只画在锚楼底边（对齐鸿蒙 :456 的 post.id === anchor && anchor > 0）。
+                showLastVisitedLine = lastVisitedAnchorPostId > 0L && post.id == lastVisitedAnchorPostId,
                 // 「俺也一样」：话题级功能，仅一楼渲染（页面只对一楼下发，对齐鸿蒙）。
                 sharedIssueVisible = post.postNumber == 1 && sharedIssueVisible,
                 sharedIssueCreated = sharedIssueCreated,
@@ -738,7 +767,10 @@ private fun TopicDetailHeaderBar(
     bookmarked: Boolean,
     hazeState: HazeState,
     onBack: () -> Unit,
-    onTitleClick: () -> Unit
+    onTitleClick: () -> Unit,
+    /** 过盾快捷入口是否可见（对齐鸿蒙 HdsNavigation.menu 的 shouldShowChallengeShortcut）。 */
+    showChallengeShortcut: Boolean = false,
+    onOpenChallenge: () -> Unit = {}
 ) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerHeight = statusBarPadding + 56.dp
@@ -849,6 +881,23 @@ private fun TopicDetailHeaderBar(
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
+                }
+            }
+            // 过盾快捷入口（对齐鸿蒙 TopicDetailPage 的 titleBar menu 条目）。
+            //
+            // 阅读时的 timings 上报是 notifyChallenge:false 的后台请求 —— 撞盾时不会弹验证页，
+            // 用户只看得到「蓝点一直不消失」，完全不知道发生了什么。这个按钮就是那个静默失败
+            // 的唯一出口：点它由 ChallengeRecoveryCoordinator 停掉后台静默轮询、把验证页交给用户。
+            //
+            // 只在真的被拦下时才出现（不是常驻）：入口占的是标题栏空间，多数用户从不撞盾，
+            // 常驻只会碍眼；「图标在 = 此刻确实有问题」也是鸿蒙那套语义。
+            if (showChallengeShortcut) {
+                IconButton(onClick = onOpenChallenge) {
+                    Icon(
+                        imageVector = Icons.Outlined.Shield,
+                        contentDescription = "手动验证",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }

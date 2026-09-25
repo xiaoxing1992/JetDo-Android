@@ -145,6 +145,33 @@ class PostDataSource {
         }
     }
 
+    /**
+     * 把已有楼整栋换成本地加工过的新对象（按 id 匹配）。
+     *
+     * 为什么必须有这个方法：`TopicPost` 是不可变 data class，已读/上报态这类本地态只能靠
+     * `copy` 出新对象。若只把新对象塞进 UiState.posts，本数据源里仍是旧对象 —— 而
+     * `snapshotPosts` 是 UiState.posts 的**唯一回填源**（分页、换窗、投票、boost、删/恢复、
+     * 编辑共十余处都写 `posts = dataSource.snapshotPosts`），任何一次回填都会把本地态打回原形。
+     * 已读态被打回的后果尤其重：ReadingTracker 的 readPosts 仍记得它已读，不会再上报，
+     * 于是蓝点永久卡在未读（真机上表现为「未读一直不消失」）。
+     *
+     * 一次调用只重发一次快照，避免逐楼 replacePost 触发 N 次重组。返回是否有变更。
+     */
+    fun acceptPosts(updated: List<TopicPost>): Boolean {
+        if (updated.isEmpty()) return false
+        val byId = updated.associateBy { it.id }
+        var changed = false
+        for (index in mutablePosts.indices) {
+            val next = byId[mutablePosts[index].id] ?: continue
+            if (next !== mutablePosts[index]) {
+                mutablePosts[index] = next
+                changed = true
+            }
+        }
+        if (changed) republish()
+        return changed
+    }
+
     /** 删除一栋楼（删帖成功后从列表摘掉）。 */
     fun removePost(postId: Long) {
         val index = mutablePosts.indexOfFirst { it.id == postId }

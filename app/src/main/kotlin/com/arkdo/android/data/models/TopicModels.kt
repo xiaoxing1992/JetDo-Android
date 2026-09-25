@@ -235,26 +235,32 @@ data class TopicPost(
     // 作者自己删掉的楼（PostSerializer#user_deleted）。楼还在，正文换成「已被作者删除」，操作栏改成恢复。
     @SerialName("user_deleted") val userDeleted: Boolean? = null,
     // 当前用户能不能把这楼恢复回来（PostSerializer#can_recover）。作者在时限内为真。
-    @SerialName("can_recover") val canRecover: Boolean? = null
-) {
+    @SerialName("can_recover") val canRecover: Boolean? = null,
+
+    // ↓↓↓ 以下五个是「本地态」：服务端不下发，由服务层构造后回填。
+    // 必须声明在主构造里并标 @Transient（序列化时忽略），与上面的 linkClicks 同一写法。
+    // 原因：data class 的 copy() 只搬主构造参数。以前它们写在类体里，任何一次 copy 都会把它们
+    // 清回默认值 —— 实测 bug：已读上报 markPostsRead 里的 post.copy(read = true) 会把
+    // 「回复某人」头像（replyToUser）连带作者/徽章/正文纯文本一次性抹掉。
+
     /** 由 cooked 本地解析（本地态，非服务端字段）。 */
-    var plainText: String = ""
+    @Transient var plainText: String = "",
 
     /** 上报 /topics/timings 进行中（本地态，蓝点呼吸）。 */
-    var reporting: Boolean = false
+    @Transient var reporting: Boolean = false,
 
     /** 被回复者（reply_to_post_number 对应的用户，头部右上角显示）。 */
-    var replyToUser: User? = null
+    @Transient var replyToUser: User? = null,
 
     /** 作者（内联 user_id/username/... 映射）。 */
-    var author: User? = null
-
-    /** 昵称后状态表情短名（user_status.emoji）。 */
-    val statusEmoji: String?
-        get() = userStatus?.emoji
+    @Transient var author: User? = null,
 
     /** 昵称后徽章图标名数组（顶层 user_badges 按 user_id 解出）。 */
-    var badgeIcons: List<String>? = null
+    @Transient var badgeIcons: List<String>? = null
+) {
+    /** 昵称后状态表情短名（user_status.emoji）。派生属性，不参与 copy，留在类体。 */
+    val statusEmoji: String?
+        get() = userStatus?.emoji
 }
 
 @Serializable

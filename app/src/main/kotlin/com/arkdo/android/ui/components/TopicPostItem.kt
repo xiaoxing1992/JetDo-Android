@@ -174,7 +174,7 @@ fun TopicPostItem(
     ) {
         // 正文区：左右留白只加在这层，红线才能通栏铺满。
         Column(modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp)) {
-            PostAuthorHeader(post = post, onOpenUser = onOpenUser)
+            PostAuthorHeader(post = post, onOpenUser = onOpenUser, onJumpToPost = onJumpToPost)
 
             PostRichContent(
                 html = post.cookedHtml,
@@ -279,7 +279,18 @@ fun TopicPostItem(
                 editLoading = editLoadingPostId == post.id,
                 onDeletePost = { onDeletePost(post) },
                 onRecoverPost = { onRecoverPost(post) },
-                postActionLoading = postActionLoadingId == post.id
+                postActionLoading = postActionLoadingId == post.id,
+                // 火箭入口本楼可见性：鸿蒙 canAddBoost() 即 post.canBoost === true
+                // （TopicPostItem.ets:1167）。注意可见性（canAddBoost）与点击回调（onAddBoost）
+                // 是**两个**参数：只传前者会渲染出一颗点了没反应的火箭（PostFooter 的
+                // onAddBoost 默认空 lambda），必须成对传。
+                canAddBoost = post.canBoost == true,
+                onAddBoost = { onAddBoost(post) },
+                sharedIssueVisible = sharedIssueVisible,
+                sharedIssueCreated = sharedIssueCreated,
+                sharedIssueCount = sharedIssueCount,
+                sharedIssueCanCreate = sharedIssueCanCreate,
+                onToggleSharedIssue = onToggleSharedIssue
             )
 
             // 本楼已有 boost：头像+短文本气泡排（每楼下方，对齐鸿蒙 BoostRow）。
@@ -326,7 +337,12 @@ fun TopicPostItem(
 // ==========================================================================
 
 @Composable
-private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
+private fun PostAuthorHeader(
+    post: TopicPost,
+    onOpenUser: (User) -> Unit,
+    // 「回复别人」指示器：点击定位到被回复楼层（对齐鸿蒙 TopicPostItem.ets:391-396）。
+    onJumpToPost: (Int) -> Unit = {}
+) {
     val author = User(
         id = post.userId ?: 0,
         username = post.username ?: "",
@@ -394,12 +410,14 @@ private fun PostAuthorHeader(post: TopicPost, onOpenUser: (User) -> Unit) {
         }
 
         // 「回复别人」指示器：share 图标 + 被回复者头像(20)，点击定位被回复楼层。
+        // 此前 clickable 里是空注释 → 有涟漪无跳转，用户会当 bug 报。对齐鸿蒙：图标与头像间距 4。
         if (post.replyToUser != null && post.replyToPostNumber != null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
                     .padding(start = 8.dp)
-                    .clickable { /* onJumpToPost 接线后定位 */ }
+                    .clickable { onJumpToPost(post.replyToPostNumber) }
             ) {
                 FaIcon("share", MaterialTheme.colorScheme.onSurfaceVariant, 16.dp)
                 UserAvatar(user = post.replyToUser, avatarSize = 20.dp, showFlair = false)
@@ -668,6 +686,14 @@ private fun PostFooter(
                         }
                     }
                 }
+                // 火箭入口（对齐鸿蒙）：无 boost 时跟在操作区、位于「更多」之前、回复按钮左边。
+                // 一旦本楼已有 boost，火箭改到 boost 行末尾（见 BoostRow），此处不再显示。
+                // 顺序对齐鸿蒙 TopicPostItem.ets:495-511 —— Like → Rocket → More → Reply。
+                if (canAddBoost && post.boosts.isNullOrEmpty()) {
+                    ActionButton(onClick = { onAddBoost(post) }) {
+                        FaIcon("rocket", iconMuted, 16.dp)
+                    }
+                }
                 if (moreExpanded) {
                     ActionButton(onClick = onCopyLink) {
                         FaIcon("link", iconMuted, 16.dp)
@@ -699,13 +725,6 @@ private fun PostFooter(
                 } else {
                     ActionButton(onClick = onMoreExpand) {
                         FaIcon("ellipsis", iconMuted, 16.dp)
-                    }
-                }
-                // 火箭入口（对齐鸿蒙）：无 boost 时跟在操作区、位于回复按钮左边。
-                // 一旦本楼已有 boost，火箭改到 boost 行末尾（见 BoostRow），此处不再显示。
-                if (canAddBoost && post.boosts.isNullOrEmpty()) {
-                    ActionButton(onClick = { onAddBoost(post) }) {
-                        FaIcon("rocket", iconMuted, 16.dp)
                     }
                 }
                 ActionButton(onClick = onReply) {
