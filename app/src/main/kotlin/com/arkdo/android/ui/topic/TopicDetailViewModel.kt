@@ -23,6 +23,8 @@ import com.arkdo.android.services.challenge.ChallengeShortcutEventBus
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.services.content.EmojiPreviewHtml
+import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.draft.DraftService
 import com.arkdo.android.services.draft.SaveEditDraftInput
@@ -1027,8 +1029,12 @@ class TopicDetailViewModel @Inject constructor(
         return engine
     }
 
-    /** 把 markdown 原文编译成可渲染的 HTML；引擎未就绪/超时返回 null，由 UI 退回原文。 */
-    suspend fun renderPreview(raw: String): String? = renderEngine?.render(raw)
+    /**
+     * 把 markdown 原文编译成可渲染的 HTML；引擎未就绪/超时返回 null，由 UI 退回原文。
+     * 已知表情短码在预览里转成图片（与发帖预览同一条通路，见 EmojiPreviewHtml）。
+     */
+    suspend fun renderPreview(raw: String): String? =
+        renderEngine?.render(raw)?.let { EmojiPreviewHtml.render(it, ::getEmojiUrl) }
 
     /**
      * 提交回复：POST /posts。直接发布 → 新楼追加到列表底部 + 清草稿 + 关浮层；进审核队列 →

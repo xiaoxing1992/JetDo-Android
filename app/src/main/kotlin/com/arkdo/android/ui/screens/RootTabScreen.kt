@@ -87,6 +87,7 @@ fun RootTabScreen(
     // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和首页共用同一个实例。
     // 顺带的好处是切标签页时首页状态不再被销毁重建。
     val homeViewModel: HomeViewModel = hiltViewModel()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // 启动会话检查(对齐鸿蒙 RootTabPage handleArkWebReady:宿主就绪后才发 session 请求;
     // 提前发会命中「ArkWeb 宿主尚未就绪」白失败,头像一直停在未登录。之后 WebView 就绪、
@@ -96,6 +97,13 @@ fun RootTabScreen(
     LaunchedEffect(isWebViewReady) {
         if (isWebViewReady) {
             sessionViewModel.checkCurrentUser()
+            // 表情目录：与上面同理，必须等宿主就绪再发请求，否则会白失败。
+            // 这是一次性的后台填充（内存命中即返回），失败也不影响使用——状态表情与
+            // 表情选择器按"查不到"降级，下次进首页会自动重试（loadedHost 未被写入）。
+            com.arkdo.android.services.content.EmojiCatalogService.ensureLoaded(
+                context,
+                com.arkdo.android.services.network.ArkWebNetworkBridge
+            )
         }
     }
 

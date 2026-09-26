@@ -57,6 +57,7 @@ import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.AcceptedAnswer
 import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.services.content.parseInlines
+import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
@@ -379,8 +380,17 @@ private fun PostAuthorHeader(
                         .weight(1f, fill = false)
                         .clickable { onOpenUser(author) }
                 )
-                post.statusEmoji?.let { emoji ->
-                    Text(emoji, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
+                // 状态表情（user_status.emoji，如 "lollipop"、"tieba_003"）：接口只给短名，
+                // 要经站点表情目录换成图片。目录里查不到就不画——把短名当文字渲染出来是
+                // 一串英文单词，比不显示更糟（对齐鸿蒙 TopicPostItem.ets:336-343）。
+                getEmojiUrl(post.statusEmoji)?.let { url ->
+                    AsyncImage(
+                        model = url,
+                        contentDescription = post.statusEmoji,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .size(16.dp)
+                    )
                 }
                 post.badgeIcons.orEmpty().forEach { iconId ->
                     FaIcon(iconId, parseHexColor(BADGE_GOLD), 15.dp, Modifier.padding(start = 5.dp))

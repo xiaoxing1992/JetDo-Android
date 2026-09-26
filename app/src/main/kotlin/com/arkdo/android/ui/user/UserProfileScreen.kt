@@ -59,12 +59,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.data.models.UserActivityItem
 import com.arkdo.android.data.models.UserInteraction
 import com.arkdo.android.data.models.UserTopReply
 import com.arkdo.android.data.models.UserTopTopic
 import com.arkdo.android.services.content.parseInlines
+import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.network.ArkWebNetworkBridge
@@ -362,14 +364,31 @@ private fun IdentityCard(
             UserAvatar(user = state.avatarUser, avatarSize = 64.dp)
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = displayName,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = arkdoColors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = displayName,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = arkdoColors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // 状态表情（user_status.emoji）：接口只给短名，经站点表情目录换成图片；
+                    // 查不到就不画（对齐鸿蒙 UserProfilePage 昵称旁 18×18 的那张图）。
+                    getEmojiUrl(profile?.statusEmoji)?.let { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = profile?.statusEmoji,
+                            modifier = Modifier
+                                .padding(start = 6.dp)
+                                .size(18.dp)
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(

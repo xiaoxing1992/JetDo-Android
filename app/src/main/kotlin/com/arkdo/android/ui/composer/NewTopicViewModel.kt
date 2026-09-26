@@ -3,6 +3,8 @@ package com.arkdo.android.ui.composer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import com.arkdo.android.services.content.EmojiPreviewHtml
+import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.draft.DraftService
 import com.arkdo.android.services.draft.SaveTopicDraftInput
@@ -230,12 +232,16 @@ class NewTopicViewModel @Inject constructor(
     // ========== 预览 ==========
 
     /**
-     * 把正文编译成可渲染的 HTML(本地 markdown-it 引擎)。
+     * 把正文编译成可渲染的 HTML(本地 markdown-it 引擎),并把已知表情短码转成图片。
+     *
+     * 短码后处理只作用于预览:详情页正文拿的是服务端 cooked HTML,里面表情已经是
+     * `<img class="emoji">`;本地 markdown-it 不会做这一步,不补的话预览里是一串裸短码。
+     *
      * @param raw markdown 原文(当前光标所在候选,见调用侧说明)
      * @return 编译后的 HTML;失败/引擎未就绪返回 null,由 UI 退回原文。
      */
     suspend fun renderPreview(raw: String): String? =
-        renderEngine?.render(raw)
+        renderEngine?.render(raw)?.let { EmojiPreviewHtml.render(it, ::getEmojiUrl) }
 
     // ========== 提交 ==========
 
