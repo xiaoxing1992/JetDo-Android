@@ -8,6 +8,7 @@ import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.core.designsystem.TopicListStyleStore
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
+import com.arkdo.android.services.network.DohManager
 import com.arkdo.android.services.network.DohService
 import com.arkdo.android.services.session.LoginGate
 import dagger.hilt.android.HiltAndroidApp
@@ -55,9 +56,13 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         FabGlassStore.init(this)
         RealtimeTopicsPrefs.init(this)
 
-        // 初始化 DoH (DNS over HTTPS)：从 DohManager 读配置构造解析器。
-        // 同步执行（只读 SharedPreferences，不发请求），避免 host WebView 抢在配置就绪前建起来。
-        runCatching { DohService.init(this) }
+        // 初始化 DoH (DNS over HTTPS)：DohManager 先把配置种子化到 preferences
+        // （首次启动写入内置服务器并选中），DohService 再读配置构造解析器。
+        // 同步执行（只读/写 SharedPreferences，不发请求），避免 host WebView 抢在配置就绪前建起来。
+        runCatching {
+            DohManager.init(this)
+            DohService.init(this)
+        }
             .onSuccess { Timber.i("[ArkDO][Startup] DoH service initialized url=%s", DohService.activeServerUrl()) }
             .onFailure { Timber.e(it, "[ArkDO][Startup] DoH initialization failed") }
 
