@@ -32,8 +32,34 @@ data class SaveTopicDraftInput(
     val typingTimeMs: Long
 )
 
+/** 保存回帖草稿的入参。与编辑草稿**共用同一个 draftKey**（`topic_<id>`），靠 data 里的 action 区分。 */
+data class SaveReplyDraftInput(
+    val draftKey: String,
+    val sequence: Long,
+    /** 详情页带下来的分类；拿不到时传 -1，落盘时转 null（对齐鸿蒙 `categoryId >= 0 ? : null`）。 */
+    val categoryId: Long,
+    val reply: String,
+    /** 定向回复的目标楼层；回复话题本身时为 null。 */
+    val replyToPostNumber: Int?,
+    val composerTimeMs: Long,
+    val typingTimeMs: Long
+)
+
+/** 保存编辑草稿的入参。 */
+data class SaveEditDraftInput(
+    val draftKey: String,
+    val sequence: Long,
+    val categoryId: Long,
+    val reply: String,
+    val postId: Long,
+    /** 乐观并发基线原文；回来提交时原样带上。 */
+    val originalText: String,
+    val composerTimeMs: Long,
+    val typingTimeMs: Long
+)
+
 /**
- * 草稿服务：对齐鸿蒙 DraftService.ets 里发新主题会用到的三条。
+ * 草稿服务：对齐鸿蒙 DraftService.ets 里会用到的几条（新主题 / 回帖 / 编辑）。
  * 保存走 POST /drafts.json 表单，删除走 DELETE /drafts/{key}.json 表单，列表走 GET。
  */
 class DraftService(private val bridge: JsonNetworkClient) {
@@ -68,6 +94,41 @@ class DraftService(private val bridge: JsonNetworkClient) {
             tags = input.tags,
             composerTime = input.composerTimeMs.coerceAtLeast(0L),
             typingTime = input.typingTimeMs.coerceAtLeast(0L)
+        )
+        return postDraft(input.draftKey, input.sequence, json.encodeToString(data))
+    }
+
+    /**
+     * 保存回帖草稿。与 [saveTopicDraft] 的差别只在 data 内层：无 title、action='reply'、
+     * 带 `reply_to_post_number`。成功时 data 同样是下一次必须带上的序号。
+     *
+     * ⚠️ 回帖草稿与编辑草稿**共用 key 与同一个序号**：各存各的序号，交替保存时必有一方
+     * 拿着过期序号被服务端拒（鸿蒙 TopicDetailPage 里对这点有明确注释）。
+     */
+    suspend fun saveReplyDraft(input: SaveReplyDraftInput): NetworkResult<Long> {
+        val data = ReplyDraftData(
+            reply = input.reply,
+            action = DraftAction.REPLY.value,
+            categoryId = if (input.categoryId >= 0) input.categoryId else null,
+            tags = emptyList(),
+            composerTime = input.composerTimeMs.coerceAtLeast(0L),
+            typingTime = input.typingTimeMs.coerceAtLeast(0L),
+            reply_to_post_number = input.replyToPostNumber
+        )
+        return postDraft(input.draftKey, input.sequence, json.encodeToString(data))
+    }
+
+    /** 保存编辑草稿。同 key，靠 action='edit' + postId 区分。 */
+    suspend fun saveEditDraft(input: SaveEditDraftInput): NetworkResult<Long> {
+        val data = EditDraftData(
+            reply = input.reply,
+            action = DraftAction.EDIT.value,
+            categoryId = if (input.categoryId >= 0) input.categoryId else null,
+            tags = emptyList(),
+            composerTime = input.composerTimeMs.coerceAtLeast(0L),
+            typingTime = input.typingTimeMs.coerceAtLeast(0L),
+            postId = input.postId,
+            original_text = input.originalText
         )
         return postDraft(input.draftKey, input.sequence, json.encodeToString(data))
     }
@@ -149,6 +210,44 @@ internal data class TopicDraftData(
     val reply_to_post_number: Int? = null,
     val reply_to_user: String? = null
 )
+
+/**
+ * 回帖草稿的 data 内层。字段集**刻意与发帖不同**（没有 title / original_text），
+ * 对齐鸿蒙 ReplyDraftData —— 多发字段虽然通常会被服务端忽略，但没必要赌。
+ */
+@Serializable
+internal data class ReplyDraftData(
+    val reply: String,
+    val action: String,
+    val categoryId: Long?,
+    val tags: List<DraftTagRef>,
+    val archetypeId: String = "regular",
+    val metaData: String? = null,
+    val composerTime: Long,
+    val typingTime: Long,
+    val locale: String = "",
+    val reply_to_post_number: Int? = null,
+    val reply_to_user: String? = null
+)
+
+/** 编辑草稿的 data 内层。对齐鸿蒙 EditDraftData（带 postId + original_text，无 reply_to_*）。 */
+@Serializable
+internal data class EditDraftData(
+    val reply: String,
+    val action: String,
+    val categoryId: Long?,
+    val tags: List<DraftTagRef>,
+    val archetypeId: String = "regular",
+    val metaData: String? = null,
+    val composerTime: Long,
+    val typingTime: Long,
+    val locale: String = "",
+    val postId: Long,
+    val original_text: String
+)
+
+/** 回帖/编辑草稿的 key 约定：一条话题一条草稿，两态共用（对齐鸿蒙 `topic_${id}`）。 */
+internal fun replyDraftKey(topicId: Long): String = "topic_$topicId"
 
 /** 标题或正文有实质内容才值得存，免得打开又关掉也留一条空草稿。 */
 internal fun draftHasContent(title: String, body: String): Boolean =

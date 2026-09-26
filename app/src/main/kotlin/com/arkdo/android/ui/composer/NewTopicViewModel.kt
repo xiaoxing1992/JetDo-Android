@@ -23,11 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.intOrNull
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -54,8 +49,6 @@ class NewTopicViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(NewTopicUiState())
     val uiState: StateFlow<NewTopicUiState> = _uiState.asStateFlow()
-
-    private val json = Json { ignoreUnknownKeys = true }
 
     private var tagDebounceJob: Job? = null
     private var tagQuerySeq = 0
@@ -226,32 +219,6 @@ class NewTopicViewModel @Inject constructor(
                 )
             }
             done(outcome.snippet, outcome.error)
-        }
-    }
-
-    private data class UploadOutcome(val snippet: String?, val error: String?)
-
-    /** 解析 /uploads.json 响应:成功取 short_url 组 markdown;失败给用户可读文案。 */
-    private fun parseUploadOutcome(response: NetworkResult<String>): UploadOutcome {
-        if (!response.success || response.data == null) {
-            return UploadOutcome(null, response.error?.message ?: "图片上传失败,请稍后重试。")
-        }
-        return runCatching {
-            val root = json.parseToJsonElement(response.data!!).jsonObject
-            val shortUrl = root["short_url"]?.jsonPrimitive?.content
-            if (shortUrl.isNullOrEmpty()) {
-                // 2xx 但缺 short_url = Discourse 校验失败,服务端 errors 里有人话。
-                val errors = root["errors"]?.jsonArray?.joinToString(" ") { it.jsonPrimitive.content }
-                UploadOutcome(null, errors?.takeIf { it.isNotEmpty() } ?: "图片上传失败,请检查格式或大小。")
-            } else {
-                val width = root["width"]?.jsonPrimitive?.intOrNull ?: 0
-                val height = root["height"]?.jsonPrimitive?.intOrNull ?: 0
-                val name = root["original_filename"]?.jsonPrimitive?.content.orEmpty()
-                UploadOutcome(UploadMarkdown.buildImage(name, width, height, shortUrl), null)
-            }
-        }.getOrElse {
-            Timber.e(it, "[ArkDO][Composer] 上传响应解析失败")
-            UploadOutcome(null, "图片上传失败,请稍后重试。")
         }
     }
 

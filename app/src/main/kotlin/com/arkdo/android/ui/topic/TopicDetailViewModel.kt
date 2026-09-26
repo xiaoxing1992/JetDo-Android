@@ -16,6 +16,7 @@ import com.arkdo.android.services.reading.ReadingTracker
 import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.PostStreamPager
 import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.network.JsonRequestOptions
 import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryState
 import com.arkdo.android.services.challenge.ChallengeShortcutEventBus
@@ -24,9 +25,15 @@ import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
 import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.draft.DraftService
+import com.arkdo.android.services.draft.SaveEditDraftInput
+import com.arkdo.android.services.draft.SaveReplyDraftInput
+import com.arkdo.android.services.draft.replyDraftKey
+import com.arkdo.android.ui.composer.MarkdownRenderEngine
+import com.arkdo.android.ui.composer.parseUploadOutcome
 import com.arkdo.android.ui.drafts.DraftResume
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +51,9 @@ private const val TARGET_FLASH_MS = 3000L
 
 /** 作者软删除后站点回的中文占位（响应没带 cooked 时本地兜底）。 */
 private const val DELETED_BY_AUTHOR_HTML = "<p>(帖子已被作者删除)</p>"
+
+/** 回帖/编辑草稿的自动保存防抖，对齐鸿蒙 TopicDetailPage 的 REPLY_DRAFT_SAVE_DEBOUNCE_MS（2 秒）。 */
+private const val REPLY_DRAFT_SAVE_DEBOUNCE_MS = 2000L
 
 /**
  * 话题详情页 ViewModel —— 窗口式加载，对齐鸿蒙 TopicDetailPage 的数据流。
@@ -123,6 +133,8 @@ class TopicDetailViewModel @Inject constructor(
     override fun onCleared() {
         challengeUnsubscribe()
         challengeShortcutUnsubscribe()
+        renderEngine?.release()
+        renderEngine = null
         readingTracker.stop()
         super.onCleared()
     }
@@ -132,6 +144,19 @@ class TopicDetailViewModel @Inject constructor(
     /** 从草稿列表带进来的续写。发表成功后删掉，只删一次。 */
     private var resumedDraft: DraftResume? = null
     private var draftComposerOpened = false
+
+    // ===== 回帖 / 编辑草稿自动落盘（对齐鸿蒙 TopicDetailPage 的 replyDraft* 一族）=====
+    // 回帖与编辑**共用同一个 key（topic_<id>）与同一个序号**：各存各的序号时，交替保存
+    // 必有一方拿着过期序号被服务端拒（鸿蒙源码里对这点有明确注释，照搬其语义）。
+    private var replyDraftSequence = 0L
+    private var replyDraftSaving = false
+    private var replyDraftDirty = false
+    private var replyDraftPersisted = false
+    private var replyDraftPublished = false
+    private var replyDraftJob: Job? = null
+
+    /** 离屏 markdown 引擎：用户真去切预览时才懒建，页面销毁释放。 */
+    private var renderEngine: MarkdownRenderEngine? = null
     // 「上次访问」红线：进入时快照的已读水位（只取一次，页内重开窗口 / 本次阅读推高水位都不
     // 重取，否则线会消失）+ 锚楼 id（快照后第一条未读楼的上一楼，锚一旦确定不再变化）。
     // 对齐鸿蒙 TopicDetailPage.ets:177-180 / :2114-2132。
@@ -532,6 +557,9 @@ class TopicDetailViewModel @Inject constructor(
         val draft = resumedDraft ?: return
         if (draftComposerOpened || draft.reply.isEmpty()) return
         draftComposerOpened = true
+        // 续写沿用服务端带回来的序号：换个序号会另存成新的一条草稿。
+        replyDraftSequence = draft.sequence
+        replyDraftPersisted = true
         val editPostId = draft.editPostId
         val original = draft.originalText
         if (editPostId != null && editPostId > 0 && original != null) {
@@ -613,6 +641,11 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 对齐鸿蒙 resetComposerModes：回复/boost/编辑三态复位。 */
     private fun resetComposerModes() {
+        // 新一轮编辑会话开始：解除「已发表」闸门。不复位的话，在同一页里发完一条回复后，
+        // 再写第二条时草稿永远不会落盘（闸门一直是关的）——这是本页最容易漏的一处状态泄漏。
+        replyDraftPublished = false
+        replyDraftJob?.cancel()
+        replyDraftJob = null
         _uiState.update {
             it.copy(
                 composerReplyToPostNumber = null,
@@ -690,6 +723,7 @@ class TopicDetailViewModel @Inject constructor(
             if (result.success && result.data != null) {
                 applyEditedPost(result.data)
                 deleteResumedDraftIfAny()
+                deleteReplyDraftIfAny()
                 _uiState.update {
                     it.copy(
                         composerVisible = false,
@@ -829,19 +863,172 @@ class TopicDetailViewModel @Inject constructor(
     }
 
     fun closeComposer() {
+        flushReplyDraft()
         _uiState.update {
             it.copy(
                 composerVisible = false,
+                composerExpanded = false,
                 editingPostId = 0L,
                 editingOriginalRaw = ""
             )
         }
     }
 
-    /** 输入内容暂存：关掉浮层再点开内容还在（鸿蒙 pendingReplyText 的内存等价物，磁盘草稿后续切片接）。 */
+    /**
+     * 输入内容暂存：关掉浮层再点开内容还在（对齐鸿蒙 pendingReplyText），
+     * 并且**停手 2 秒后自动落盘**（对齐鸿蒙 scheduleReplyDraftSave）。
+     */
     fun updateReplyDraft(text: String) {
         _uiState.update { it.copy(pendingReplyText = text) }
+        scheduleReplyDraftSave()
     }
+
+    // ========== 全屏编辑器展开/收起 ==========
+
+    /**
+     * 紧凑输入条 → 全屏编辑器（对齐鸿蒙「内联回复条点展开进 ComposerPage」）。
+     * 文本真源不变（仍是 pendingReplyText），只是换一种呈现，所以内容不会丢。
+     */
+    fun expandComposer() {
+        _uiState.update { it.copy(composerExpanded = true) }
+    }
+
+    /** 全屏编辑器 → 退回紧凑条。收起时补存一次草稿，别让刚敲的字烂在防抖窗口里。 */
+    fun collapseComposer() {
+        flushReplyDraft()
+        _uiState.update { it.copy(composerExpanded = false) }
+    }
+
+    // ========== 回帖 / 编辑草稿自动落盘 ==========
+
+    /** 内容变化：标脏，停手 2 秒后再存。已发出的不再存（否则刚删的草稿又写回来）。 */
+    private fun scheduleReplyDraftSave() {
+        if (replyDraftPublished) return
+        replyDraftDirty = true
+        replyDraftJob?.cancel()
+        replyDraftJob = viewModelScope.launch {
+            delay(REPLY_DRAFT_SAVE_DEBOUNCE_MS)
+            saveReplyDraftNow()
+        }
+    }
+
+    /** 离屏/收起时补存一次还没到防抖点的改动。 */
+    fun flushReplyDraft() {
+        if (replyDraftPublished || !replyDraftDirty) return
+        replyDraftJob?.cancel()
+        replyDraftJob = null
+        viewModelScope.launch { saveReplyDraftNow() }
+    }
+
+    /**
+     * 存一次草稿。按当前是否编辑态选 schema（reply / edit），key 与序号两态共用。
+     *
+     * 空内容不存：一进编辑框就写一条空草稿，会平白把用户真正在写的回帖草稿顶掉
+     * （鸿蒙 saveEditDraftNow 里有同样的护栏，另外还比对原文避免存"等于原文"的草稿）。
+     */
+    private suspend fun saveReplyDraftNow() {
+        val state = _uiState.value
+        val topicId = state.topic?.id ?: return
+        if (replyDraftPublished || replyDraftSaving) return
+        val text = state.pendingReplyText
+        if (text.trim().isEmpty()) return
+        val editingPostId = state.editingPostId
+        // 编辑态下内容仍等于原文 → 没改过，不值得存（存了会把回帖草稿挤掉）。
+        if (editingPostId > 0 && text == state.editingOriginalRaw) return
+        replyDraftSaving = true
+        replyDraftDirty = false
+        val categoryId = state.topic?.categoryId ?: -1L
+        val result = if (editingPostId > 0) {
+            draftService.saveEditDraft(
+                SaveEditDraftInput(
+                    draftKey = replyDraftKey(topicId),
+                    sequence = replyDraftSequence,
+                    categoryId = categoryId,
+                    reply = text,
+                    postId = editingPostId,
+                    originalText = state.editingOriginalRaw,
+                    composerTimeMs = 0L,
+                    typingTimeMs = 0L
+                )
+            )
+        } else {
+            draftService.saveReplyDraft(
+                SaveReplyDraftInput(
+                    draftKey = replyDraftKey(topicId),
+                    sequence = replyDraftSequence,
+                    categoryId = categoryId,
+                    reply = text,
+                    replyToPostNumber = state.composerReplyToPostNumber,
+                    composerTimeMs = 0L,
+                    typingTimeMs = 0L
+                )
+            )
+        }
+        replyDraftSaving = false
+        if (result.success && result.data != null) {
+            // 服务端回的是下次该带的序号，不存回去下次会因序号过期被拒。
+            replyDraftSequence = result.data
+            replyDraftPersisted = true
+            Timber.i("[ArkDO][TopicDetail] reply draft saved topicId=%s seq=%d", topicId, replyDraftSequence)
+        } else {
+            replyDraftDirty = true
+        }
+    }
+
+    /** 发表/保存成功后删掉这条草稿。没真存过就不删，避免白发一次请求。 */
+    private fun deleteReplyDraftIfAny() {
+        replyDraftPublished = true
+        replyDraftJob?.cancel()
+        replyDraftJob = null
+        val topicId = _uiState.value.topic?.id ?: return
+        if (!replyDraftPersisted) return
+        replyDraftPersisted = false
+        val sequence = replyDraftSequence
+        viewModelScope.launch {
+            val result = draftService.deleteDraft(replyDraftKey(topicId), sequence)
+            // 确已删除 → 角标乐观 -1（对齐鸿蒙的 DraftEventBus.notifyDeleted）。不重查会话，
+            // 理由同 handleDraftDeleted：/session/current.json 会短暂回删除前的缓存值。
+            if (result.success) {
+                DraftCountStore.decrement(CurrentUserHolder.currentUser.value?.draftCount)
+            }
+        }
+    }
+
+    // ========== 上传与预览（全屏编辑器用） ==========
+
+    /** 上传一张图：base64 → POST /uploads.json → 返回可插入正文的 markdown 片段。 */
+    fun uploadImage(
+        base64: String,
+        fileName: String,
+        mimeType: String,
+        done: (snippet: String?, error: String?) -> Unit
+    ) {
+        if (_uiState.value.isUploadingMedia) return
+        _uiState.update { it.copy(isUploadingMedia = true, uploadProgressText = "图片上传中...") }
+        viewModelScope.launch {
+            val response = ArkWebNetworkBridge.uploadImage(
+                base64 = base64,
+                fileName = fileName,
+                mimeType = mimeType,
+                options = JsonRequestOptions(notifyChallenge = true, referrer = "${AppConstants.BASE_URL}/")
+            )
+            val outcome = parseUploadOutcome(response)
+            _uiState.update { it.copy(isUploadingMedia = false, uploadProgressText = null) }
+            outcome.error?.let { _uiState.update { s -> s.copy(actionMessage = it) } }
+            done(outcome.snippet, outcome.error)
+        }
+    }
+
+    /** 懒建渲染引擎（首次切预览时）。UI 串行调用，不额外加锁。 */
+    fun ensureRenderEngine(context: Context): MarkdownRenderEngine {
+        renderEngine?.let { return it }
+        val engine = MarkdownRenderEngine(context)
+        renderEngine = engine
+        return engine
+    }
+
+    /** 把 markdown 原文编译成可渲染的 HTML；引擎未就绪/超时返回 null，由 UI 退回原文。 */
+    suspend fun renderPreview(raw: String): String? = renderEngine?.render(raw)
 
     /**
      * 提交回复：POST /posts。直接发布 → 新楼追加到列表底部 + 清草稿 + 关浮层；进审核队列 →
@@ -864,6 +1051,7 @@ class TopicDetailViewModel @Inject constructor(
                 val outcome = result.data
                 if (outcome.pending) {
                     deleteResumedDraftIfAny()
+                    deleteReplyDraftIfAny()
                     _uiState.update {
                         it.copy(
                             isSubmittingReply = false,
@@ -875,6 +1063,7 @@ class TopicDetailViewModel @Inject constructor(
                     }
                 } else if (outcome.post != null) {
                     deleteResumedDraftIfAny()
+                    deleteReplyDraftIfAny()
                     dataSource.appendPosts(listOf(outcome.post))
                     _uiState.update {
                         it.copy(
@@ -1255,10 +1444,15 @@ data class TopicDetailUiState(
     val categories: List<TopicCategory> = emptyList(),
     // 回复输入浮层（切片 7）：可见性/占位文字/定向回复目标/未发出草稿/提交中。
     val composerVisible: Boolean = false,
+    /** 是否展开成全屏编辑器（紧凑条与全屏编辑器共用同一份 pendingReplyText，切换不丢字）。 */
+    val composerExpanded: Boolean = false,
     val composerPlaceholder: String = "回复当前话题",
     val composerReplyToPostNumber: Int? = null,
     val pendingReplyText: String = "",
     val isSubmittingReply: Boolean = false,
+    /** 全屏编辑器里图片上传中（进度文案随行显示，不盖全屏遮罩）。 */
+    val isUploadingMedia: Boolean = false,
+    val uploadProgressText: String? = null,
     // 「俺也一样」（shared issue，话题级）：可见性/已点/计数/当前用户能否点。
     val sharedIssueVisible: Boolean = false,
     val sharedIssueCreated: Boolean = false,
