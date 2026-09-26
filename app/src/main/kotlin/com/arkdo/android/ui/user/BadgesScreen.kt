@@ -197,8 +197,10 @@ private fun BadgeGroup(group: UserBadgeGroup, onTap: (UserBadgeItem) -> Unit) {
                 row.forEach { badge ->
                     BadgeTileInRow(badge = badge, onClick = { onTap(badge) })
                 }
+                // 末行补位必须用 weight(1f)：Weight 才能参与宽度分配，把剩下的格子压回 1/3。
+                // 用 width(0.dp) 占位时它不参与分配，两个徽章会各占半宽、被拉宽。
                 repeat(3 - row.size) {
-                    Spacer(modifier = Modifier.width(0.dp))
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }

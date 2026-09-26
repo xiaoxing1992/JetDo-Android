@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -35,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +65,9 @@ import com.arkdo.android.data.models.UserInteraction
 import com.arkdo.android.data.models.UserTopReply
 import com.arkdo.android.data.models.UserTopTopic
 import com.arkdo.android.services.content.parseInlines
+import com.arkdo.android.services.content.LinkRoute
+import com.arkdo.android.services.content.resolveLinkRoute
+import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.InlineText
 import com.arkdo.android.ui.components.UserAvatar
@@ -111,6 +116,21 @@ fun UserProfileScreen(
         viewModel.load(username, seedDisplayName, seedAvatarTemplate)
     }
 
+    // 简介 / 网站行的链接：和帖子正文共用一条 LinkRouter 通路（对齐鸿蒙
+    // openProfileLink → onOpenLink，四类分流见 RootTabPage.handleOpenLink）。
+    // 不接这一步，InlineText 走默认空实现，链接看着是可点的蓝字、点了却没有任何反应。
+    val openLink: (String) -> Unit = { url ->
+        when (val route = resolveLinkRoute(url)) {
+            is LinkRoute.Topic -> onOpenTopic(route.topicId, "", route.targetPostNumber)
+            is LinkRoute.User -> onOpenUser(route.username, null, null)
+            is LinkRoute.Download ->
+                // 附件交 host WebView 的下载委托（带会话 Cookie），宿主未就绪退回内置 WebView，
+                // 总之不能交系统浏览器——站内地址在那里没有登录态。
+                if (!ArkWebNetworkBridge.startDownload(route.url)) onOpenWeb(route.url, null)
+            is LinkRoute.Web -> onOpenWeb(route.url, null)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -153,7 +173,8 @@ fun UserProfileScreen(
                 state = state,
                 viewModel = viewModel,
                 onOpenWeb = onOpenWeb,
-                onOpenSolved = onOpenSolved
+                onOpenSolved = onOpenSolved,
+                onOpenLink = openLink
             )
             if (state.summary != null) {
                 BadgesCard(state = state, onAllBadges = { onOpenBadges(state.username, state.profile?.badgeCount ?: 0) })
@@ -313,11 +334,17 @@ private fun IdentityCard(
     state: UserProfileViewModel.UiState,
     viewModel: UserProfileViewModel,
     onOpenWeb: (String, String?) -> Unit = { _, _ -> },
-    onOpenSolved: (String, Int) -> Unit = { _, _ -> }
+    onOpenSolved: (String, Int) -> Unit = { _, _ -> },
+    onOpenLink: (String) -> Unit = {}
 ) {
     val colors = arkdoColors
     val profile = state.profile
     val context = LocalContext.current
+    // 昵称提到 Column 外：取关确认弹窗要用它拼文案。
+    val displayName = profile?.displayName?.takeIf { it.isNotEmpty() }
+        ?: state.displayName.takeIf { it.isNotEmpty() }
+        ?: state.username
+    var showUnfollowDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -335,9 +362,6 @@ private fun IdentityCard(
             UserAvatar(user = state.avatarUser, avatarSize = 64.dp)
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                val displayName = profile?.displayName?.takeIf { it.isNotEmpty() }
-                    ?: state.displayName.takeIf { it.isNotEmpty() }
-                    ?: state.username
                 Text(
                     text = displayName,
                     fontSize = 21.sp,
@@ -419,10 +443,38 @@ private fun IdentityCard(
                 lineHeight = 20.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                onLinkClick = onOpenLink,
                 textModifier = Modifier
                     .fillMaxWidth()
                     .padding(start = CardPadding, end = CardPadding, top = 2.dp, bottom = 6.dp)
             )
+        }
+
+        // 资料设置里的「网站」：独立一行，图标 + 站点名（对齐鸿蒙 UserProfilePage.ets:531-548）。
+        // website / website_name 两个字段解析层早就有，只是整块 UI 没做——填了网站也看不到。
+        val websiteName = profile?.websiteName
+        if (!websiteName.isNullOrEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        profile.website?.takeIf { it.isNotEmpty() }?.let(onOpenLink)
+                    }
+                    .padding(start = CardPadding, end = CardPadding, bottom = 6.dp)
+            ) {
+                FaIcon("link", colors.brand, 12.dp)
+                Text(
+                    text = websiteName,
+                    fontSize = 13.sp,
+                    color = colors.brand,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .weight(1f)
+                )
+            }
         }
 
         // meta 行：加入于 · 最近发帖 · 浏览量。
@@ -461,7 +513,13 @@ private fun IdentityCard(
                 }
                 if (canFollow) {
                     ActionButton(
-                        onClick = { if (LoginGate.ensureLoggedIn(context)) viewModel.toggleFollow() },
+                        onClick = {
+                            if (LoginGate.ensureLoggedIn(context)) {
+                                // 已关注时先弹确认（对齐鸿蒙 toggleFollow → confirmUnfollow）：
+                                // 直接 toggle 的话误触一下就取关了，用户还找不到地方加回来。
+                                if (state.isFollowing) showUnfollowDialog = true else viewModel.toggleFollow()
+                            }
+                        },
                         leadingIcon = if (state.isFollowing) "user-check" else "user-plus",
                         accent = state.isFollowing,
                         loading = state.followPending,
@@ -528,6 +586,28 @@ private fun IdentityCard(
                 }
             }
         }
+    }
+
+    // 取消关注二次确认（对齐鸿蒙 confirmUnfollow）：警示色只给「取消关注」，默认动作是「再想想」。
+    if (showUnfollowDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnfollowDialog = false },
+            title = { Text("取消关注", color = colors.textPrimary) },
+            text = { Text("确定不再关注 $displayName 吗？", color = colors.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnfollowDialog = false
+                    viewModel.toggleFollow()
+                }) {
+                    Text("取消关注", color = colors.ldDanger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnfollowDialog = false }) {
+                    Text("再想想", color = colors.textSecondary)
+                }
+            }
+        )
     }
 }
 

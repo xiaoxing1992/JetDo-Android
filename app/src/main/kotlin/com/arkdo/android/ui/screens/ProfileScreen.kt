@@ -142,6 +142,8 @@ fun ProfileScreen(
     onOpenSettings: () -> Unit = {},
     onOpenLogin: () -> Unit,
     onOpenWeb: (String, String?) -> Unit = { _, _ -> },
+    // 最近活动行点击 → 原生详情页并定位楼层（对齐鸿蒙 ProfilePage 的 onOpenTopic）。
+    onOpenTopic: (topicId: Long, title: String, postNumber: Int?) -> Unit = { _, _, _ -> },
     onOpenActivity: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenBadges: (String, Int) -> Unit = { _, _ -> },
     onOpenDrafts: () -> Unit = {},
@@ -242,6 +244,7 @@ fun ProfileScreen(
                         state = state,
                         accountUser = accountUser,
                         onOpenWeb = onOpenWeb,
+                        onOpenTopic = onOpenTopic,
                         onOpenActivity = onOpenActivity,
                         onOpenBadges = onOpenBadges,
                         onOpenDrafts = onOpenDrafts,
@@ -307,6 +310,7 @@ private fun LoggedInContent(
     state: ProfileViewModel.UiState,
     accountUser: User,
     onOpenWeb: (String, String?) -> Unit,
+    onOpenTopic: (Long, String, Int?) -> Unit,
     onOpenActivity: (String, String, String) -> Unit,
     onOpenBadges: (String, Int) -> Unit,
     onOpenDrafts: () -> Unit,
@@ -513,7 +517,7 @@ private fun LoggedInContent(
                 if (index > 0) {
                     HorizontalDivider(color = colors.border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = CardPadding))
                 }
-                ProfileActivityRow(item, state)
+                ProfileActivityRow(item, state, onOpenTopic)
             }
             // 底部「我的话题 N › · 我的回复 N ›」。
             val topicsLabel = state.stats?.let { "我的话题 ${formatCount(it.topicCount)} ›" } ?: "我的话题 ›"
@@ -736,12 +740,19 @@ private fun androidx.compose.foundation.layout.RowScope.ProfileBadgeTile(badge: 
 }
 
 @Composable
-private fun ProfileActivityRow(item: UserActivityItem, state: ProfileViewModel.UiState) {
+private fun ProfileActivityRow(
+    item: UserActivityItem,
+    state: ProfileViewModel.UiState,
+    onOpenTopic: (Long, String, Int?) -> Unit
+) {
     val colors = arkdoColors
     val isReply = item.actionType == com.arkdo.android.data.models.UserActionType.REPLY.value
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // 对齐鸿蒙 ProfilePage.ets:676-678：整行进详情页并定位到这条动态所在的楼层。
+            // 此前整块没有 clickable，看着是普通列表项、点了没有任何反应。
+            .clickable { onOpenTopic(item.topicId, item.title, item.postNumber) }
             .padding(start = CardPadding, end = CardPadding, top = 12.dp, bottom = 11.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {

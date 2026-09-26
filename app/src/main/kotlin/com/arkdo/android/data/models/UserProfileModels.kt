@@ -30,6 +30,8 @@ data class UserProfileDetail(
     @SerialName("flair_name") val flairName: String? = null,
     @SerialName("bio_excerpt") val bioExcerpt: String? = null,
     @SerialName("website_name") val websiteName: String? = null,
+    /** 「网站」行展示用的名字，点击后打开的是 [website]（对齐鸿蒙 profileDetail.website）。 */
+    @SerialName("website") val website: String? = null,
     @SerialName("can_follow") val canFollow: Boolean? = null,
     @SerialName("is_followed") val isFollowed: Boolean? = null,
     @SerialName("total_followers") val totalFollowers: Int? = null,
