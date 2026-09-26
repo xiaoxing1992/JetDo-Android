@@ -11,6 +11,7 @@ import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.services.session.LoginGate
+import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.services.reading.ReadingTracker
 import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.PostStreamPager
@@ -21,6 +22,7 @@ import com.arkdo.android.services.challenge.ChallengeShortcutEventBus
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.draft.DraftService
 import com.arkdo.android.ui.drafts.DraftResume
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -563,7 +565,12 @@ class TopicDetailViewModel @Inject constructor(
         val topicId = _uiState.value.topic?.id
         if (topicId != null && draft.draftKey == "topic_$topicId") return
         viewModelScope.launch {
-            draftService.deleteDraft(draft.draftKey, draft.sequence)
+            val result = draftService.deleteDraft(draft.draftKey, draft.sequence)
+            // 草稿确已删除 → 角标乐观 -1（对齐鸿蒙 TopicDetailPage.deleteResumedDraftIfAny
+            // 的 DraftEventBus.notifyDeleted）。不重查会话，理由同 handleDraftDeleted。
+            if (result.success) {
+                DraftCountStore.decrement(CurrentUserHolder.currentUser.value?.draftCount)
+            }
         }
     }
 
