@@ -37,7 +37,8 @@ object StorageKeys {
     const val DRAFTS_COMPOSER_VISIBLE_KEY = "draftsComposerVisible"
     const val DRAFTS_COMPOSER_BACK_TICK_KEY = "draftsComposerBackTick"
     const val DRAFTS_REFRESH_TICK_KEY = "draftsRefreshTick"
-    const val PROFILE_DRAFT_COUNT_KEY = "profileDraftCount"
+    // 草稿角标数(鸿蒙的 profileDraftCount)在 Android 侧改为内存真源 DraftCountStore，
+    // 不再走字符串 key，故此处不再定义。
 
     // 站点列表变更信号
     const val SITES_TICK = "sites_tick"

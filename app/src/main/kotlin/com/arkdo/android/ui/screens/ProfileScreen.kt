@@ -88,6 +88,7 @@ import com.arkdo.android.ui.utils.formatCount
 import com.arkdo.android.ui.utils.formatTimeRead
 import com.arkdo.android.ui.utils.trustLabelWithTitleOf
 import com.arkdo.android.services.content.parseInlines
+import com.arkdo.android.services.draft.DraftCountStore
 import androidx.compose.foundation.layout.fillMaxHeight
 
 // ==========================================================================
@@ -325,6 +326,11 @@ private fun LoggedInContent(
     val colors = arkdoColors
     val username = accountUser.username
     val profile = state.profile
+    // 草稿角标真源：会话复查/登出/删草稿三处写入 DraftCountStore，这里只订阅。
+    // store 为 null 表示「还没被权威结果写过」，回退到登录快照 accountUser.draftCount
+    // （对齐鸿蒙 ProfilePage 的 @StorageProp + RootTabPage 的 storedCount 回退写法）。
+    val draftCountByStore by DraftCountStore.count.collectAsState()
+    val draftBadgeCount = draftCountByStore ?: accountUser.draftCount ?: 0
     val displayName = profile?.displayName?.takeIf { it.isNotEmpty() }
         ?: accountUser.name?.takeIf { it.isNotEmpty() }
         ?: username
@@ -451,7 +457,7 @@ private fun LoggedInContent(
         QuickEntryNative(icon = "heart", label = "我的点赞", love = true) {
             onOpenActivity(username, "1", "我的点赞")
         }
-        QuickEntryNative(icon = "pen-to-square", label = "我的草稿", badgeCount = accountUser.draftCount ?: 0) {
+        QuickEntryNative(icon = "pen-to-square", label = "我的草稿", badgeCount = draftBadgeCount) {
             onOpenDrafts()
         }
     }

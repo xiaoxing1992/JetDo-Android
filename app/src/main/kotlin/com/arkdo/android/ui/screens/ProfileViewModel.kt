@@ -8,6 +8,7 @@ import com.arkdo.android.data.models.UserBadgeItem
 import com.arkdo.android.data.models.UserProfileDetail
 import com.arkdo.android.data.models.UserSummaryStats
 import com.arkdo.android.services.auth.AuthService
+import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.services.session.LoginGate
@@ -106,6 +107,9 @@ class ProfileViewModel @Inject constructor(
             CurrentUserHolder.clear()
             LoginGate.setLoggedIn(context, false)
             LoginGate.clearUserPrivileges()
+            // 草稿角标随登出归零,免得下一个账号进来先看到上一个账号的草稿数
+            // (对齐鸿蒙 applyLoggedOut 里的 setOrCreate(PROFILE_DRAFT_COUNT_KEY, 0))。
+            DraftCountStore.reset()
             ArkWebNetworkBridge.markHostReloading()
             SessionEventBus.notifySessionChanged()
             onResult(true)

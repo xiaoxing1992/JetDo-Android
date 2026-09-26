@@ -3,11 +3,13 @@ package com.arkdo.android.ui.composer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.draft.DraftService
 import com.arkdo.android.services.draft.SaveTopicDraftInput
 import com.arkdo.android.services.draft.draftHasContent
 import com.arkdo.android.services.draft.resolveDraftKey
 import com.arkdo.android.services.network.NetworkResult
+import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.services.topic.TopicService
 import com.arkdo.android.data.models.DraftTagRef
@@ -400,6 +402,9 @@ class NewTopicViewModel @Inject constructor(
         val result = draftService.deleteDraft(draftKey, draftSequence)
         if (result.success && draftPersisted) {
             draftPersisted = false
+            // 草稿确已删除 → 角标乐观 -1（对齐鸿蒙 ComposerPage.deleteDraftAfterPublish 的
+            // DraftEventBus.notifyDeleted）。不重查会话：服务端 draftCount 可能还是删除前的缓存。
+            DraftCountStore.decrement(CurrentUserHolder.currentUser.value?.draftCount)
             Timber.i("[ArkDO][Composer] draft deleted after publish key=%s", draftKey)
         }
     }

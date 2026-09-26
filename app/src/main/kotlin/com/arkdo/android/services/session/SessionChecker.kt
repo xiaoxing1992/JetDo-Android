@@ -2,6 +2,7 @@ package com.arkdo.android.services.session
 
 import android.content.Context
 import com.arkdo.android.services.auth.AuthService
+import com.arkdo.android.services.draft.DraftCountStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import javax.inject.Inject
@@ -31,6 +32,10 @@ class SessionChecker @Inject constructor(
         val user = result.data
         LoginGate.setLoggedIn(context, user != null, user?.id)
         CurrentUserHolder.update(user)
+        // 草稿角标同源同帧更新：会话结果是这个数的唯一权威来源（对齐鸿蒙
+        // RootTabPage.checkCurrentUser 里的 AppStorage.setOrCreate(PROFILE_DRAFT_COUNT_KEY)）。
+        // 未登录写成 0，免得下一个账号沿用上一个账号的草稿数。
+        DraftCountStore.set(user?.draftCount)
         if (user != null) {
             LoginGate.setUserPrivileges(
                 user.trustLevel ?: 0,

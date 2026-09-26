@@ -3,7 +3,9 @@ package com.arkdo.android.ui.drafts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.Draft
+import com.arkdo.android.services.draft.DraftCountStore
 import com.arkdo.android.services.draft.DraftService
+import com.arkdo.android.services.session.CurrentUserHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -97,6 +99,11 @@ class DraftsViewModel @Inject constructor(
         _uiState.update { it.copy(deletingKey = draft.draftKey) }
         viewModelScope.launch {
             val result = draftService.deleteDraft(draft.draftKey, draft.sequence)
+            if (result.success) {
+                // 删除已被服务端确认，直接更新共享角标数。刻意不重查会话：/session/current.json
+                // 可能短暂返回删除前的缓存值，重查会把刚减掉的数写回去（对齐鸿蒙 handleDraftDeleted）。
+                DraftCountStore.decrement(CurrentUserHolder.currentUser.value?.draftCount)
+            }
             _uiState.update { state ->
                 if (result.success) {
                     val next = state.drafts.filterNot { it.draftKey == draft.draftKey && it.sequence == draft.sequence }
