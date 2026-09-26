@@ -23,6 +23,7 @@ import com.arkdo.android.navigation.slidePopEnterTransition
 import com.arkdo.android.navigation.slidePopExitTransition
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.CurrentUserHolder
+import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.ui.composer.NewTopicResume
 import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.composer.canUseComposer
@@ -38,6 +39,8 @@ import com.arkdo.android.ui.screens.SettingsScreen
 import com.arkdo.android.ui.screens.TopicListStyleSettingsScreen
 import com.arkdo.android.ui.screens.RootTabScreen
 import com.arkdo.android.ui.screens.WebViewPage
+import com.arkdo.android.ui.network.DohSettingsScreen
+import com.arkdo.android.ui.network.NetworkSettingsScreen
 import com.arkdo.android.ui.bookmarks.BookmarksScreen
 import com.arkdo.android.ui.bookmarks.ReadTopicsScreen
 import com.arkdo.android.ui.level.LevelProgressScreen
@@ -111,6 +114,14 @@ fun ArkDoNavHost(
                 onOpenLogin = {
                     // 未登录「立即登录」→ 请求根层弹登录半窗。
                     LoginGate.requestLogin()
+                },
+                // 最近活动行 → 原生详情页并定位到该动态所在楼层（对齐鸿蒙 ProfilePage.onOpenTopic）。
+                onOpenTopic = { topicId, title, postNumber ->
+                    val parts = mutableListOf<String>()
+                    title.takeIf { it.isNotBlank() }?.let { parts.add("title=${java.net.URLEncoder.encode(it, "UTF-8")}") }
+                    postNumber?.let { parts.add("target=$it") }
+                    val q = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
                 },
                 // 「全部 ›」/快捷入口/互动圈等点击目标。不接的话这些 entry 会走
                 // ProfileScreen 的默认空回调,表现成「点了没反应」。
@@ -515,7 +526,8 @@ fun ArkDoNavHost(
                 },
                 onOpenDiagnostics = { navController.navigate(Routes.DEBUG_LOG) },
                 onOpenExperimental = { navController.navigate(Routes.SETTINGS_EXPERIMENTAL) },
-                onOpenTopicListStyle = { navController.navigate(Routes.SETTINGS_TOPIC_LIST_STYLE) }
+                onOpenTopicListStyle = { navController.navigate(Routes.SETTINGS_TOPIC_LIST_STYLE) },
+                onOpenNetworkSettings = { navController.navigate(Routes.SETTINGS_NETWORK) }
             )
         }
         composable(Routes.SETTINGS_EXPERIMENTAL) {
@@ -523,6 +535,20 @@ fun ArkDoNavHost(
         }
         composable(Routes.SETTINGS_TOPIC_LIST_STYLE) {
             TopicListStyleSettingsScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS_NETWORK) {
+            NetworkSettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenDoh = { navController.navigate(Routes.SETTINGS_DOH) }
+            )
+        }
+        composable(Routes.SETTINGS_DOH) {
+            DohSettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                // DoH 配置变更后重载宿主 WebView：新的 DNS 只对之后发出的请求生效，
+                // 已加载的页面不重载就还在用旧的解析结果。
+                onDohApplied = { ArkWebNetworkBridge.reloadHost() }
+            )
         }
         }
 

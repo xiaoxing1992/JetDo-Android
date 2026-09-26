@@ -77,7 +77,7 @@ import com.arkdo.android.ui.theme.arkdoColors
 
 // 设置页,对齐鸿蒙 SettingsPage:灰底无描边卡片。
 // 外观三档会立刻改主题。关于里的反馈、版本、免责声明、诊断日志是真入口。
-// 论坛 / 通知 / 网络 / 我的站点在 Android 上还没有子页,
+// 「网络与连接」已迁(内有 DoH 配置);论坛 / 通知 / 我的站点在 Android 上还没有子页,
 // 点了只提示,不造一个空页面冒充已经做好。实验性功能只放了首页新话题提醒。
 
 private val PageMargin = 12.dp
@@ -99,6 +99,7 @@ fun SettingsScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenExperimental: () -> Unit,
     onOpenTopicListStyle: () -> Unit,
+    onOpenNetworkSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -171,7 +172,7 @@ fun SettingsScreen(
                 SettingRow(
                     icon = Icons.Outlined.Wifi,
                     label = "网络与连接",
-                    onClick = { toastNotMigrated(context) }
+                    onClick = onOpenNetworkSettings
                 )
                 Hairline()
                 SettingRow(
