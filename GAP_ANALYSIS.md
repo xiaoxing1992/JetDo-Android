@@ -1,13 +1,41 @@
-# ArkDO-Android 功能缺口分析（v5 · 本轮修复记账）
+# ArkDO-Android 功能缺口分析（v6 · 累计修复记账）
 
 > 对标对象：鸿蒙版 [`ArkDO`](../ArkDO)（ArkTS · 28 页面 / 47 组件 / 25 服务子域）@ `main 7680996`
 > 复核分支：`feat/migrate-vertical-slice`
 > 复核日期：2026-09-26
-> 版本链：v1 @ `f78d3e5` → v2 @ `cf223b7` → v3 @ `7f5a6b2` → v4 @ `6175f0a` → **v5（本轮修复，见 §十一）**
+> 版本链：v1 @ `f78d3e5` → v2 @ `cf223b7` → v3 @ `7f5a6b2` → v4 @ `6175f0a` → v5（DoH 配置页 + 5 项接通）→ **v6（S3 草稿角标真源，见 §〇）**
 
 ---
 
-## 〇、本轮（v4 → v5）做了什么
+## 〇、最近两轮做了什么
+
+### v6（本轮）· S3 草稿角标事件通路
+
+**现象**：「我的」页快捷入口「我的草稿」的角标只在登录那一刻取一次快照，之后删草稿、登出都不动，长期陈旧甚至挂着上一个账号的数。
+
+**根因**：`ProfileScreen` 直接读登录时的 `User.draftCount`，全 App 没有任何一处会更新它；`StorageKeys.PROFILE_DRAFT_COUNT_KEY` 定义后零引用（死常量）。
+
+**修法**：按鸿蒙 `AppStorage[PROFILE_DRAFT_COUNT_KEY]` 的语义补一个内存真源 `DraftCountStore`（`StateFlow<Int?>`，`null` = 尚未被权威结果写过），把鸿蒙的**写入点一个不落地**搬过来：
+
+| 写入点 | 鸿蒙 | Android |
+|---|---|---|
+| 会话复查成功覆盖 | `RootTabPage.ets:1836` | `SessionChecker.checkCurrentUser()` → `set(user?.draftCount)` |
+| 登出归零 | `RootTabPage.ets:1798` `applyLoggedOut` | `ProfileViewModel.logout()` → `reset()` |
+| 草稿页删除 → -1 | `DraftsPage.ets:392` | `DraftsViewModel.delete()` → `decrement()` |
+| 发帖成功后删草稿 → -1 | `ComposerPage.ets:444` | `NewTopicViewModel.deleteDraftAfterPublish()` → `decrement()` |
+| 续写草稿发表后删 → -1 | `TopicDetailPage.ets:1305` | `TopicDetailViewModel.deleteResumedDraftIfAny()` → `decrement()` |
+
+**两处刻意的实现差异**：
+- **不建 `DraftEventBus`**。鸿蒙需要一个总线把「草稿删了」广播给 `RootTabPage`，是因为 ArkUI 的 `AppStorage` 不会跨页面推送；Android 的 `DraftCountStore` 本身就是 `StateFlow` 单例，写入即广播，再加一层总线是空转。**保留的是语义（谁写、写什么、什么时候写），不是机制**。
+- **`decrement` 带 `fallback` 参数**。鸿蒙那行是 `storedCount ?? currentUser.draftCount` 再减 1，即 store 未被写过时回退到登录快照。正常路径上会话复查早已写过，这条分支只在「会话检查因过盾/断网失败、而草稿接口仍可用」时才走到，Android 侧保留同样语义。
+
+**没有搬的 1 个删除点**：鸿蒙 `TopicDetailPage.ets:1285` 的 `deleteReplyDraft` 删的是**回帖自动草稿**（key = `topic_<id>`），Android 的回复框只有内存暂存、不落盘（属 P0-3 回帖链路），所以没有对应物——这不是 S3 的遗漏，是 P0-3 的连带项。
+
+**顺带**：删掉死常量 `PROFILE_DRAFT_COUNT_KEY`。另查出同批死常量 6 个（`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY`，均只在定义处出现），**本轮未动**，记入 D6 备查。
+
+验证：`:app:compileDebugKotlin` + `:app:testDebugUnitTest` 均 BUILD SUCCESSFUL，新增 `DraftCountStoreTest` 8 个用例全绿。
+
+### v5（上一轮）· DoH 配置页 + 5 项接通
 
 按 v4 的 §九「建议实施顺序」，落地了**第 0 步（捡地上的钱）**与**第一步的一部分**：
 
@@ -36,9 +64,10 @@
 
 ## 一、结论先行
 
-**主链路对齐度约 90%；功能点级对齐度约 82%。缺口 43 项（P0 6 / P1 13 / 半截 12 / P2 12）。**
+**主链路对齐度约 90%；功能点级对齐度约 82%。缺口 42 项（P0 6 / P1 13 / 半截 11 / P2 12）。**
 
 > v5 相对 v4 净修 5 项半截链路（S1 / S2 / S4 / S6 / S8），并落地 DoH 配置页（P0-5 的 1/4）。
+> **v6 再修 1 项（S3 草稿角标），并把鸿蒙的删除广播点核对到齐（4 个里 Android 有 3 个，缺的那个属 P0-3 回帖链路）**。
 > 修得不多是因为本轮**刻意只做「数据与组件都在、只差接通」那一类**：改动小、风险低，
 > 但用户会当成 bug 来报（点了没反应 / 东西没出来）。根因存疑的（S7）与依赖其它大项的（S5）先不动，理由见 §〇。
 
@@ -78,7 +107,7 @@
 | 通知 | `NotificationPage` + `Bell` | `feature/notification` 完整 | **~95%** | 仅系统推送缺失（列表本身已完整） |
 | 消息 / 私信 | `services/message` | 有 `MessageBusEventBus` | ~80% | presence 数据无消费者 |
 | 搜索 | `SearchOverlay` + `SearchFilterPanel` | `feature/search` | **~98%** | 仅缺一镜到底转场动画 |
-| 个人中心「我的」 | `ProfilePage` | `ui/screens/ProfileScreen` | ~85% | 活动行不可点、草稿角标不刷新 |
+| 个人中心「我的」 | `ProfilePage` | `ui/screens/ProfileScreen` | ~88% | 状态表情（并进 P0-4）、头像方/圆闪白待复核 |
 | 用户主页 | `UserProfilePage` | `ui/user/UserProfileScreen` | ~80% | 简介链接不可点、网站行未渲染、取关无确认 |
 | 徽章 / 活动 / 等级 / 已解决 / 阅读记录 / 书签 / 积分 / 草稿 | 8 个页面 | `ui/user`、`ui/level`、`ui/bookmarks`、`ui/credit`、`ui/drafts` | **~92%** | 徽章末行等分占位、称号全息特效 |
 | **设置全家桶** | 11 个页面 | 4 个页面 + 3 个 Toast 入口 | **~48%** | 论坛 / 推送 / 站点三页未迁移 |
@@ -126,20 +155,20 @@ DoH 后端（`DohManager` / `DohService` / `WebViewDohInterceptor`）**已完整
 
 ---
 
-## 五、半截链路与降级（隐性缺口 · v5 后剩 12 项）
+## 五、半截链路与降级（隐性缺口 · v6 后剩 11 项）
 
 **这一类是报告里最该先修的**：骨架、数据、组件往往都已就位，只差一行转发或一次订阅，
 用户会当成 bug 报，而纯静态对比目录结构永远发现不了。
 
 ### 5.1 一行就能修（数据 + 组件都在，只差接通）
 
-> ✅ 标记的 5 项已在 v5 修掉（见 §〇）。保留在原位是为了对照原始诊断与修法。
+> ✅ 标记的 6 项已在 v5 / v6 修掉（见 §〇）。保留在原位是为了对照原始诊断与修法。
 
 | # | 现象 | 根因 | 证据 |
 |---|---|---|---|
 | ✅ S1 | ~~「我的」页最近活动行点了没反应~~ → **v5 已修**：整行接 `clickable` → `onOpenTopic` | `ProfileActivityRow` 无 `clickable`，`LoggedInContent` 签名也没接 `onOpenTopic` | `ProfileScreen.kt`、`ArkDoNavHost.kt`、`RootTabScreen.kt` |
 | ✅ S2 | ~~他人主页简介里的链接点了没反应~~ → **v5 已修**：接 `onOpenLink`，四类分流复用 `LinkRouter` | 调 `InlineText` 未传 `onLinkClick`，走默认空实现；页面无 `onOpenLink` 参数 | `UserProfileScreen.kt`（对比 `UserProfilePage.ets:597-602`） |
-| S3 | **草稿角标长期陈旧** | `PROFILE_DRAFT_COUNT_KEY` 定义后**零引用**；Android 无 `DraftEventBus`；角标只读登录时写入的 `draftCount` | `StorageKeys.kt:40`；`ProfileScreen.kt:450`（对比 `ProfilePage.ets:71` + `RootTabPage.ets:275`） |
+| ✅ S3 | ~~草稿角标长期陈旧~~ → **v6 已修**：补内存真源 `DraftCountStore`，把鸿蒙的写入点搬齐（会话复查覆盖 / 登出归零 / 三处删草稿 -1）；**未建 `DraftEventBus`**（`StateFlow` 本身即总线，理由见 §〇） | 角标只读登录那一刻快照，全 App 无更新通路；`PROFILE_DRAFT_COUNT_KEY` 定义后零引用 | 新增 `services/draft/DraftCountStore.kt`；改 `SessionChecker` / `ProfileViewModel` / `DraftsViewModel` / `NewTopicViewModel` / `TopicDetailViewModel` / `ProfileScreen`（对比 `ProfilePage.ets:71` + `RootTabPage.ets:1778-1837`） |
 | ✅ S4 | ~~他人主页「网站」行不渲染~~ → **v5 已修**：补 `website` 字段解析 + 整行 UI | 字段已解析但 UI 整块缺失 | `UserProfileModels.kt`、`UserProfileService.kt`、`UserProfileScreen.kt`（对比 `UserProfilePage.ets:531-548`） |
 | S5 | **他人主页昵称旁状态表情不渲染** | 模型有 `statusEmoji`，仅楼层在用；**缺「短名 → CDN url」的表情目录服务，并进 P0-4 一起做** | `UserProfileModels.kt:46`（对比 `UserProfilePage.ets:441-448`） |
 | ✅ S6 | ~~取关无二次确认~~ → **v5 已修**：「再想想 / 取消关注」确认弹窗，警示色只在后者 | 直接调 `toggleFollow()`，误触即取关 | `UserProfileScreen.kt`（对比 `UserProfilePage.ets:1241-1260`） |
@@ -167,7 +196,7 @@ DoH 后端（`DohManager` / `DohService` / `WebViewDohInterceptor`）**已完整
 
 ---
 
-## 六、死代码与死资源（专项 · 8 组）
+## 六、死代码与死资源（专项 · 9 组）
 
 这类不是"缺功能"，但会**严重误导后续判断**（看着有实现、其实是死的），建议单独清理。
 
@@ -178,7 +207,7 @@ DoH 后端（`DohManager` / `DohService` / `WebViewDohInterceptor`）**已完整
 | D3 | **`services/notification/NotificationService.kt` 整个类** | 无实例化、无 Provider | 含 `markPushNotificationRead:57` 死钩子；列表实际走 `core/data` 的 `DefaultNotificationRepository` |
 | D4 | **`services/notification/NotificationApi.kt` 整个类** | 仅被 D3 与未被注入的 `di/AppModule.kt:107` 引用 | `load/markRead/markAllRead` 无真实调用方 |
 | D5 | 悬空路由常量 ×3 | `ArkDoNavHost.kt:560-562` | `SETTINGS_DOH`/`SETTINGS_PUSH`/`SETTINGS_NETWORK`。**做 P0-5 时直接复用，不要另起名字** |
-| D6 | 死 Prefs 常量 ×2 | `StorageKeys.kt:40`（草稿角标）、`:58`（动图头像开关） | 定义后零引用，对应功能因此断链 |
+| D6 | 死 Prefs 常量（v6 后剩 1 主项 + 6 待查） | `StorageKeys.kt:58`（动图头像开关）**未修**；草稿角标那个 **v6 已删**（改为内存真源 `DraftCountStore`） | 定义后零引用。v6 顺带查出同批死常量 6 个：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY`，均只在定义处出现，**本轮未动** |
 | D7 | 死资源 `assets/linuxdo_emojis.json` | 全项目零引用 | 表情目录的半个骨架，配套的 `EmojiCatalogService` 未迁移（见 P0-4） |
 | D8 | `core:datastore` 空模块 | 无 `src/main` | 只有 `build.gradle.kts` |
 | D9 | `DohManager.init()` | 零调用（v5 新增发现） | 首次启动的种子数据从没落盘过，一直靠 `getServers`/`isEnabled`/`getMode` 各自的默认值兜着（默认值恰好与种子一致，所以没暴露）。**v5 已接进 `ArkDoApplication.onCreate`** |
@@ -234,7 +263,7 @@ DoH 后端（`DohManager` / `DohService` / `WebViewDohInterceptor`）**已完整
 
 **第一步 · 把「声明了没接上」收干净**
 6. ✅ **DoH 配置页**：`SETTINGS_NETWORK` / `SETTINGS_DOH` 已注册，含服务器增删选 + 测速 + 模式切换（D5 + P0-5 的 1/4）
-7. 草稿角标事件通路：补 `DraftEventBus` 或复用现有总线（S3 + D6）
+7. ✅ 草稿角标事件通路（S3）：补内存真源 `DraftCountStore` + 5 个写入点；**不建 `DraftEventBus`**（理由见 §〇）；D6 里草稿角标那个死常量一并删除
 8. 深链导航 + `onNewIntent`（S13）、本地通知通道（不依赖 FCM）
 9. 恢复 `PendingPostCard`（P1-11）、`ReactionUsersSheet`（P1-8）—— 两者模型都已在
 
@@ -269,6 +298,7 @@ DoH 后端（`DohManager` / `DohService` / `WebViewDohInterceptor`）**已完整
 | 首页/抽屉 | `3c931ab` | 铃铛角标与摇铃、错误 toast、会话检查真源、抽屉登录提示 |
 | 文档/工程 | `21c99ae` `6175f0a` | 本报告 v3；`.gitignore` 忽略 `.tmp` / `.workbuddy` |
 | **本轮（v4 → v5）** | 见 §〇 | 半截链路 5 项接通（S1 / S2 / S4 / S6 / S8）＋ DoH 配置页与测速（P0-5 的 1/4）＋ `DohManager.init` 接进启动流程 |
+| **本轮（v5 → v6）** | 见 §〇 | 草稿角标真源 `DraftCountStore` + 5 个写入点（会话复查 / 登出 / 三处删草稿）；删死常量 `PROFILE_DRAFT_COUNT_KEY`；新增 `DraftCountStoreTest`（8 用例） |
 
 **验证边界**：以上只做了编译与单测验证，**未做真机交互验证**。待实机确认：火箭 / 「俺也一样」在真实帖子上的显示（`canBoost` / `sharedIssueVisible` 由服务端下发）、书签取消后刷新是否真的不回来、红线画在第几楼、铃铛摇铃观感。
 
