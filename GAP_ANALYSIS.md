@@ -1,37 +1,37 @@
 # ArkDO-Android 待实现清单
 
 > 基准：鸿蒙版 ArkDO（ArkTS · 28 页面 / 47 组件 / 25 服务子域）
-> 核查点：`feat/migrate-vertical-slice` @ `6d5f016`（本轮在其上完成回帖链路，见 §一 第 3 项）
+> 核查点：`feat/migrate-vertical-slice` @ `7791c69`（本轮在其上完成表情体系，见 §一 第 4 项）
 > 规则：只记「现在还没做的」，做完一条删一条。不带版本号，不记修复历史。
 
 ## 总览
 
-**还剩 41 项 + 8 组死代码。**
+**还剩 38 项 + 7 组死代码。**
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
-| P0 | 5 | 用户一眼能看出没做 |
+| P0 | 4 | 用户一眼能看出没做 |
 | P1 | 12 | 功能不完整，用起来别扭 |
-| 半截 | 11 | 数据 / 组件都在，只差一次接通（用户会当 bug 报） |
+| 半截 | 10 | 数据 / 组件都在，只差一次接通（用户会当 bug 报） |
 | P2 | 12 | 工程化与发布 |
-| 死代码 | 8 组 | 看着有实现，其实是死的，会误导判断 |
+| 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
 
-模块对齐度参考：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 88% / **回帖 80%** / 我的 88% / 用户主页 80% / 设置 48% / 多站点 30% / 表情 15% / 音视频 0% / 系统推送 0%。
+模块对齐度参考：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 88% / 回帖 80% / **表情 85%** / 我的 88% / 用户主页 88% / 设置 48% / 多站点 30% / 音视频 0% / 系统推送 0%。
 
 ---
 
-## 一、P0 · 一眼能看出没做（5 项）
+## 一、P0 · 一眼能看出没做（4 项）
 
 | # | 要做什么 | 现在是什么样 | 关键证据 |
 |---|---|---|---|
 | 1 | **系统推送 + 本地通知** | `services/push/` 不存在；无 FCM / HMS 依赖；全库 0 处 `NotificationManager`；`POST_NOTIFICATIONS` 已声明但**无运行时申请**；App 活着时点通知也接不到（**无 `onNewIntent`**） | Manifest `:9`；`MainActivity.kt:212-217` 深链只打日志 + `// TODO: 通过 Navigation 跳转到详情页` |
 | 2 | **帖内音视频播放** | 媒体块已解析但**退化成纯文本**（只输出「音频：URL」）；全库 `exoplayer` / `media3` 0 命中 | `PostRichContent.kt:67`（自述占位）、`:211-212` |
 | ~~3~~ | ~~**回帖链路残废**~~ → **已做** | 紧凑输入条加「展开」进全屏编辑器（Markdown 工具栏 / 预览 / 图片上传，与发帖同一套实现）；回帖草稿 2s 防抖自动落盘、与编辑草稿共用 key 与序号 | 新增 `ui/composer/ReplyComposerOverlay.kt`、`ComposerCommon.kt`、`ComposerUpload.kt`；`DraftService.saveReplyDraft/saveEditDraft`；`TopicDetailViewModel` 的 `scheduleReplyDraftSave` 一族 |
-| 4 | **表情体系整体缺失** | 只有长按回应的 **10 个固定表情**；发帖预览不解析短码；`EmojiPicker` / `EmojiCatalog` / `EmojiUrlRegistry` 全缺；`assets/linuxdo_emojis.json` 零引用（死资源） | `EmojiRegistry.kt`；`CommentInputBar.kt:77-90`；`NewTopicScreen.kt:861` |
+| ~~4~~ | ~~**表情体系整体缺失**~~ → **已做** | 新增按站点拉取的目录服务（`EmojiCatalogService` + `EmojiCatalogRegistry`，磁盘缓存 1 天）；表情选择器接进回复输入条（分组 tab + 7 列网格 + 整段退格）；发帖 / 回帖**预览**里的已知短码转成图片；楼层与用户主页的**状态表情**由短名出图 | 新增 `services/content/EmojiCatalogRegistry.kt`、`EmojiCatalogService.kt`、`EmojiPreviewHtml.kt`、`EmojiShortcodeEdit.kt`、`ui/components/EmojiPicker.kt`；`RootTabScreen` 宿主就绪后加载；死资源 `assets/linuxdo_emojis.json` 已删 |
 | 5 | **设置 4 入口未迁移** | 「网络与连接 → DoH」已落地；**论坛 / 通知 / 我的站点**仍弹「尚未迁移」；`SETTINGS_PUSH` 仍悬空未注册 | `SettingsScreen.kt:88`；`ArkDoNavHost.kt:587`；对照鸿蒙 `ForumsPage` / `PushSettingsPage` / `SitesPage` |
 | 6 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**（约 15 处引用）；`CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteUrl` / `SiteSwitchCoordinator` / `SiteSettingsService` 全缺；Android `services/site/` 只有 5 文件 vs 鸿蒙 12 | `AppConstants.kt:8`、`:21` |
 
-**性价比排序**：`多站点` > `表情体系` > `音视频` > `系统推送`。
+**性价比排序**：`多站点` > `音视频` > `系统推送`。
 
 ---
 
@@ -55,13 +55,13 @@
 
 ---
 
-## 三、半截 · 差一次接通（11 项）
+## 三、半截 · 差一次接通（10 项）
 
 **这类最该先修**：骨架、数据、组件往往都已就位，只差一行转发或一次订阅，用户会当成 bug 报，而纯静态对比目录结构永远发现不了。
 
 | # | 现象 | 根因 | 证据 |
 |---|---|---|---|
-| S5 | **他人主页昵称旁状态表情不渲染** | 模型有 `statusEmoji`，仅楼层在用；缺「短名 → CDN url」的表情目录服务（并进 P0-4 一起做） | `UserProfileModels.kt:46`；对照 `UserProfilePage.ets:441-448` |
+| ~~S5~~ | ~~**状态表情不渲染成图**~~ → **已做** | 原实现把短名当纯文本画（楼层显示的是 "lollipop" 这种英文单词），用户主页整块没渲染。现改为查站点表情目录出图，两处都接上 | `TopicPostItem.kt`（`getEmojiUrl` + AsyncImage 16×16）；`UserProfileScreen.kt`（昵称旁 18×18） |
 | S7 | **圆形头像先方后圆闪一下** | `onOpenUser` 未透传 userId，种子 `id=0`。**待实机复核**：判据是 `id == 1L` 走方形，种子恒为圆形，推不出该现象 | `UserProfileScreen.kt:99`、`UserProfileViewModel.kt:72` |
 | S9 | **presence 数据无人消费** | `entering_users` / `leavingUserIds` 只解析不渲染 | `MessageBusEventBus.kt:17`、`:34-35` |
 | S10 | **帖内实时新回复未接线** | 两个 extract 方法零调用（仅测试用） | `MessageBusEventBus.kt:87`、`:96` |
@@ -96,7 +96,7 @@
 
 ---
 
-## 五、死代码与死资源（8 组）
+## 五、死代码与死资源（7 组）
 
 不是「缺功能」，但会**严重误导后续判断**（看着有实现、其实是死的）：
 
@@ -108,7 +108,7 @@
 | D4 | `services/notification/NotificationApi.kt` 整个类 | 仅被 D3 与未被注入的 `di/AppModule.kt:107` 引用（已核实） | `load` / `markRead` / `markAllRead` 无真实调用方 |
 | D5 | 悬空路由常量 `SETTINGS_PUSH` | `ArkDoNavHost.kt:587`（已核实仍悬空） | 做 P0-5 时直接复用，不要另起名字 |
 | D6 | 死 Prefs 常量 | `StorageKeys.kt:59` `PREFS_ANIMATED_AVATAR`（已核实零引用）；另有同批 6 个：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY` | 均只在定义处出现 |
-| D7 | 死资源 `assets/linuxdo_emojis.json` | 全项目零引用（已核实） | 表情目录的半个骨架，配套的 `EmojiCatalogService` 未迁移（见 P0-4） |
+| ~~D7~~ | ~~死资源 `assets/linuxdo_emojis.json`~~ → **已删** | 284KB，全项目零引用（已核实） | 内置的那份只对 linux.do 成立，别的论坛自定义表情完全不同；目录已改为按站点拉取（`EmojiCatalogService`），留着只会让人以为"有内置兜底" |
 | D8 | `core:datastore` 空模块 | 无 `src/main` | 同 P2-23 |
 
 **顺带一个「活代码里的过期注释」**：`TopicPostItem.kt:79` 仍写「待后续切片：boost 行与火箭、shared issue『俺也一样』、采纳答案面板」，但这三项**早已修完**；只剩「拷贝画勾动画（暂 Toast）、全息称号（暂普通文字）、回应人数弹层」未做。下次读到这条注释会被误导。
@@ -129,6 +129,7 @@
 8. **LdcCredit 拆分更细**——credit 子域 6 文件 vs 鸿蒙 4
 9. **通知列表实现完整**——30/页分页、下拉刷新、上拉加载、全部已读、乐观已读、未读轮询 + 实时频道
 10. **DoH 诊断能力更强**——`NetworkAccessibilityChecker`（鸿蒙无）；DoH 配置页与测速也已补齐
+11. **表情目录可观察刷新**——鸿蒙在 `aboutToAppear` 读一次分组快照，表情表拉到得比面板打开晚就一直空白、要重开；Android 用 `emojiCatalogRevision: StateFlow<Int>`，表一到选择器自动刷新
 
 ---
 
@@ -144,7 +145,7 @@
 **第 2 步 · 用户一眼能看到的**
 6. **多站点 / 论坛切换**（P0-6）：`ForumPrefs` + `CurrentSite`，让 `BASE_URL` 可变；顺带解锁 P0-5 的论坛 / 站点两个入口
 7. ✅ **回帖链路对齐发帖**（P0-3 / P1-18）：紧凑条展开成全屏编辑器（工具栏 / 预览 / 图片）+ 回帖草稿落盘（本轮完成）
-8. **表情体系**（P0-4）：`EmojiCatalogService` → `EmojiPicker` → 短码渲染，带上 S5，删死资源 D7
+8. ✅ **表情体系**（P0-4 / S5 / D7）：目录服务（按站点拉取 + 磁盘缓存）→ 选择器接回复条（分组 + 整段退格）→ 预览短码转图 → 状态表情出图，死资源已删（本轮完成）
 9. **音视频播放**（P0-2）：引入 Media3，替换 `PostRichContent.kt:67` 占位
 10. Markdown 工具栏补 `video` / `file-arrow-up`（P1-14）+ 多图批量上传（P1-15）
 
@@ -166,7 +167,7 @@
 # 能力关键词命中（0 = 缺失）
 rg -l "exoplayer|media3"                  -g '*.{kt,toml}'        # 音视频
 rg -l "NotificationCompat|NotificationManager" -g '*.kt'          # 本地通知
-rg -l "EmojiPicker|EmojiCatalog|EmojiUrlRegistry" -g '*.kt'       # 表情体系
+rg -l "EmojiPicker|EmojiCatalogRegistry" -g '*.kt'                # 表情体系（现应有 5 处命中）
 rg -l "CurrentSite|ForumPrefs|SiteCapabilities|WindowSizeClass" -g '*.kt'
 rg -l "presence|Lottery" -g '*.kt'                                # presence / 抽奖
 
