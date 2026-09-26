@@ -1,11 +1,5 @@
 package com.arkdo.android.ui.composer
 
-import android.content.ContentResolver
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.net.Uri
-import android.provider.OpenableColumns
-import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -77,7 +71,6 @@ import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.core.designsystem.FaIcon
-import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.TagIconRegistry
 import com.arkdo.android.ui.components.TopicBadgeUtils
 import com.arkdo.android.ui.composer.MarkdownActions.EditState
@@ -88,7 +81,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 
 /**
  * 首页发帖浮层(对齐鸿蒙 ComposerPage 的 composeTopic 模式)。
@@ -831,73 +823,8 @@ private fun TagPickerContent(
     }
 }
 
-// ========== 预览 ==========
-
-/** 预览内容区:编译好的 HTML 走 PostRichContent 富文本渲染;失败/空内容退回原文/占位。 */
-@Composable
-private fun PreviewPane(html: String?, rawText: String, loading: Boolean, modifier: Modifier = Modifier) {
-    val colors = arkdoColors
-    Box(modifier = modifier.fillMaxWidth()) {
-        if (loading) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = colors.ldAccent,
-                    strokeWidth = 2.dp
-                )
-                Text(
-                    "正在生成预览...",
-                    fontSize = 14.sp,
-                    color = colors.textSecondary,
-                    modifier = Modifier.padding(start = 10.dp)
-                )
-            }
-        } else if (!html.isNullOrEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-            ) {
-                PostRichContent(
-                    html = html,
-                    // 预览里不上传图片解析,预览中的图(如已有 markdown 图链)原样显示链接/兜底。
-                    onOpenImages = { _, _ -> },
-                    onLinkClick = {}
-                )
-                Spacer(modifier = Modifier.height(32.dp))
-            }
-        } else if (rawText.isBlank()) {
-            Text(
-                "(无内容可预览)",
-                fontSize = 15.sp,
-                color = colors.textTertiary,
-                modifier = Modifier.padding(16.dp)
-            )
-        } else {
-            // 编译失败(引擎未就绪/超时):退回原文展示,与鸿蒙「(无内容可预览)」同层兜底。
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    rawText,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp,
-                    color = colors.textBody
-                )
-            }
-        }
-    }
-}
+// 预览（PreviewPane）与图片预处理已抽到 ComposerCommon.kt：发帖与回帖全屏编辑器共用同一份，
+// 免得"预览兜底文案""图片缩到 1920"这类细节在两边慢慢漂移。
 
 // ========== Markdown 工具栏 ==========
 
@@ -957,50 +884,4 @@ private fun DividerSpace() {
     Spacer(modifier = Modifier.width(6.dp))
 }
 
-// ========== 图片预处理 ==========
-
-/** 选中的一张图片 → base64 + 文件名 + MIME。超宽/过大时先缩放再 JPEG 压缩,避免撞站点上限。 */
-private data class PreparedImage(val base64: String, val fileName: String, val mimeType: String)
-
-private fun prepareImageUpload(resolver: ContentResolver, uri: Uri): PreparedImage? = runCatching {
-    val fileName = queryDisplayName(resolver, uri)
-        ?: uri.lastPathSegment?.substringAfterLast('/')
-        ?: "image"
-    val mimeType = resolver.getType(uri) ?: "image/jpeg"
-
-    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-    // 动图/无法解码的格式原样上传;大尺寸位图压到长边 ≤1920(对齐鸿蒙 1920 上限)。
-    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    val outBytes = if (bitmap != null && bitmap.width > 1920 && !mimeType.contains("gif")) {
-        val scale = 1920f / maxOf(bitmap.width, bitmap.height)
-        val scaled = Bitmap.createScaledBitmap(
-            bitmap,
-            (bitmap.width * scale).toInt().coerceAtLeast(1),
-            (bitmap.height * scale).toInt().coerceAtLeast(1),
-            true
-        )
-        val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 88, out)
-        if (scaled !== bitmap) scaled.recycle()
-        bitmap.recycle()
-        out.toByteArray()
-    } else {
-        bytes
-    }
-    val mime = if (outBytes !== bytes) "image/jpeg" else mimeType
-    PreparedImage(
-        base64 = Base64.encodeToString(outBytes, Base64.NO_WRAP),
-        fileName = if (outBytes !== bytes) fileName.substringBeforeLast('.', fileName) + ".jpg" else fileName,
-        mimeType = mime
-    )
-}.getOrNull()
-
-private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? =
-    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-        if (cursor.moveToFirst()) {
-            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0) cursor.getString(idx) else null
-        } else {
-            null
-        }
-    }
+// 图片预处理（prepareImageUpload / PreparedImage）见 ComposerCommon.kt。

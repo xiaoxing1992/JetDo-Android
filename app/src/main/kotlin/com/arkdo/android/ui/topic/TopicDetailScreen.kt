@@ -67,6 +67,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
@@ -80,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.R
@@ -95,6 +97,8 @@ import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.site.CategoryIndex
+import com.arkdo.android.ui.composer.MarkdownRenderEngine
+import com.arkdo.android.ui.composer.ReplyComposerOverlay
 import com.arkdo.android.ui.components.CommentInputOverlay
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.ImageViewer
@@ -467,7 +471,8 @@ fun TopicDetailScreen(
         // 回复输入浮层（切片 7）：盖在内容与顶栏之上；FAB 打开时隐藏由 VM 状态保证。
         // 三态：编辑（editingPostId>0）→ submitEdit；boost → submitBoost；否则普通回复。
         CommentInputOverlay(
-            visible = ui.composerVisible,
+            // 展开成全屏编辑器时把紧凑条整个撤掉：两者共用同一份文本，同时在场只会互相压住。
+            visible = ui.composerVisible && !ui.composerExpanded,
             placeholder = ui.composerPlaceholder,
             initialText = ui.pendingReplyText,
             isSubmitting = ui.isSubmittingReply,
@@ -475,6 +480,7 @@ fun TopicDetailScreen(
             minChars = if (ui.boostTargetPostId > 0 || ui.editingPostId > 0) 1 else 16,
             maxChars = if (ui.boostTargetPostId > 0) 16 else 0,
             editMode = ui.editingPostId > 0,
+            onExpand = viewModel::expandComposer,
             onSubmit = { text, typingMs, composerMs, done ->
                 when {
                     ui.editingPostId > 0 -> viewModel.submitEdit(text, done)
@@ -484,6 +490,49 @@ fun TopicDetailScreen(
             },
             onClose = viewModel::closeComposer,
             modifier = Modifier.zIndex(3f)
+        )
+
+        // 回帖/编辑/boost 的**全屏编辑器**（紧凑条点「展开」进入）。对齐鸿蒙
+        // 「内联回复条 → 展开进 ComposerPage」，Markdown 工具栏 / 预览 / 图片与发帖页同一套。
+        var replyEngine by remember { mutableStateOf<MarkdownRenderEngine?>(null) }
+        LaunchedEffect(ui.composerExpanded) {
+            if (ui.composerExpanded && replyEngine == null) {
+                replyEngine = viewModel.ensureRenderEngine(context.applicationContext)
+            }
+        }
+        // 离屏 markdown 编译 WebView 必须挂在视图树里才会加载完成（1×1、近透明，不可见）。
+        replyEngine?.let { engine ->
+            Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
+                AndroidView(factory = { engine.webView }, update = {})
+            }
+        }
+        ReplyComposerOverlay(
+            visible = ui.composerVisible && ui.composerExpanded,
+            title = ui.composerPlaceholder,
+            placeholder = ui.composerPlaceholder,
+            initialText = ui.pendingReplyText,
+            isSubmitting = ui.isSubmittingReply,
+            isUploading = ui.isUploadingMedia,
+            uploadProgressText = ui.uploadProgressText,
+            minChars = if (ui.boostTargetPostId > 0 || ui.editingPostId > 0) 1 else 16,
+            maxChars = if (ui.boostTargetPostId > 0) 16 else 0,
+            editMode = ui.editingPostId > 0,
+            onTextChange = viewModel::updateReplyDraft,
+            onSubmit = { text, typingMs, composerMs, done ->
+                when {
+                    ui.editingPostId > 0 -> viewModel.submitEdit(text, done)
+                    ui.boostTargetPostId > 0 -> viewModel.submitBoost(text, done)
+                    else -> viewModel.createReply(text, typingMs, composerMs, done)
+                }
+            },
+            onUploadImage = { image, done ->
+                viewModel.uploadImage(image.base64, image.fileName, image.mimeType) { snippet, _ ->
+                    done(snippet)
+                }
+            },
+            renderPreview = { raw -> viewModel.renderPreview(raw) },
+            onClose = viewModel::collapseComposer,
+            modifier = Modifier.zIndex(5f)
         )
 
         // 一次性提示（发表成功/失败等）：Toast 展示后立即消费。

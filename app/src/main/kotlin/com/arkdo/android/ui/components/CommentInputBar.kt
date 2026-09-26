@@ -86,7 +86,9 @@ fun CommentInputOverlay(
     minChars: Int = 16,
     maxChars: Int = 0,
     // 编辑态：提交按钮换对勾图标（回复态保持回复箭头，对齐鸿蒙共用一个圆钮、图标按场景区分）。
-    editMode: Boolean = false
+    editMode: Boolean = false,
+    /** 点「展开」进全屏编辑器（对齐鸿蒙内联回复条的展开入口）。 */
+    onExpand: () -> Unit = {}
 ) {
     // initialText 只在浮层从无到有时取一次；提交成功后 VM 清草稿，输入条随之回到空态。
     var text by remember { mutableStateOf(initialText) }
@@ -232,6 +234,18 @@ fun CommentInputOverlay(
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
+
+                    // 展开：进全屏编辑器（Markdown 工具栏 / 预览 / 图片）。单行条写长回复太憋屈。
+                    Box(
+                        modifier = Modifier
+                            .size(SUBMIT_BUTTON_SIZE)
+                            .clickable(onClick = onExpand),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        FaIcon("expand", colors.textSecondary, 18.dp)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     // 提交按钮：圆形蓝底，提交中转白圈；不可用降透明度提示，重复点击由 submit() 拦。
                     val canSubmit = !submitting && trimmedLength() >= minChars && !overMaxChars()
