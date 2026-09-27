@@ -60,6 +60,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -500,16 +502,25 @@ fun CommentInputOverlay(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // 表情：与系统键盘互斥切换（对齐鸿蒙输入条的表情切换钮）。
+                    // 表情：与系统键盘互斥切换。按钮图标显示的是「点它会发生什么」——
+                    // 键盘态是笑脸、面板态是键盘（对齐鸿蒙 commentKeyboardToggleIcon 的
+                    // showEmojiKeyboard ? 'keyboard' : 'face-smile'，也是微信同一处的做法）。
+                    // 颜色刻意保持恒定：状态已经由图标本身表达，鸿蒙侧同样固定 icon_secondary。
+                    // （鸿蒙那边把两个分支写成 if/else 是为了让 ArkUI 重建图标节点；Compose 的
+                    //  AsyncImage 在 model 变化时就会重新加载，直接换图标名即可。）
                     Box(
                         modifier = Modifier
                             .size(SUBMIT_BUTTON_SIZE)
-                            .clickable(onClick = { toggleEmojiPanel() }),
+                            .clickable(onClick = { toggleEmojiPanel() })
+                            .semantics {
+                                // 对齐鸿蒙 accessibilityText：读屏用户也该知道这个钮会切到哪去。
+                                contentDescription = if (showEmojiPanel) "切换到键盘" else "选择表情"
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         FaIcon(
-                            "face-smile",
-                            if (showEmojiPanel) colors.ldAccent else colors.textSecondary,
+                            if (showEmojiPanel) "keyboard" else "face-smile",
+                            colors.textSecondary,
                             18.dp
                         )
                     }
