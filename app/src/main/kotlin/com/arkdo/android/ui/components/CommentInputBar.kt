@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -85,6 +86,10 @@ private const val PANEL_EXIT_MS = 180L
 /** 面板让位给键盘时，轮询「键盘是否顶到位」的间隔 / 最长等待。 */
 private const val HANDOVER_POLL_MS = 20L
 private const val KEYBOARD_ARRIVE_TIMEOUT_MS = 600L
+
+/** 键盘高度采样：实时值连续这么多帧不变，就认为键盘已经静止、可以记高度了。 */
+private const val IME_STABLE_SAMPLE_MS = 16L
+private const val IME_STABLE_FRAMES = 3
 
 /**
  * 底部回复输入浮层（切片 7，对齐鸿蒙 CommentInputBar 的普通回复链路）。
@@ -157,27 +162,67 @@ fun CommentInputOverlay(
     //   （顺带修掉面板顶边比键盘顶边高出一个导航栏的老问题。）
     val navBarPx = WindowInsets.navigationBars.getBottom(density)
     val imeNowPx = WindowInsets.ime.getBottom(density)
-    // imeAnimationTarget 弹出时立刻就是全高、收起时是 0，拿它记键盘高度不会被逐帧中间态污染
-    // （实时值收起时是单调递减的，最后一次非零采样可能只剩零头）。但它只参与「记录」、不参与
-    // 布局：低版本（minSdk 26）没有 inset 动画框架，目标值可能恒为 0，拿它布局会把输入条卡在半空。
-    val imePeakPx = maxOf(WindowInsets.imeAnimationTarget.getBottom(density), imeNowPx)
+    val imeTargetPx = WindowInsets.imeAnimationTarget.getBottom(density)
+
+    // 键盘「真实高度」。这个数必须**严格等于键盘静止时的高度**：面板态按它撑高、键盘态用实时
+    // ime，两个数只要差 1~2dp，切回键盘时输入条就会轻轻跳一下（正是本轮修的现象）。
     var lastKeyboardSpacePx by remember { mutableFloatStateOf(0f) }
+
+    // ① 打底：键盘升到一半时就要用高度（比如刚弹键盘就去点表情键），先用动画目标顶一下，
+    //    免得面板退回 EMOJI_PANEL_MIN_HEIGHT。只在**还没有记录**时生效一次 —— 原来是无条件
+    //    取单调最大值，于是每次切回键盘时这个「目标值」都可能把记录顶高，面板高度/交接 padding
+    //    在动画中途被撑大，输入条就被推着往上跳。
+    val imePeakPx = maxOf(imeTargetPx, imeNowPx)
     LaunchedEffect(imePeakPx) {
-        if (imePeakPx > 0) {
-            val space = maxOf(imePeakPx, navBarPx)
-            if (space > lastKeyboardSpacePx) lastKeyboardSpacePx = space.toFloat()
+        if (lastKeyboardSpacePx == 0f && imePeakPx > 0) {
+            lastKeyboardSpacePx = maxOf(imePeakPx, navBarPx).toFloat()
         }
     }
-    // 键盘实时占用镜像成 State：下面交接用的协程里要读到最新值，而 insets 只能在组合里读。
-    var liveKeyboardPx by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(imeNowPx) { liveKeyboardPx = imeNowPx.toFloat() }
+
+    // 实时 inset 镜像：下面的协程要读最新值，而 insets 只能在组合里读。
+    // 用 SideEffect（本次提交后同步执行）而不是 LaunchedEffect —— 后者要等一次协程调度，
+    // 镜像值会晚一帧，交接判定就会拿到陈旧的键盘高度。
+    var liveImePx by remember { mutableFloatStateOf(0f) }
+    var liveNavBarPx by remember { mutableFloatStateOf(0f) }
+    SideEffect {
+        liveImePx = imeNowPx.toFloat()
+        liveNavBarPx = navBarPx.toFloat()
+    }
+
+    // ② 定稿：键盘静止后用实时值**覆盖**记录 —— 这才是键盘的真实高度。
+    //    判据用「实时值连续若干帧不变」，不依赖 imeAnimationTarget 的语义：低版本（minSdk 26）
+    //    没有 inset 动画框架，imeAnimationTarget 的值恒等于实时值，拿它当「已到位」的信号会在
+    //    动画途中误判。覆盖是双向的，换成更矮的键盘（横屏/换输入法）也会跟着修正，两态始终等高。
+    LaunchedEffect(Unit) {
+        var prevPx = -1f
+        var stableFrames = 0
+        while (true) {
+            delay(IME_STABLE_SAMPLE_MS)
+            val nowPx = liveImePx
+            if (nowPx > 0f && nowPx == prevPx) {
+                if (++stableFrames >= IME_STABLE_FRAMES) {
+                    val spacePx = maxOf(nowPx, liveNavBarPx)
+                    // 值没变就不写，免得键盘静止期间每 16ms 白触发一次重组。
+                    if (spacePx != lastKeyboardSpacePx) lastKeyboardSpacePx = spacePx
+                }
+            } else {
+                stableFrames = 0
+            }
+            prevPx = nowPx
+        }
+    }
 
     val navBarDp = with(density) { navBarPx.toDp() }
     val keyboardSpaceDp = with(density) { lastKeyboardSpacePx.toDp() }
     // 面板内容高度 = 键盘内容区高度（键盘占位 − 导航栏），于是 navBar + 面板 == 键盘占位。
-    // 只有「键盘从没弹过、拿不到真高度」时才退回下限；那种情况下面板顶替需要一个让位动作，
-    // 属必要开销（只在首次打开时发生一次）。
-    val emojiPanelHeight = maxOf(EMOJI_PANEL_MIN_HEIGHT, keyboardSpaceDp - navBarDp)
+    // 这里刻意不再对下限取 max：一旦键盘高度比「下限 + 导航栏」矮，max 会把面板撑高，
+    // 两个态就不等高了，切回键盘时输入条仍会掉一截。下限只用于「键盘从没弹过、还没有高度」——
+    // 那种情况下面板顶替需要一个让位动作，属必要开销（只在首次打开时发生一次）。
+    val emojiPanelHeight = if (lastKeyboardSpacePx > 0f) {
+        (keyboardSpaceDp - navBarDp).coerceAtLeast(0.dp)
+    } else {
+        EMOJI_PANEL_MIN_HEIGHT
+    }
 
     // 面板退场后它的布局高度就没了，但键盘要 200~300ms 才顶上来。这段空档继续把高度记在
     // 底部 padding 上（见 bottomPadding），否则输入条会先掉到导航栏、再被键盘顶回去。
@@ -186,8 +231,11 @@ fun CommentInputOverlay(
         if (!handoverToKeyboard) return@LaunchedEffect
         delay(PANEL_EXIT_MS)
         var waitedMs = 0L
+        // 等键盘真的顶到位再交还。判据是「实时值已经到了记录高度」（差 1px 以内）：原先是 98%
+        // 就放行，等于键盘还差 2%（270dp 键盘上约 5dp）时就把 padding 从记录高度换成实时值，
+        // 输入条先掉一下、再随键盘升回来 —— 那一下就是切键盘时的轻微抖动。
         while (waitedMs < KEYBOARD_ARRIVE_TIMEOUT_MS &&
-            liveKeyboardPx < lastKeyboardSpacePx * 0.98f
+            liveImePx < lastKeyboardSpacePx - 1f
         ) {
             delay(HANDOVER_POLL_MS)
             waitedMs += HANDOVER_POLL_MS
