@@ -104,8 +104,8 @@ private const val IME_STABLE_FRAMES = 3
  * 结构：全屏遮罩（点击关闭，淡入淡出 220ms）+ 底部输入条（圆角输入框 + 提交按钮，
  * 进场从底部滑入 220ms）。键盘避让不用现成的 imePadding/navigationBarsPadding，而是自己按
  * insets 算一个「底部占位」（见 bottomPadding）—— 因为面板和键盘要抢同一块地方，两个独立的
- * padding 修饰符没法互斥。模糊背板因 Haze 1.6.1 单 HazeState 多效果节点
- * 在 API 31 不可靠，暂以 70% 半透明底色近似（鸿蒙 bar 底色本身即 #B3 半透明）。
+ * padding 修饰符没法互斥。背板用 70% 半透明底色（鸿蒙 bar 底色本身即 #B3 半透明），
+ * 不做模糊——Haze 已从工程移除（见 TopicDetailScreen 顶栏同款处理）。
  *
  * 本轮范围（普通回复）：占位文字、最短字数拦截（16，对齐 Discourse）、超限提示、
  * 提交 loading、失败保留内容供重试、草稿经 onTextChange 上抛页面暂存、表情面板

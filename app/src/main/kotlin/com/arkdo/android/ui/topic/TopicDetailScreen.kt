@@ -69,7 +69,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -111,17 +110,14 @@ import com.arkdo.android.ui.components.ViewerImage
 import com.arkdo.android.ui.drafts.DraftResume
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
 import timber.log.Timber
 
 /**
  * 话题详情页
  *
  * 结构（对齐鸿蒙 TopicDetailPage）：
- * - 内容层：LazyColumn（hazeSource，滚动内容供顶栏模糊取样）
- * - 顶栏层：渐进式模糊材质 + 双层标题（最后绘制，盖在内容之上）
+ * - 内容层：LazyColumn
+ * - 顶栏层：实色底 + 双层标题（最后绘制，盖在内容之上）
  * - 图片浏览器：viewerState 非空时全屏覆盖（共享元素转场）
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
@@ -154,7 +150,6 @@ fun TopicDetailScreen(
     // 由 ReadingTracker 的撞盾/恢复结果驱动）。为真时顶栏右侧亮「手动验证」入口。
     val challengeBlocked by viewModel.challengeBlocked.collectAsState()
     val listState = rememberLazyListState()
-    val hazeState = remember { HazeState() }
     // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
     var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
     // 链接路由（LinkRouter，对齐鸿蒙 RootTabPage.handleOpenLink 的四类分流）：
@@ -326,7 +321,7 @@ fun TopicDetailScreen(
         // 引用归零后空闲 20s 自行卸载(见 MathRenderService)。
         com.arkdo.android.ui.components.MathRenderHostSlot()
 
-        // 只录楼层列表。回复按钮在这层外面取样，避免采到自己，也避开共享转场层把坐标算偏。
+        // 共享元素转场层：楼层列表与图片浏览器共用（转场坐标必须在同一层里算）。
         SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = viewerState,
@@ -350,9 +345,9 @@ fun TopicDetailScreen(
                             ui.topic == null -> {
                                 LoadingView()
                             }
-                            else -> ui.topic?.let { topic ->
+                            // 上面两支已排除「有错」与「topic 为空」，此处 topic 必非空。
+                            else -> ui.topic.let { topic ->
                                 TopicDetailContent(
-                                        hazeState = hazeState,
                                         // 默认滚动位置：顶栏（状态栏+56dp）之下再让出 contentTopGap。
                                         headerTopPadding = headerHeight + contentTopGap,
                                         listState = listState,
@@ -446,8 +441,8 @@ fun TopicDetailScreen(
             )
         }
 
-        // 顶栏最后绘制：盖在共享元素覆盖层之上（zIndex 置顶），模糊材质统一罩住
-        // 文字/图片/代码块；图片浏览器打开时隐藏（浏览器自带 ✕/分享顶栏）。
+        // 顶栏最后绘制：盖在共享元素覆盖层之上（zIndex 置顶）；图片浏览器打开时
+        // 隐藏（浏览器自带 ✕/分享顶栏）。
         if (viewerState == null) {
             TopicDetailHeaderBar(
                 modifier = Modifier
@@ -460,7 +455,6 @@ fun TopicDetailScreen(
                 tags = ui.topic?.tags.orEmpty(),
                 solved = !ui.topic?.acceptedAnswers.isNullOrEmpty(),
                 bookmarked = ui.topic?.bookmarked == true,
-                hazeState = hazeState,
                 onBack = onNavigateBack,
                 onTitleClick = { viewModel.jumpToPostNumber(1) },
                 showChallengeShortcut = challengeBlocked,
@@ -584,7 +578,6 @@ private data class ScrubberBounds(val current: Int, val highest: Int)
 
 @Composable
 private fun TopicDetailContent(
-    hazeState: HazeState,
     headerTopPadding: Dp,
     listState: androidx.compose.foundation.lazy.LazyListState,
     topic: com.arkdo.android.data.models.TopicDetail,
@@ -701,9 +694,7 @@ private fun TopicDetailContent(
         state = listState,
         // 底部 72dp：让最后一楼的操作区完全越过 52dp 悬浮回复按钮（对齐鸿蒙底部余量）。
         contentPadding = PaddingValues(top = headerTopPadding, bottom = 72.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .hazeSource(hazeState)
+        modifier = Modifier.fillMaxSize()
     ) {
         // 话题标题
         item {
@@ -797,12 +788,12 @@ private fun TopicDetailContent(
 }
 
 /**
- * 详情页顶栏：HDS 渐进式模糊材质 + 双层标题（对齐鸿蒙 TopicDetailHeader.ets）。
+ * 详情页顶栏：实色底 + 双层标题（对齐鸿蒙 TopicDetailHeader.ets）。
  *
  * 图层 A：摘要在视口内时的静态标题「帖子详情」；图层 B：滑出后的帖子标题 + 分类/标签行。
  * 两层常驻，透明度 + 竖向位移（±8dp）随 summaryVisible 切换（250ms EaseInOut）。
  * 图层 B 整行可点：回一楼（跳到第一楼，对齐鸿蒙 jumpToFirstPost）。
- * 材质：backdrop blur 24 + 渐变蒙版（HazeProgressive，越靠下越弱），强度随滚动 0..8vp 渐入。
+ * 材质：surface 实色 + 栏底 0.5dp 细线，不做模糊（Haze 已从工程移除）。
  */
 @Composable
 private fun TopicDetailHeaderBar(
@@ -814,7 +805,6 @@ private fun TopicDetailHeaderBar(
     tags: List<TopicTag>,
     solved: Boolean,
     bookmarked: Boolean,
-    hazeState: HazeState,
     onBack: () -> Unit,
     onTitleClick: () -> Unit,
     /** 过盾快捷入口是否可见（对齐鸿蒙 HdsNavigation.menu 的 shouldShowChallengeShortcut）。 */
@@ -837,25 +827,18 @@ private fun TopicDetailHeaderBar(
     val translateA = with(density) { (if (summaryVisible) 0.dp else (-8).dp).toPx() }
     val translateB = with(density) { (if (summaryVisible) 8.dp else 0.dp).toPx() }
 
+    // 实色底（用户反馈玻璃模糊下标题看不清）：浅色为纯白、深色取 surface（与楼层卡
+    // 同档的微亮面）；栏底 0.5dp 细线交代内容滚入栏下的边界——设置页 / 他人主页同款。
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(headerHeight)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        // 材质层：backdrop 高斯模糊常驻（半径 24 均匀）。
-        // 说明：渐进蒙版需要 AGSL 着色器（API 33+），本机 Android 12 上 Haze 1.6.1
-        // 会降级/不渲染（多效果节点共享 HazeState 亦不可靠）——均匀模糊是 API 31
-        // 上 Haze 的能力上限，等目标平台升级或自写 AGSL 再上渐进。
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                // 裁剪到栏体边界：防止模糊层绘制溢出到栏底之下，视觉上盖住
-                // 栏下方的内容（Haze 的 RenderEffect 模糊输出可能超出节点边界）。
-                .clipToBounds()
-                .hazeEffect(state = hazeState) {
-                    blurRadius = 24.dp
-                    noiseFactor = 0f
-                }
+        HorizontalDivider(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            color = arkdoColors.border,
+            thickness = 0.5.dp
         )
 
         Row(
