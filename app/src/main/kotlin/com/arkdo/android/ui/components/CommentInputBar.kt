@@ -4,9 +4,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -24,8 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imeAnimationTarget
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -78,12 +79,20 @@ private val SUBMIT_BUTTON_SIZE = 40.dp
 /** 表情面板高度下限（对齐鸿蒙 EMOJI_PANEL_MIN_HEIGHT）：键盘没弹过时给个能用的高度。 */
 private val EMOJI_PANEL_MIN_HEIGHT = 260.dp
 
+/** 表情面板退场动画时长（与下面 AnimatedVisibility 的 180ms 一致）。 */
+private const val PANEL_EXIT_MS = 180L
+
+/** 面板让位给键盘时，轮询「键盘是否顶到位」的间隔 / 最长等待。 */
+private const val HANDOVER_POLL_MS = 20L
+private const val KEYBOARD_ARRIVE_TIMEOUT_MS = 600L
+
 /**
  * 底部回复输入浮层（切片 7，对齐鸿蒙 CommentInputBar 的普通回复链路）。
  *
  * 结构：全屏遮罩（点击关闭，淡入淡出 220ms）+ 底部输入条（圆角输入框 + 提交按钮，
- * 进场从底部滑入 220ms）。键盘避让走 Compose 标准 imePadding/navigationBarsPadding，
- * 替代鸿蒙手动监听 avoidAreaChange；模糊背板因 Haze 1.6.1 单 HazeState 多效果节点
+ * 进场从底部滑入 220ms）。键盘避让不用现成的 imePadding/navigationBarsPadding，而是自己按
+ * insets 算一个「底部占位」（见 bottomPadding）—— 因为面板和键盘要抢同一块地方，两个独立的
+ * padding 修饰符没法互斥。模糊背板因 Haze 1.6.1 单 HazeState 多效果节点
  * 在 API 31 不可靠，暂以 70% 半透明底色近似（鸿蒙 bar 底色本身即 #B3 半透明）。
  *
  * 本轮范围（普通回复）：占位文字、最短字数拦截（16，对齐 Discourse）、超限提示、
@@ -91,7 +100,8 @@ private val EMOJI_PANEL_MIN_HEIGHT = 260.dp
  * （分组选择 + 短码插入 + 整段退格）、展开进全屏编辑器。boost 与编辑模式由调用方
  * 传参切换，本组件不感知。
  *
- * 键盘与表情面板**互斥**：两者抢同一块底部空间，任意时刻只允许一个在场。
+ * 键盘与表情面板**互斥且等高**：两者抢同一块底部空间，任意时刻只算一份，而且相加相等
+ * （见 bottomPadding），所以来回切换时输入条不会上下跳。
  * 打开面板走「编辑器失焦」（[androidx.compose.ui.focus.FocusManager.clearFocus]）由系统收键盘，
  * 关面板走「重新请求焦点」弹回键盘；点输入框重新获焦时也会自动收掉面板。详见 hideKeyboard 的注释。
  */
@@ -131,28 +141,72 @@ fun CommentInputOverlay(
     val density = LocalDensity.current
     val colors = arkdoColors
 
-    // 表情面板高度对齐软键盘（对齐鸿蒙 emojiPanelHeight），键盘从未弹过则退回下限。
+    // ── 底部占位：键盘与表情面板共用同一块空间 ───────────────────────────────
+    // 两者抢的是同一块地方，所以必须「等高」、而且任意时刻只算一份。
     //
-    // 这里有两个坑：
-    // ① 键盘收起时，实时 insets 是逐帧变小的**中间态**（API 30+ 的 IME 动画），直接跟着记会把
-    //    面板越记越矮 —— 记到最后一帧非零值，可能只剩全高的零头。所以同时看「本次动画的目标高度」
-    //    （imeAnimationTarget 在弹出时立刻就是全高、收起时是 0），拿最大值才不会取到中间态。
-    // ② 低版本（minSdk 26）没有 inset 动画框架，目标值可能恒为 0，此时退回实时值即可（那边是
-    //    一次性跳变，没有中间态问题）。
-    // 最后再加一道单调保护：键盘收起时高度序列是单调递减的，只写「比已记录更高」的值就永远不会被
-    // 收起过程污染。代价是同一进程内换成更矮的键盘（横屏等）时面板会偏高，转屏重建即复原。
-    val imeHeightPx = maxOf(
-        WindowInsets.imeAnimationTarget.getBottom(density),
-        WindowInsets.ime.getBottom(density)
-    )
-    var lastKeyboardHeightPx by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(imeHeightPx) {
-        if (imeHeightPx > lastKeyboardHeightPx) lastKeyboardHeightPx = imeHeightPx.toFloat()
+    // 原写法是 Column 上叠「navigationBarsPadding + imePadding」，再把面板追加在最下面：
+    // 面板出现的那一帧，底部位移 = 键盘 + 面板（≈两个键盘高），输入条先猛地弹上去、再随键盘
+    // 收起滑下来 —— 就是「切一次跳一下」的来源。
+    //
+    // 现在只算一个数：输入条底边到屏幕底边的距离。
+    //   · 键盘在场 → 实时 ime。键盘本来就压在导航栏上，所以这个值已经含导航栏区域
+    //     （Compose 的 WindowInsets.ime 不做导航栏扣除，navigationBarsPadding + imePadding
+    //      的合成值恰好也是它）。
+    //   · 面板在场 → 只留导航栏，剩下的高度由面板自己占（面板高度 = 键盘占位 − 导航栏）。
+    //   两侧相加相等：navBar + (键盘占位 − navBar) == 键盘占位 ⇒ 切换时输入条**完全不动**。
+    //   （顺带修掉面板顶边比键盘顶边高出一个导航栏的老问题。）
+    val navBarPx = WindowInsets.navigationBars.getBottom(density)
+    val imeNowPx = WindowInsets.ime.getBottom(density)
+    // imeAnimationTarget 弹出时立刻就是全高、收起时是 0，拿它记键盘高度不会被逐帧中间态污染
+    // （实时值收起时是单调递减的，最后一次非零采样可能只剩零头）。但它只参与「记录」、不参与
+    // 布局：低版本（minSdk 26）没有 inset 动画框架，目标值可能恒为 0，拿它布局会把输入条卡在半空。
+    val imePeakPx = maxOf(WindowInsets.imeAnimationTarget.getBottom(density), imeNowPx)
+    var lastKeyboardSpacePx by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(imePeakPx) {
+        if (imePeakPx > 0) {
+            val space = maxOf(imePeakPx, navBarPx)
+            if (space > lastKeyboardSpacePx) lastKeyboardSpacePx = space.toFloat()
+        }
     }
-    val emojiPanelHeight = maxOf(
-        EMOJI_PANEL_MIN_HEIGHT,
-        with(density) { lastKeyboardHeightPx.toDp() }
-    )
+    // 键盘实时占用镜像成 State：下面交接用的协程里要读到最新值，而 insets 只能在组合里读。
+    var liveKeyboardPx by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(imeNowPx) { liveKeyboardPx = imeNowPx.toFloat() }
+
+    val navBarDp = with(density) { navBarPx.toDp() }
+    val keyboardSpaceDp = with(density) { lastKeyboardSpacePx.toDp() }
+    // 面板内容高度 = 键盘内容区高度（键盘占位 − 导航栏），于是 navBar + 面板 == 键盘占位。
+    // 只有「键盘从没弹过、拿不到真高度」时才退回下限；那种情况下面板顶替需要一个让位动作，
+    // 属必要开销（只在首次打开时发生一次）。
+    val emojiPanelHeight = maxOf(EMOJI_PANEL_MIN_HEIGHT, keyboardSpaceDp - navBarDp)
+
+    // 面板退场后它的布局高度就没了，但键盘要 200~300ms 才顶上来。这段空档继续把高度记在
+    // 底部 padding 上（见 bottomPadding），否则输入条会先掉到导航栏、再被键盘顶回去。
+    var handoverToKeyboard by remember { mutableStateOf(false) }
+    LaunchedEffect(handoverToKeyboard) {
+        if (!handoverToKeyboard) return@LaunchedEffect
+        delay(PANEL_EXIT_MS)
+        var waitedMs = 0L
+        while (waitedMs < KEYBOARD_ARRIVE_TIMEOUT_MS &&
+            liveKeyboardPx < lastKeyboardSpacePx * 0.98f
+        ) {
+            delay(HANDOVER_POLL_MS)
+            waitedMs += HANDOVER_POLL_MS
+        }
+        handoverToKeyboard = false
+    }
+
+    // 面板的「在场」含退场动画（currentState 在退场播完才翻 false）：这段期间高度由面板自己占，
+    // padding 必须留空，否则面板高度和 padding 会叠成两份 —— 这正是原来那个上跳。
+    val panelState = remember { MutableTransitionState(false) }
+    panelState.targetState = showEmojiPanel
+    val panelInLayout = panelState.currentState || panelState.targetState
+
+    val bottomPadding = when {
+        panelInLayout -> navBarDp
+        handoverToKeyboard -> maxOf(keyboardSpaceDp, navBarDp)
+        imeNowPx > 0 -> maxOf(with(density) { imeNowPx.toDp() }, navBarDp)
+        else -> navBarDp
+    }
 
     fun trimmedLength(): Int = fieldValue.text.trim().length
     fun overMaxChars(): Boolean = maxChars > 0 && trimmedLength() > maxChars
@@ -245,14 +299,22 @@ fun CommentInputOverlay(
         keyboardController?.show()
     }
 
+    /** 面板让位给系统键盘：高度交给 handoverToKeyboard 衔接，输入条原地不动。 */
+    fun closePanelForKeyboard() {
+        showEmojiPanel = false
+        handoverToKeyboard = true
+    }
+
     /** 表情键与系统键盘互斥切换（对齐鸿蒙 toggleEmojiKeyboard）：两者占同一块底部空间，只留一个。 */
     fun toggleEmojiPanel() {
         if (showEmojiPanel) {
-            showEmojiPanel = false
+            closePanelForKeyboard()
             showSystemKeyboard()
             return
         }
         showEmojiPanel = true
+        // 面板重新接管高度，撤掉上一次可能的交接（值不变的话 LaunchedEffect 不会重启）。
+        handoverToKeyboard = false
         hideKeyboard()
     }
 
@@ -266,15 +328,21 @@ fun CommentInputOverlay(
     // 的兜底（表情键本身也会主动切），否则键盘会盖在面板上、两条底部栏同屏。
     // 反方向安全：打开面板走的是 clearFocus（焦点变 false），不会误触发这里。
     LaunchedEffect(editorFocused) {
-        if (editorFocused && showEmojiPanel) showEmojiPanel = false
+        if (editorFocused && showEmojiPanel) closePanelForKeyboard()
     }
 
-    // 浮层收起时复位面板：下次打开是干净的输入态，不会还挂着上次没关的表情面板。
+    // 浮层收起时复位面板：下次打开是干净的输入态，不会还挂着上次没关的表情面板，
+    // 也不会留着上一次没交完的高度（否则重开时输入条会先悬在半空等键盘）。
     LaunchedEffect(visible) {
-        if (!visible) showEmojiPanel = false
+        if (!visible) {
+            showEmojiPanel = false
+            handoverToKeyboard = false
+        }
     }
 
     // 返回键分两级（对齐鸿蒙 onComposerBackTick）：面板开着先收面板，再按才关浮层。
+    // 这条路径刻意不补 showSystemKeyboard()（鸿蒙同样只收面板）：没有键盘接班，面板就收掉自己的
+    // 高度、输入条顺势滑到底（见下面退场动画的 shrinkVertically 分支）。
     BackHandler(enabled = showEmojiPanel) { showEmojiPanel = false }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -306,8 +374,9 @@ fun CommentInputOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.immersiveInputBarBg)
-                    .navigationBarsPadding()
-                    .imePadding()
+                    // 键盘 / 面板 / 都没有，三种情况的底部占位都由 bottomPadding 一个数决定
+                    // （原先是 navigationBarsPadding + imePadding 叠着，面板再追加在最下面）。
+                    .padding(bottom = bottomPadding)
             ) {
                 // 顶部 0.5dp 高光：分清输入条与正文（对齐鸿蒙 immersive_input_bar_highlight 亮边）。
                 Box(
@@ -446,14 +515,27 @@ fun CommentInputOverlay(
                     }
                 }
 
-                // 表情面板：从底部滑入，高度对齐软键盘（对齐鸿蒙把 EmojiPicker 挂在
-                // 输入条下方的做法）。挂在这块底板里，键盘收起后它会顶上原键盘的位置。
+                // 表情面板：高度按键盘占位算（见 emojiPanelHeight），所以它一进场就顶上原键盘
+                // 的位置，输入条不用动。
+                //
+                // 进场只做位移、不改高度：高度一旦是渐变的，Column 总高就会跟着变，输入条会被
+                // 拽着上下动。退场分两种：
+                //   · 键盘在下面接班 → 同样只做位移，高度等面板退场完再交给 padding
+                //     （handoverToKeyboard），中间那段空档输入条一动不动；
+                //   · 没人接班（返回键收面板）→ 收掉高度，输入条顺势滑到底，而不是一格一格地跳。
                 AnimatedVisibility(
-                    visible = showEmojiPanel,
-                    enter = slideInVertically(tween(180, easing = EaseOut)) { it } +
-                        fadeIn(tween(180, easing = EaseOut)),
-                    exit = slideOutVertically(tween(180, easing = EaseOut)) { it } +
-                        fadeOut(tween(180, easing = EaseOut))
+                    visibleState = panelState,
+                    enter = slideInVertically(tween(PANEL_EXIT_MS.toInt(), easing = EaseOut)) { it } +
+                        fadeIn(tween(PANEL_EXIT_MS.toInt(), easing = EaseOut)),
+                    exit = if (handoverToKeyboard) {
+                        slideOutVertically(tween(PANEL_EXIT_MS.toInt(), easing = EaseOut)) { it } +
+                            fadeOut(tween(PANEL_EXIT_MS.toInt(), easing = EaseOut))
+                    } else {
+                        shrinkVertically(
+                            tween(PANEL_EXIT_MS.toInt(), easing = EaseOut),
+                            shrinkTowards = Alignment.Top
+                        ) + fadeOut(tween(PANEL_EXIT_MS.toInt(), easing = EaseOut))
+                    }
                 ) {
                     EmojiPicker(
                         onSelect = { emoji -> insertEmoji(emoji.name) },
