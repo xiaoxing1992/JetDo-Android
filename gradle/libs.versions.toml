@@ -19,7 +19,6 @@ okhttp = "5.4.0"
 jsoup = "1.18.3"
 backdrop = "1.0.0"
 capsule = "2.1.1"
-haze = "1.6.1"
 material-icons-extended = "1.7.8"
 kotlinx-serialization-json = "1.11.0"
 coroutines = "1.8.0"
@@ -80,7 +79,6 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 capsule = { module = "io.github.kyant0:capsule", version.ref = "capsule" }
-haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
 okhttp-dnsoverhttps = { group = "com.squareup.okhttp3", name = "okhttp-dnsoverhttps", version.ref = "okhttp" }
 
 # Kotlinx Serialization

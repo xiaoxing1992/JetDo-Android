@@ -141,8 +141,6 @@ dependencies {
     implementation(libs.tbssdk)
     // WebView 身份统一(UA Client Hints / X-Requested-With),见 WebSessionManager.applyUserAgent
     implementation(libs.androidx.webkit)
-    // 标题栏渐进式模糊（对齐鸿蒙 HDS 渐进模糊材质）
-    implementation(libs.haze)
     implementation(libs.backdrop)
     implementation(libs.capsule)
     implementation(libs.okhttp)
