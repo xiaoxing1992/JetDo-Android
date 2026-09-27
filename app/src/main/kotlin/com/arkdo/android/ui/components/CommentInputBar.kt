@@ -1,6 +1,7 @@
 package com.arkdo.android.ui.components
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
@@ -13,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -48,9 +51,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
@@ -85,7 +90,12 @@ private val EMOJI_PANEL_MIN_HEIGHT = 260.dp
  * 提交 loading、失败保留内容供重试、草稿经 onTextChange 上抛页面暂存、表情面板
  * （分组选择 + 短码插入 + 整段退格）、展开进全屏编辑器。boost 与编辑模式由调用方
  * 传参切换，本组件不感知。
+ *
+ * 键盘与表情面板**互斥**：两者抢同一块底部空间，任意时刻只允许一个在场。
+ * 打开面板走「编辑器失焦」（[androidx.compose.ui.focus.FocusManager.clearFocus]）由系统收键盘，
+ * 关面板走「重新请求焦点」弹回键盘；点输入框重新获焦时也会自动收掉面板。详见 hideKeyboard 的注释。
  */
+@OptIn(ExperimentalLayoutApi::class) // WindowInsets.imeAnimationTarget
 @Composable
 fun CommentInputOverlay(
     visible: Boolean,
@@ -108,25 +118,41 @@ fun CommentInputOverlay(
     var fieldValue by remember { mutableStateOf(TextFieldValue(initialText)) }
     var localSubmitting by remember { mutableStateOf(false) }
     var showEmojiPanel by remember { mutableStateOf(false) }
+    // 编辑器当前是否持有焦点。面板打开时是失焦的，所以「重新获焦」= 用户要去打字 = 面板该让位。
+    var editorFocused by remember { mutableStateOf(false) }
     val submitting = isSubmitting || localSubmitting
     val appearTimeMs = remember { System.currentTimeMillis() }
     var firstTypeTimeMs by remember { mutableLongStateOf(0L) }
     var wasOverMaxChars by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     val density = LocalDensity.current
     val colors = arkdoColors
 
-    // 表情面板高度对齐软键盘（对齐鸿蒙 emojiPanelHeight）：记录最近一次键盘高度，
-    // 键盘从未弹过时退回下限。键盘收起后 ime 高度归 0，不能直接拿它当高度。
-    val imeHeightPx = WindowInsets.ime.getBottom(density)
+    // 表情面板高度对齐软键盘（对齐鸿蒙 emojiPanelHeight），键盘从未弹过则退回下限。
+    //
+    // 这里有两个坑：
+    // ① 键盘收起时，实时 insets 是逐帧变小的**中间态**（API 30+ 的 IME 动画），直接跟着记会把
+    //    面板越记越矮 —— 记到最后一帧非零值，可能只剩全高的零头。所以同时看「本次动画的目标高度」
+    //    （imeAnimationTarget 在弹出时立刻就是全高、收起时是 0），拿最大值才不会取到中间态。
+    // ② 低版本（minSdk 26）没有 inset 动画框架，目标值可能恒为 0，此时退回实时值即可（那边是
+    //    一次性跳变，没有中间态问题）。
+    // 最后再加一道单调保护：键盘收起时高度序列是单调递减的，只写「比已记录更高」的值就永远不会被
+    // 收起过程污染。代价是同一进程内换成更矮的键盘（横屏等）时面板会偏高，转屏重建即复原。
+    val imeHeightPx = maxOf(
+        WindowInsets.imeAnimationTarget.getBottom(density),
+        WindowInsets.ime.getBottom(density)
+    )
     var lastKeyboardHeightPx by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(imeHeightPx) {
-        if (imeHeightPx > 0) lastKeyboardHeightPx = imeHeightPx.toFloat()
+        if (imeHeightPx > lastKeyboardHeightPx) lastKeyboardHeightPx = imeHeightPx.toFloat()
     }
-    val emojiPanelHeight =
-        if (lastKeyboardHeightPx > 0) with(density) { lastKeyboardHeightPx.toDp() } else EMOJI_PANEL_MIN_HEIGHT
+    val emojiPanelHeight = maxOf(
+        EMOJI_PANEL_MIN_HEIGHT,
+        with(density) { lastKeyboardHeightPx.toDp() }
+    )
 
     fun trimmedLength(): Int = fieldValue.text.trim().length
     fun overMaxChars(): Boolean = maxChars > 0 && trimmedLength() > maxChars
@@ -199,15 +225,35 @@ fun CommentInputOverlay(
         if (firstTypeTimeMs == 0L) firstTypeTimeMs = System.currentTimeMillis()
     }
 
-    /** 表情键与系统键盘互斥切换（对齐鸿蒙 toggleEmojiKeyboard）。 */
+    /**
+     * 收起系统键盘：让编辑器**失焦**，由系统自己把软键盘收掉（对齐鸿蒙 hideKeyboard 的 clearFocus）。
+     *
+     * 这里刻意不用 [keyboardController.hide]（原实现就是它，也是「面板和键盘同时在场」的根因）：
+     * hide() 只收键盘、编辑器仍持有焦点，于是 ① 用户点一下输入框键盘就又被顶回来，表情面板和
+     * 键盘叠在同屏；② 之后想切回键盘时 requestFocus 会变成空操作，得点两下才回来。鸿蒙侧在
+     * hideKeyboard 上同样注了这个坑（「保留焦点会导致后续 requestFocus 成为空操作」）。
+     *
+     * 不用像鸿蒙那样手动存取选区：光标位置在我们自己的 [TextFieldValue] 里，失焦再获焦不会丢。
+     */
+    fun hideKeyboard() {
+        focusManager.clearFocus()
+    }
+
+    /** 弹回系统键盘：重新请求焦点。补一次显式 show —— 个别输入法对「失焦后重新聚焦」不敏感。 */
+    fun showSystemKeyboard() {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    /** 表情键与系统键盘互斥切换（对齐鸿蒙 toggleEmojiKeyboard）：两者占同一块底部空间，只留一个。 */
     fun toggleEmojiPanel() {
         if (showEmojiPanel) {
             showEmojiPanel = false
-            focusRequester.requestFocus()
+            showSystemKeyboard()
             return
         }
         showEmojiPanel = true
-        keyboardController?.hide()
+        hideKeyboard()
     }
 
     // 挂载后短暂延迟再请求焦点弹键盘（对齐鸿蒙 focusInput 的 200ms 延迟）。
@@ -215,6 +261,21 @@ fun CommentInputOverlay(
         delay(200)
         focusRequester.requestFocus()
     }
+
+    // 编辑器重新拿到焦点 = 用户点了输入框要打字：先把表情面板收掉。这条是「点输入框切回键盘」
+    // 的兜底（表情键本身也会主动切），否则键盘会盖在面板上、两条底部栏同屏。
+    // 反方向安全：打开面板走的是 clearFocus（焦点变 false），不会误触发这里。
+    LaunchedEffect(editorFocused) {
+        if (editorFocused && showEmojiPanel) showEmojiPanel = false
+    }
+
+    // 浮层收起时复位面板：下次打开是干净的输入态，不会还挂着上次没关的表情面板。
+    LaunchedEffect(visible) {
+        if (!visible) showEmojiPanel = false
+    }
+
+    // 返回键分两级（对齐鸿蒙 onComposerBackTick）：面板开着先收面板，再按才关浮层。
+    BackHandler(enabled = showEmojiPanel) { showEmojiPanel = false }
 
     Box(modifier = modifier.fillMaxSize()) {
         // 遮罩层：点击空白处关闭浮层。
@@ -314,6 +375,8 @@ fun CommentInputOverlay(
                                     .fillMaxWidth()
                                     .heightIn(min = 24.dp)
                                     .focusRequester(focusRequester)
+                                    // 记录焦点：点输入框时用来收掉表情面板（见上面的 LaunchedEffect）。
+                                    .onFocusChanged { editorFocused = it.isFocused }
                             )
                         }
                     }
