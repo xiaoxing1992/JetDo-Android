@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -62,6 +63,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -70,8 +72,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.R
 import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.services.content.emojiCatalogRevision
+import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.services.content.isKnownEmoji
 import com.arkdo.android.services.content.normalizeEmojiDeletion
+import com.arkdo.android.services.content.renderEmojiInput
 import com.arkdo.android.ui.theme.ArkdoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.delay
@@ -104,8 +109,8 @@ private const val IME_STABLE_FRAMES = 3
  *
  * 本轮范围（普通回复）：占位文字、最短字数拦截（16，对齐 Discourse）、超限提示、
  * 提交 loading、失败保留内容供重试、草稿经 onTextChange 上抛页面暂存、表情面板
- * （分组选择 + 短码插入 + 整段退格）、展开进全屏编辑器。boost 与编辑模式由调用方
- * 传参切换，本组件不感知。
+ * （分组选择 + 短码插入 + 整段退格 + 输入框内直接渲染成图片）、展开进全屏编辑器。
+ * boost 与编辑模式由调用方传参切换，本组件不感知。
  *
  * 键盘与表情面板**互斥且等高**：两者抢同一块底部空间，任意时刻只算一份，而且相加相等
  * （见 bottomPadding），所以来回切换时输入条不会上下跳。
@@ -147,6 +152,24 @@ fun CommentInputOverlay(
     val context = LocalContext.current
     val density = LocalDensity.current
     val colors = arkdoColors
+
+    // ── 输入框内的表情图文混排 ───────────────────────────────────────────────
+    // 真值永远是短码原文（`:smile:`）：发帖、草稿、字数统计、服务端渲染都不变，只有**显示**
+    // 变成图片。显示上把每个已知短码换成一个全角空格占位，再把表情图按量出来的盒子画上去 ——
+    // 对齐鸿蒙 RichEditor 的 addImageSpan；Compose 的 BasicTextField 没有 inlineContent
+    // 这个能力（详见 EmojiInputRender.kt 顶部的源码核对结论），只能这么曲线救国。
+    //
+    // 订阅目录版本号：表情表是异步拉来的，表到货时已输入的短码要跟着从裸文本变成图片。
+    val catalogRevision by emojiCatalogRevision.collectAsState()
+    val emojiRender = remember(fieldValue.text, catalogRevision) {
+        renderEmojiInput(fieldValue.text, ::getEmojiUrl)
+    }
+    val emojiTransformation = remember(catalogRevision) {
+        EmojiInputVisualTransformation(::getEmojiUrl)
+    }
+    // 输入框最近一次的排版结果：占位字符的位置/行高全靠它量，字体换行都不用自己算。
+    var inputLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val onInputLayout: (TextLayoutResult) -> Unit = remember { { inputLayout = it } }
 
     // ── 底部占位：键盘与表情面板共用同一块空间 ───────────────────────────────
     // 两者抢的是同一块地方，所以必须「等高」、而且任意时刻只算一份。
@@ -490,6 +513,10 @@ fun CommentInputOverlay(
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
+                                // 显示层变换：短码 → 全角空格占位（原文不变，见 EmojiInputRender.kt）。
+                                visualTransformation = emojiTransformation,
+                                // 排版结果用来量占位字符的盒子，把表情图画在上面。
+                                onTextLayout = onInputLayout,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 24.dp)
@@ -497,6 +524,9 @@ fun CommentInputOverlay(
                                     // 记录焦点：点输入框时用来收掉表情面板（见上面的 LaunchedEffect）。
                                     .onFocusChanged { editorFocused = it.isFocused }
                             )
+
+                            // 表情图片：画在上面的占位字符上（不参与测量，所以不影响输入框高度）。
+                            EmojiInputOverlay(render = emojiRender, layout = inputLayout)
                         }
                     }
 
