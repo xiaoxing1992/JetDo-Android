@@ -1,22 +1,22 @@
 # ArkDO-Android 待实现清单
 
 > 基准：鸿蒙版 ArkDO（ArkTS · 28 页面 / 47 组件 / 25 服务子域）
-> 核查点：`feat/migrate-vertical-slice` @ `7791c69`（本轮在其上完成表情体系，见 §一 第 4 项）
+> 核查点：`feat/migrate-vertical-slice` @ `eb5da45`（本轮完成帖内音视频与谁回应了弹层，见 §一 第 2 项 / §二 第 8 项）
 > 规则：只记「现在还没做的」，做完一条删一条。不带版本号，不记修复历史。
 
 ## 总览
 
-**还剩 38 项 + 7 组死代码。**
+**还剩 36 项 + 7 组死代码。**
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
-| P0 | 4 | 用户一眼能看出没做 |
-| P1 | 12 | 功能不完整，用起来别扭 |
+| P0 | 3 | 用户一眼能看出没做 |
+| P1 | 11 | 功能不完整，用起来别扭 |
 | 半截 | 10 | 数据 / 组件都在，只差一次接通（用户会当 bug 报） |
 | P2 | 12 | 工程化与发布 |
 | 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
 
-模块对齐度参考：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 88% / 回帖 80% / **表情 85%** / 我的 88% / 用户主页 88% / 设置 48% / 多站点 30% / 音视频 0% / 系统推送 0%。
+模块对齐度参考：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 88% / 回帖 80% / **表情 85%** / **音视频 90%** / 我的 88% / 用户主页 88% / 设置 48% / 多站点 30% / 系统推送 0%。
 
 ---
 
@@ -25,7 +25,7 @@
 | # | 要做什么 | 现在是什么样 | 关键证据 |
 |---|---|---|---|
 | 1 | **系统推送 + 本地通知** | `services/push/` 不存在；无 FCM / HMS 依赖；全库 0 处 `NotificationManager`；`POST_NOTIFICATIONS` 已声明但**无运行时申请**；App 活着时点通知也接不到（**无 `onNewIntent`**） | Manifest `:9`；`MainActivity.kt:212-217` 深链只打日志 + `// TODO: 通过 Navigation 跳转到详情页` |
-| 2 | **帖内音视频播放** | 媒体块已解析但**退化成纯文本**（只输出「音频：URL」）；全库 `exoplayer` / `media3` 0 命中 | `PostRichContent.kt:67`（自述占位）、`:211-212` |
+| ~~2~~ | ~~**帖内音视频播放**~~ → **已做** | Media3 ExoPlayer 音频条/视频卡（状态机对齐鸿蒙），MediaSource 同域分流，下载桥结算链补完（完成广播/真实落盘路径/同源 Cookie），全局互斥 + 离页即停；texture_view 修黑屏闪 | 新增 `AudioPlayer` / `VideoPlayer` / `PostMediaEngine` / `MediaSource` / `MediaPlaybackCoordinator`；`ArkWebNetworkBridge.downloadMedia` 结算接回 |
 | ~~3~~ | ~~**回帖链路残废**~~ → **已做** | 紧凑输入条加「展开」进全屏编辑器（Markdown 工具栏 / 预览 / 图片上传，与发帖同一套实现）；回帖草稿 2s 防抖自动落盘、与编辑草稿共用 key 与序号 | 新增 `ui/composer/ReplyComposerOverlay.kt`、`ComposerCommon.kt`、`ComposerUpload.kt`；`DraftService.saveReplyDraft/saveEditDraft`；`TopicDetailViewModel` 的 `scheduleReplyDraftSave` 一族 |
 | ~~4~~ | ~~**表情体系整体缺失**~~ → **已做** | 新增按站点拉取的目录服务（`EmojiCatalogService` + `EmojiCatalogRegistry`，磁盘缓存 1 天）；表情选择器接进回复输入条（分组 tab + 7 列网格 + 整段退格）；发帖 / 回帖**预览**里的已知短码转成图片；楼层与用户主页的**状态表情**由短名出图 | 新增 `services/content/EmojiCatalogRegistry.kt`、`EmojiCatalogService.kt`、`EmojiPreviewHtml.kt`、`EmojiShortcodeEdit.kt`、`ui/components/EmojiPicker.kt`；`RootTabScreen` 宿主就绪后加载；死资源 `assets/linuxdo_emojis.json` 已删 |
 | 5 | **设置 4 入口未迁移** | 「网络与连接 → DoH」已落地；**论坛 / 通知 / 我的站点**仍弹「尚未迁移」；`SETTINGS_PUSH` 仍悬空未注册 | `SettingsScreen.kt:88`；`ArkDoNavHost.kt:587`；对照鸿蒙 `ForumsPage` / `PushSettingsPage` / `SitesPage` |
@@ -40,7 +40,7 @@
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
 | 7 | **版本公告 / 升级提示** | `announce/VersionAnnouncement.ets`（扫帖 `2590051`，按 `[v<code>]` 匹配版本，启动时弹） | 完全不存在 | 全仓唯一命中是测试里的分类名 |
-| 8 | **「谁回应了」列表** | `ReactionUsersSheet.ets`（可切表情、分页） | 数据模型已在（`ReactionUsersPage`），**无弹层**；汇总胶囊看着可点但不可点 | `TopicPostItem.kt:573-590` |
+| ~~8~~ | ~~**「谁回应了」列表**~~ → **已做** | 弹层五态（chips 过滤/用户行/四态 footer）+ 胶囊接通 + 触底自动加载；真实响应为扁平结构，DTO 解码映射 | 新增 `ReactionUsersSheet` / `ReactionUsersPager`（含单测）；`TopicService.getReactionUsers` |
 | 9 | **正在回复的人 / 输入中** | `services/presence/` + `ReplyingPresenceBar` + `TypingDots` | 不存在；`MessageBusEventBus` 已解析 `enteringUsers` 但**无任何消费者** | `MessageBusEventBus.kt:17`、`:34-35` |
 | 10 | **帖内实时新回复** | `RealtimePostsPrefs` | 只有首页新话题提醒；两个 extract 方法**零调用**（仅测试用）；且 `RealtimeTopicsPrefs` **默认值反了**（鸿蒙默认关、Android 默认开） | `MessageBusEventBus.kt:87`、`:96`；`RealtimeTopicsPrefs.kt:17` |
 | 11 | **待审核帖子卡片** | `PendingPostCard.ets`（标签 / 时间 / 正文 / 删除） | **无 UI**：模型（`PendingPost`）与提交路径都在，用户被审后只看到一句 Toast，永远找不到也撤不回 | `TopicDetailViewModel.kt:831-839`；`TopicModels.kt:345` |
@@ -146,7 +146,7 @@
 6. **多站点 / 论坛切换**（P0-6）：`ForumPrefs` + `CurrentSite`，让 `BASE_URL` 可变；顺带解锁 P0-5 的论坛 / 站点两个入口
 7. ✅ **回帖链路对齐发帖**（P0-3 / P1-18）：紧凑条展开成全屏编辑器（工具栏 / 预览 / 图片）+ 回帖草稿落盘（本轮完成）
 8. ✅ **表情体系**（P0-4 / S5 / D7）：目录服务（按站点拉取 + 磁盘缓存）→ 选择器接回复条（分组 + 整段退格）→ 预览短码转图 → 状态表情出图，死资源已删（本轮完成）
-9. **音视频播放**（P0-2）：引入 Media3，替换 `PostRichContent.kt:67` 占位
+9. ✅ **音视频播放**（P0-2，本轮完成）
 10. Markdown 工具栏补 `video` / `file-arrow-up`（P1-14）+ 多图批量上传（P1-15）
 
 **第 3 步 · 横向铺开**
