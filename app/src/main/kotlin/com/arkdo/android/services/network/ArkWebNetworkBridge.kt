@@ -1,6 +1,10 @@
 package com.arkdo.android.services.network
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +17,7 @@ import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.content.DownloadEventBus
 import com.arkdo.android.services.content.DownloadResult
+import com.arkdo.android.services.content.MediaSource
 import com.arkdo.android.services.message.MessageBusEventBus
 import com.arkdo.android.services.network.webscript.MessageBusScriptTemplate
 import com.arkdo.android.services.web.WebSessionManager
@@ -190,9 +195,16 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     private var downloadDelegateReady = false
     private val mediaWaiters = mutableMapOf<String, CompletableDeferred<String>>()
     private val mediaInflight = mutableMapOf<String, kotlinx.coroutines.Deferred<String>>()
-    private val mediaGuidUrl = mutableMapOf<String, String>()
     private val mediaCache = mutableMapOf<String, String>()
     private val downloadIntents = mutableListOf<DownloadIntent>()
+
+    // 媒体下载结算表:DownloadManager enqueue id → (媒体源 URL, 落盘路径)。
+    // 下载委托是「loadUrl 触发下载导航 → 系统下载」的两段式,完成事件只能靠系统广播接回,
+    // ACTION_DOWNLOAD_COMPLETE 里按 id 查回媒体 URL,才能 settle 到 downloadMedia 的 waiter。
+    private val mediaDownloadJobs = mutableMapOf<Long, MediaDownloadJob>()
+    private var downloadReceiverRegistered = false
+
+    private data class MediaDownloadJob(val mediaUrl: String, val localPath: String)
 
     // ---------- host 生命周期 ----------
 
@@ -552,9 +564,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         configureDownloadDelegate()
     }
 
-    /** 冷启动清空媒体缓存目录（filesDir/media_cache）。不碰附件目录 download。 */
+    /** 冷启动清空媒体缓存目录。目录与 DownloadManager 落盘位置一致(getExternalFilesDir/media_cache)。 */
     fun clearMediaCacheDir(context: Context) {
-        val dir = File(context.filesDir, "media_cache")
+        val mediaBase = context.getExternalFilesDir(null) ?: context.filesDir
+        val dir = File(mediaBase, "media_cache")
         runCatching {
             if (dir.exists()) {
                 dir.deleteRecursively()
@@ -618,9 +631,12 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     /** 给 host 挂下载委托：onDownloadStart 选沙箱保存路径。完成/失败经 DownloadEventBus 通知页面。 */
     private fun configureDownloadDelegate() {
         if (downloadDelegateReady || webView == null || downloadContext == null) return
-        val context = downloadContext!!
+        val context = downloadContext!!.applicationContext
+        // 媒体缓存目录必须与 DownloadManager 实际落盘目录一致(getExternalFilesDir);
+        // 之前用 filesDir 推路径,内/外目录对不上,缓存命中与冷启动清理都落空。
+        val mediaBase = context.getExternalFilesDir(null) ?: context.filesDir
         val attachmentDir = File(context.filesDir, "download")
-        val mediaDir = File(context.filesDir, "media_cache")
+        val mediaDir = File(mediaBase, "media_cache")
 
         webView?.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
             // 按发起顺序出队意图，辨别媒体/附件。
@@ -637,8 +653,50 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             // 交给系统 DownloadManager 下到应用专属外部目录。
             startSystemDownload(context, url, fileName, dir, isMedia, intent?.url)
         })
+        registerMediaDownloadReceiver(context)
         downloadDelegateReady = true
         Timber.i("[ArkDO][Network] download delegate configured")
+    }
+
+    /** 注册系统下载完成广播:媒体下载的结算出口(settleMediaSuccess 的唯一触发点)。 */
+    private fun registerMediaDownloadReceiver(appContext: Context) {
+        if (downloadReceiverRegistered) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+                val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+                val job = synchronized(mediaDownloadJobs) { mediaDownloadJobs.remove(id) } ?: return
+                val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                runCatching {
+                    dm.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
+                        val success = cursor.moveToFirst() &&
+                            cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) ==
+                                DownloadManager.STATUS_SUCCESSFUL
+                        if (success) {
+                            Timber.i("[ArkDO][Network] media download complete url=%s path=%s", job.mediaUrl, job.localPath)
+                            settleMediaSuccess(job.mediaUrl, job.localPath)
+                        } else {
+                            Timber.i("[ArkDO][Network] media download failed url=%s", job.mediaUrl)
+                            settleMediaFailure(job.mediaUrl, IllegalStateException("媒体下载失败"))
+                        }
+                    }
+                }.onFailure {
+                    Timber.i("[ArkDO][Network] media download query failed msg=%s", it.message)
+                    settleMediaFailure(job.mediaUrl, it)
+                }
+            }
+        }
+        runCatching {
+            appContext.registerReceiver(
+                receiver,
+                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+                Context.RECEIVER_NOT_EXPORTED
+            )
+            downloadReceiverRegistered = true
+            Timber.i("[ArkDO][Network] media download receiver registered")
+        }.onFailure {
+            Timber.i("[ArkDO][Network] media download receiver register failed msg=%s", it.message)
+        }
     }
 
     private fun suggestedFileName(contentDisposition: String?, url: String): String {
@@ -663,21 +721,37 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         isMedia: Boolean,
         mediaUrl: String?
     ) {
-        // 走系统 DownloadManager，下到应用专属外部目录；完成后再回调。
+        // 走系统 DownloadManager 下到应用专属外部目录;媒体完成后经 ACTION_DOWNLOAD_COMPLETE 广播结算。
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
         val req = android.app.DownloadManager.Request(android.net.Uri.parse(url))
-        req.setDestinationInExternalFilesDir(context, null, "${dir.name}/$fileName")
+        // 真实落盘位置 = getExternalFilesDir(null)/relative。结算回给播放器的必须是这个路径,
+        // 不能拿 filesDir 推——内/外目录不同,推出来的路径播放器打不开。
+        val relative = "${dir.name}/$fileName"
+        val localFile = File(context.getExternalFilesDir(null) ?: context.filesDir, relative)
+        req.setDestinationInExternalFilesDir(context, null, relative)
         req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_HIDDEN)
         req.addRequestHeader("User-Agent", com.arkdo.android.services.web.UserAgentProvider.get(context))
+        // 论坛同源媒体(xz 上传件)直连会被 CF 挡:补 webview 会话 cookie(cf_clearance/_t),
+        // 与宿主同 UA 才拿得到字节。跨源 CDN 的下载请求不附加——CookieManager 按域返回,
+        // 天然只带该域自己的 cookie,不会把论坛会话泄给第三方。
+        if (isMedia && MediaSource.needsDownloadBridge(url)) {
+            val cookie = CookieManager.getInstance().getCookie(url)
+            if (!cookie.isNullOrEmpty()) {
+                req.addRequestHeader("Cookie", cookie)
+            }
+        }
         try {
-            dm.enqueue(req)
-            // 无回调通道，这里简化：附件经 DownloadEventBus 提示已开始下载。
-            if (!isMedia) {
+            val id = dm.enqueue(req)
+            if (isMedia && mediaUrl != null) {
+                synchronized(mediaDownloadJobs) {
+                    mediaDownloadJobs[id] = MediaDownloadJob(mediaUrl, localFile.absolutePath)
+                }
+            } else {
                 DownloadEventBus.notify(
                     DownloadResult(
                         true,
                         fileName,
-                        File(dir, fileName).absolutePath,
+                        localFile.absolutePath,
                         "已开始下载：$fileName"
                     )
                 )

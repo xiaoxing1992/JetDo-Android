@@ -89,7 +89,9 @@ fun PostRichContent(
     modifier: Modifier = Modifier,
     linkClicks: Map<String, Int>? = null,
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit = {}
+    onLinkClick: (String) -> Unit = {},
+    // 媒体解析(论坛同源上传件下载过 CF → 本地路径),音频播放条用;未接入时点播报错误态。
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") }
 ) {
     val blocks = remember(html) { CookedHtmlParser.parse(html) }
     // 本楼全部图片（原图 url + 优化图兜底），供图片浏览器整组翻页。
@@ -113,7 +115,8 @@ fun PostRichContent(
                 linkClicks = linkClicks,
                 viewerImages = viewerImages,
                 onOpenImages = onOpenImages,
-                onLinkClick = onLinkClick
+                onLinkClick = onLinkClick,
+                onResolveMedia = onResolveMedia
             )
         }
     }
@@ -154,7 +157,8 @@ private fun BlockView(
     linkClicks: Map<String, Int>? = null,
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") }
 ) {
     when (block.type) {
         RichBlockType.PARAGRAPH -> InlineText(
@@ -173,23 +177,23 @@ private fun BlockView(
             onLinkClick = onLinkClick
         )
 
-        RichBlockType.QUOTE -> QuoteBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+        RichBlockType.QUOTE -> QuoteBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
 
-        RichBlockType.TOPIC_QUOTE -> TopicQuoteBlock(block, key, onLinkClick)
+        RichBlockType.TOPIC_QUOTE -> TopicQuoteBlock(block, key, onLinkClick, onResolveMedia)
 
-        RichBlockType.CALLOUT -> CalloutBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+        RichBlockType.CALLOUT -> CalloutBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
 
         RichBlockType.CODE -> CodeBlock(block)
 
         RichBlockType.IMAGE -> ImageBlock(block, viewerImages, onOpenImages)
 
-        RichBlockType.LIST -> ListBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+        RichBlockType.LIST -> ListBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
 
         RichBlockType.TABLE -> TableBlock(block)
 
-        RichBlockType.SPOILER -> SpoilerBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+        RichBlockType.SPOILER -> SpoilerBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
 
-        RichBlockType.DISCLOSURE -> DisclosureBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+        RichBlockType.DISCLOSURE -> DisclosureBlock(block, key, expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
 
         RichBlockType.DIVIDER -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -208,15 +212,10 @@ private fun BlockView(
         // discourse-math 块级公式:离屏 MathJax 出图后居中;未就绪/失败退回裸 LaTeX。
         RichBlockType.MATH -> MathBlock(latex = block.text.orEmpty())
 
-        RichBlockType.AUDIO, RichBlockType.VIDEO -> Text(
-            text = (if (block.type == RichBlockType.VIDEO) "视频" else "音频") + "：" + block.src.orEmpty(),
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                .padding(12.dp)
-        )
+        // 音频:原生播放器就地播放;视频:黑底卡就地播放(点击加载,宽高比按解析值,缺省 16:9)。
+        RichBlockType.AUDIO -> AudioBlock(block, onResolveMedia)
+
+        RichBlockType.VIDEO -> VideoBlock(block, onResolveMedia)
 
         RichBlockType.UNSUPPORTED -> Text(
             text = plainNodeText(block.text.orEmpty()),
@@ -227,7 +226,31 @@ private fun BlockView(
     }
 }
 
-/** 引用：左侧 3dp 竖线 + 弱化底色，内部递归渲染子块。 */
+/** 音频块:原生播放条就地播放(对齐鸿蒙 AudioBlock builder 的落位——独立块、整行宽)。 */
+@Composable
+private fun AudioBlock(block: RichBlock, onResolveMedia: suspend (String) -> String) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        AudioPlayer(
+            src = block.src.orEmpty(),
+            onResolveMedia = onResolveMedia
+        )
+    }
+}
+
+/** 视频块:黑底播放卡就地播放。宽高比取 <video> 自带宽高,缺失退 16:9(对齐鸿蒙 VideoBlock builder)。 */
+@Composable
+private fun VideoBlock(block: RichBlock, onResolveMedia: suspend (String) -> String) {
+    val w = block.width
+    val h = block.height
+    Column(modifier = Modifier.fillMaxWidth()) {
+        VideoPlayer(
+            src = block.src.orEmpty(),
+            aspectRatio = if (w != null && h != null && w > 0 && h > 0) w.toFloat() / h else 1.78f,
+            onResolveMedia = onResolveMedia
+        )
+    }
+}
+
 /** 引用:左侧 3dp 竖线 + 弱化底色,内部递归渲染子块。对齐鸿蒙 QuoteBlock:背景 post_content_surface_bg
  *  (亮 #E6E8EB / 暗 #23262C),左条 post_content_border(更深一档)。此前误用 surfaceMuted(浅)+border(更浅)。 */
 @Composable
@@ -238,7 +261,8 @@ private fun QuoteBlock(
     linkClicks: Map<String, Int>? = null,
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         Box(
@@ -254,7 +278,7 @@ private fun QuoteBlock(
                 .padding(10.dp)
         ) {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
-                BlockView(inner, "$key-q$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+                BlockView(inner, "$key-q$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
             }
         }
     }
@@ -277,7 +301,8 @@ private fun QuoteAccent(bar: Boolean): Color {
 private fun TopicQuoteBlock(
     block: RichBlock,
     key: String,
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         Box(
@@ -321,7 +346,7 @@ private fun TopicQuoteBlock(
             if (!block.text.isNullOrEmpty()) {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     CookedHtmlParser.parse(block.text).forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-p$index", mutableStateListOf(), null, emptyList(), { _, _ -> }, onLinkClick)
+                        BlockView(inner, "$key-p$index", mutableStateListOf(), null, emptyList(), { _, _ -> }, onLinkClick, onResolveMedia)
                     }
                 }
             }
@@ -338,7 +363,8 @@ private fun CalloutBlock(
     linkClicks: Map<String, Int>? = null,
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     val expanded = if (!block.collapsible) true else if (key in expandedKeys) !block.defaultExpanded else block.defaultExpanded
     val accent = parseCalloutColor(block.calloutColor)
@@ -370,7 +396,7 @@ private fun CalloutBlock(
             if (expanded) {
                 Column(modifier = Modifier.padding(top = 6.dp)) {
                     block.blocks.orEmpty().forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-c$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+                        BlockView(inner, "$key-c$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
                     }
                 }
             }
@@ -439,7 +465,8 @@ private fun ListBlock(
     linkClicks: Map<String, Int>? = null,
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
         block.items.orEmpty().forEachIndexed { index, item ->
@@ -455,7 +482,7 @@ private fun ListBlock(
                         // 列表项含块级图：文字成段落、图片各自成块级 IMAGE。
                         InlineText(item.inlines, onLinkClick = onLinkClick)
                         item.blocks.forEachIndexed { bi, inner ->
-                            BlockView(inner, "$key-l$index-$bi", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+                            BlockView(inner, "$key-l$index-$bi", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
                         }
                     } else {
                         InlineText(item.inlines, onLinkClick = onLinkClick)
@@ -513,13 +540,14 @@ private fun SpoilerBlock(
     linkClicks: Map<String, Int>? = null,
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     val revealed = key in expandedKeys
     if (revealed) {
         Column {
             block.blocks.orEmpty().forEachIndexed { index, inner ->
-                BlockView(inner, "$key-s$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+                BlockView(inner, "$key-s$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
             }
         }
     } else {
@@ -544,7 +572,8 @@ private fun DisclosureBlock(
     linkClicks: Map<String, Int>? = null,
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onLinkClick: (String) -> Unit
+    onLinkClick: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     val expanded = toggleState(expandedKeys, key)
     Column(
@@ -570,7 +599,7 @@ private fun DisclosureBlock(
         if (expanded) {
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) {
                 block.blocks.orEmpty().forEachIndexed { index, inner ->
-                    BlockView(inner, "$key-d$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick)
+                    BlockView(inner, "$key-d$index", expandedKeys, linkClicks, viewerImages, onOpenImages, onLinkClick, onResolveMedia)
                 }
             }
         }

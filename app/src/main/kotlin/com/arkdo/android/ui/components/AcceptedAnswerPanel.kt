@@ -66,6 +66,8 @@ fun AcceptedAnswerPanel(
     onJumpToPost: (Int) -> Unit = {},
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onOpenLink: (String) -> Unit = {},
+    // 采纳答案正文里也可能带音频:透传媒体解析回调(同 PostRichContent)。
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
     modifier: Modifier = Modifier
 ) {
     if (answers.isEmpty()) return
@@ -126,7 +128,8 @@ fun AcceptedAnswerPanel(
                 initiallyCollapsed = index > 0,
                 onJumpToPost = onJumpToPost,
                 onOpenImages = onOpenImages,
-                onOpenLink = onOpenLink
+                onOpenLink = onOpenLink,
+                onResolveMedia = onResolveMedia
             )
         }
     }
@@ -138,7 +141,8 @@ private fun AcceptedAnswerCard(
     initiallyCollapsed: Boolean,
     onJumpToPost: (Int) -> Unit,
     onOpenImages: (List<ViewerImage>, Int) -> Unit,
-    onOpenLink: (String) -> Unit
+    onOpenLink: (String) -> Unit,
+    onResolveMedia: suspend (String) -> String
 ) {
     val colors = com.arkdo.android.ui.theme.arkdoColors
     var collapsed by remember(answer.postNumber) { mutableStateOf(initiallyCollapsed) }
@@ -224,6 +228,7 @@ private fun AcceptedAnswerCard(
                             html = answer.cookedHtml,
                             onOpenImages = onOpenImages,
                             onLinkClick = onOpenLink,
+                            onResolveMedia = onResolveMedia,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

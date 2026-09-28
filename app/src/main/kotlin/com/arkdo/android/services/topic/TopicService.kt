@@ -526,6 +526,83 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
+     * discourse-reactions:按页读取某楼的反应用户(page 从 0 起,每页 30)。
+     * 响应只带用户明细,顶部分类数量由 topic.json 的 reactions 直接提供(对齐鸿蒙 getReactionUsers)。
+     */
+    suspend fun getReactionUsers(postId: Long, page: Int): NetworkResult<ReactionUsersPage> {
+        val safePage = page.coerceAtLeast(0)
+        val response = bridge.getJson(
+            "/discourse-reactions/posts/$postId/reactions-users-list.json?page=$safePage&limit=30"
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data ?: return NetworkResults.unexpectedResponse(
+            response.statusCode,
+            response.challengeState,
+            "站点表情用户列表响应为空。"
+        )
+        return try {
+            // 服务端返回的是扁平结构 {id, username, ..., reaction}(对齐鸿蒙 DiscourseReactionUser),
+            // 不是 {user:{...}, reaction} 嵌套 —— 经 DTO 解码后映射成领域模型。
+            val payload = json.decodeFromString<DiscourseReactionUsersPage>(data)
+            val mapped = payload.users.orEmpty().mapNotNull(::mapReactionUser)
+            NetworkResult(
+                success = true,
+                statusCode = response.statusCode,
+                challengeState = response.challengeState,
+                data = ReactionUsersPage(users = mapped, totalRows = payload.totalRows)
+            )
+        } catch (e: SerializationException) {
+            Timber.i(
+                "[ArkDO][TopicService] reaction users parse failed: %s",
+                data.take(600)
+            )
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点表情用户列表响应格式异常。"
+            )
+        }
+    }
+
+    /** 扁平结构 → 领域模型;id/username/reaction 缺一即跳过(对齐鸿蒙 mapReactionUsers)。 */
+    private fun mapReactionUser(source: DiscourseReactionUser): ReactionUser? {
+        val id = source.id ?: return null
+        val username = source.username ?: return null
+        val reaction = source.reaction ?: return null
+        if (username.isEmpty() || reaction.isEmpty()) return null
+        return ReactionUser(
+            user = User(
+                id = id,
+                username = username,
+                name = source.name,
+                avatarTemplate = source.avatarTemplate,
+                animatedAvatar = source.animatedAvatar
+            ),
+            reaction = reaction
+        )
+    }
+
+
+    // discourse-reactions 的反应用户分页接口。该接口不含各表情总数,总数仍以帖子详情的 reactions 为准。
+    @Serializable
+    data class DiscourseReactionUser(
+        val id: Long? = null,
+        val username: String? = null,
+        val name: String? = null,
+        @SerialName("avatar_template") val avatarTemplate: String? = null,
+        @SerialName("animated_avatar") val animatedAvatar: String? = null,
+        val reaction: String? = null
+    )
+
+    @Serializable
+    data class DiscourseReactionUsersPage(
+        val users: List<DiscourseReactionUser> = emptyList(),
+        @SerialName("total_rows") val totalRows: Int = 0
+    )
+
+    /**
      * linux.do shared issue（"俺也一样"）toggle：POST /solution/shared_issue，form body topic_id。
      * 纯翻转端点——点/撤同一地址；响应 { count, user_created_shared_issue } 即翻转后的权威新态。
      * notifyChallenge:true——与书签/评论一致：撞 CF 时触发静默恢复，下一次点击就能过。

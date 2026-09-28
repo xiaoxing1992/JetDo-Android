@@ -103,6 +103,10 @@ fun TopicPostItem(
     onOpenLink: (String) -> Unit = {},
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onOpenUser: (User) -> Unit = {},
+    // 帖内音频播放:论坛同源上传件经桥下载过 CF(见 AudioPlayer);未传入时点播报错误态。
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    // 回应人数胶囊点击 → 「谁回应了」弹层(对齐鸿蒙 openReactionUsers;未接时胶囊不可点)。
+    onOpenReactions: () -> Unit = {},
     // 采纳答案面板:仅一楼下发非空数组(对齐鸿蒙:postNumber===1 才传 detail.acceptedAnswers)。
     acceptedAnswers: List<AcceptedAnswer> = emptyList(),
     onReply: (TopicPost) -> Unit = {},
@@ -182,6 +186,7 @@ fun TopicPostItem(
                 linkClicks = post.linkClicks,
                 onOpenImages = onOpenImages,
                 onLinkClick = onOpenLink,
+                onResolveMedia = onResolveMedia,
                 modifier = Modifier.padding(top = 12.dp)
             )
 
@@ -202,7 +207,8 @@ fun TopicPostItem(
                     answers = acceptedAnswers,
                     onJumpToPost = onJumpToPost,
                     onOpenImages = onOpenImages,
-                    onOpenLink = onOpenLink
+                    onOpenLink = onOpenLink,
+                    onResolveMedia = onResolveMedia
                 )
             }
 
@@ -276,6 +282,7 @@ fun TopicPostItem(
                         }
                     }
                 },
+                onOpenReactions = onOpenReactions,
                 onEdit = { onEdit(post) },
                 editLoading = editLoadingPostId == post.id,
                 onDeletePost = { onDeletePost(post) },
@@ -319,6 +326,7 @@ fun TopicPostItem(
                     onOpenUser = onOpenUser,
                     onOpenLink = onOpenLink,
                     onOpenImages = onOpenImages,
+                    onResolveMedia = onResolveMedia,
                     onCollapse = { repliesExpanded = false },
                     onJumpToPost = onJumpToPost
                 )
@@ -499,6 +507,8 @@ private fun PostFooter(
     onCopyLink: () -> Unit,
     onBookmarkToggle: () -> Unit,
     onRepliesToggle: () -> Unit,
+    // 回应人数胶囊点击 → 「谁回应了」弹层(对齐鸿蒙 PostActions 区的 reactionUsers 点击)。
+    onOpenReactions: () -> Unit = {},
     // 火箭入口（本楼无 boost 时显示，位于回复左边）。
     canAddBoost: Boolean = false,
     // 「俺也一样」(shared issue)。
@@ -583,7 +593,10 @@ private fun PostFooter(
                 if ((post.reactionUsersCount ?: 0) > 0 && reactions.isNotEmpty()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable(onClick = onOpenReactions)
+                            .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
                     ) {
                         // 汇总胶囊最多展示前 3 种表情，总人数仍用 reactionUsersCount。
                         reactions.take(3).forEach { reaction ->
@@ -781,6 +794,7 @@ private fun RepliesSection(
     onOpenUser: (User) -> Unit,
     onOpenLink: (String) -> Unit,
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
     onCollapse: () -> Unit,
     onJumpToPost: (Int) -> Unit
 ) {
@@ -850,6 +864,7 @@ private fun RepliesSection(
                             html = reply.cookedHtml,
                             onOpenImages = onOpenImages,
                             onLinkClick = onOpenLink,
+                            onResolveMedia = onResolveMedia,
                             modifier = Modifier.padding(top = 6.dp)
                         )
                     }
