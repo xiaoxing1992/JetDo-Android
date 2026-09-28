@@ -6,6 +6,8 @@ import android.content.Context
 import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.PostReaction
+import com.arkdo.android.data.models.ReactionUser
+import com.arkdo.android.data.models.ReactionUsersPage
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
@@ -14,6 +16,7 @@ import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.services.reading.ReadingTracker
 import com.arkdo.android.services.topic.PostDataSource
+import com.arkdo.android.services.topic.ReactionUsersPager
 import com.arkdo.android.services.topic.PostStreamPager
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.network.JsonRequestOptions
@@ -371,6 +374,109 @@ class TopicDetailViewModel @Inject constructor(
      * 表情回应切换（点赞 = heart）：请求先行，结果经 done 回调（成功 true）。
      * 成功后的本地计数/已点态刷新依赖详情重拉，暂以回调通知屏幕。
      */
+    // ── 「谁回应了」弹层(对齐鸿蒙 TopicDetailPage.openReactionUsers / loadReactionUsersPage) ──
+
+    /** 翻页游标:下一次要取的页(服务端 page 从 0 起)。 */
+    private var reactionSheetNextPage: Int = 0
+
+    /** 打开弹层即自增;在途响应回来时 epoch 不匹配则丢弃,防止旧弹层的响应写进新弹层。 */
+    private var reactionSheetEpoch: Int = 0
+
+    fun openReactionSheet(post: TopicPost) {
+        val total = post.reactionUsersCount ?: 0
+        if (total <= 0) return
+        reactionSheetEpoch++
+        reactionSheetNextPage = 0
+        _uiState.update {
+            it.copy(
+                reactionSheet = ReactionUsersSheetState(
+                    post = post,
+                    reactions = post.reactions.orEmpty(),
+                    totalRows = total,
+                    hasMore = true
+                )
+            )
+        }
+        loadReactionUsersPage(reset = true, page = 0)
+    }
+
+    fun dismissReactionSheet() {
+        reactionSheetEpoch++
+        _uiState.update { it.copy(reactionSheet = null) }
+    }
+
+    /** 切过滤表情:纯客户端过滤已加载名单,不重发请求(对齐鸿蒙 selectedReactionUserFilter)。 */
+    fun selectReactionFilter(reaction: String) {
+        _uiState.update {
+            it.reactionSheet?.let { sheet -> it.copy(reactionSheet = sheet.copy(selectedReaction = reaction)) } ?: it
+        }
+    }
+
+    fun loadMoreReactionUsers() {
+        val sheet = _uiState.value.reactionSheet ?: return
+        if (!sheet.hasMore || sheet.loadMoreLoading || sheet.initialLoading) return
+        loadReactionUsersPage(reset = false, page = reactionSheetNextPage)
+    }
+
+    fun retryReactionUsers() {
+        val sheet = _uiState.value.reactionSheet ?: return
+        if (sheet.initialError != null) {
+            loadReactionUsersPage(reset = true, page = 0)
+        } else {
+            loadMoreReactionUsers()
+        }
+    }
+
+    private fun loadReactionUsersPage(reset: Boolean, page: Int) {
+        val sheet = _uiState.value.reactionSheet ?: return
+        if (sheet.initialLoading || sheet.loadMoreLoading) return
+        if (!reset && !sheet.hasMore) return
+        val epoch = reactionSheetEpoch
+        _uiState.update {
+            it.reactionSheet?.let { s ->
+                it.copy(
+                    reactionSheet = if (reset) {
+                        s.copy(initialLoading = true, initialError = null)
+                    } else {
+                        s.copy(loadMoreLoading = true, loadMoreError = null)
+                    }
+                )
+            } ?: it
+        }
+        viewModelScope.launch {
+            val result = topicService.getReactionUsers(sheet.post.id, page)
+            if (epoch != reactionSheetEpoch) return@launch
+            _uiState.update {
+                it.reactionSheet?.let { s ->
+                    if (!result.success || result.data == null) {
+                        val message = result.error?.message ?: "加载表情回应失败，请稍后重试。"
+                        it.copy(
+                            reactionSheet = if (reset) {
+                                s.copy(initialLoading = false, initialError = message)
+                            } else {
+                                s.copy(loadMoreLoading = false, loadMoreError = message)
+                            }
+                        )
+                    } else {
+                        val pageData = result.data
+                        // 去重累积与 hasMore 判定走纯逻辑(对齐鸿蒙 ReactionUsersPager,含单测)。
+                        val merged = ReactionUsersPager.merge(s.users, pageData, s.totalRows)
+                        it.copy(
+                            reactionSheet = s.copy(
+                                users = merged.users,
+                                totalRows = merged.totalRows,
+                                initialLoading = false,
+                                loadMoreLoading = false,
+                                hasMore = merged.hasMore
+                            )
+                        )
+                    }
+                } ?: it
+            }
+            if (result.success) reactionSheetNextPage = page + 1
+        }
+    }
+
     fun toggleReaction(post: TopicPost, reaction: String, done: (Boolean) -> Unit) {
         val topicId = currentTopicId ?: return done(false)
         viewModelScope.launch {
@@ -1478,5 +1584,24 @@ data class TopicDetailUiState(
     val editingOriginalRaw: String = "",
     val editLoadingPostId: Long = 0L,
     // 正在软删除或恢复的楼 id（>0 时该楼操作按钮转圈，避免连点）。
-    val postActionLoadingId: Long = 0L
+    val postActionLoadingId: Long = 0L,
+    // 「谁回应了」弹层（对齐鸿蒙 ReactionUsersSheet）：非空即弹层可见，请求与分页状态都在这里。
+    val reactionSheet: ReactionUsersSheetState? = null
+)
+
+/**
+ * 「谁回应了」弹层状态。reactions(chips 来源)与 totalRows(总人数)取自楼层与首页响应；
+ * users 为跨页累积去重后的名单，selectedReaction 为客户端过滤(不重发请求)。
+ */
+data class ReactionUsersSheetState(
+    val post: TopicPost,
+    val reactions: List<PostReaction>,
+    val users: List<ReactionUser> = emptyList(),
+    val totalRows: Int = 0,
+    val selectedReaction: String = "",
+    val initialLoading: Boolean = false,
+    val loadMoreLoading: Boolean = false,
+    val hasMore: Boolean = false,
+    val initialError: String? = null,
+    val loadMoreError: String? = null
 )

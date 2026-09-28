@@ -141,6 +141,9 @@ dependencies {
     implementation(libs.tbssdk)
     // WebView 身份统一(UA Client Hints / X-Requested-With),见 WebSessionManager.applyUserAgent
     implementation(libs.androidx.webkit)
+    // 帖内音视频播放(对齐鸿蒙 AVPlayer 播放器):ExoPlayer 引擎 + PlayerView 控制条
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     implementation(libs.backdrop)
     implementation(libs.capsule)
     implementation(libs.okhttp)

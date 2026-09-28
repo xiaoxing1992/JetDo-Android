@@ -51,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -104,6 +105,7 @@ import com.arkdo.android.ui.components.ImageViewer
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
 import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.components.ReactionUsersSheetContent
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
@@ -401,7 +403,9 @@ fun TopicDetailScreen(
                                         postActionLoadingId = ui.postActionLoadingId,
                                         onDeletePost = { p -> viewModel.deleteOwnPost(p) {} },
                                         onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
-                                        onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) }
+                                        onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) },
+                                        // 回应胶囊 → 弹层(状态在 VM,对齐鸿蒙 TopicDetailPage:483)。
+                                        onOpenReactions = { viewModel.openReactionSheet(it) }
                                 )
                             }
                         }
@@ -500,6 +504,35 @@ fun TopicDetailScreen(
                 AndroidView(factory = { engine.webView }, update = {})
             }
         }
+        // 「谁回应了」底部弹层(对齐鸿蒙 TopicDetailPage 的 bindSheet + ReactionUsersSheet)。
+        // 状态与分页在 ViewModel,这里只负责挂载/收起与用户跳转。
+        ui.reactionSheet?.let { sheet ->
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { viewModel.dismissReactionSheet() },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                ReactionUsersSheetContent(
+                    reactions = sheet.reactions,
+                    totalRows = sheet.totalRows,
+                    users = sheet.users,
+                    selectedReaction = sheet.selectedReaction,
+                    initialLoading = sheet.initialLoading,
+                    loadMoreLoading = sheet.loadMoreLoading,
+                    hasMore = sheet.hasMore,
+                    initialError = sheet.initialError,
+                    loadMoreError = sheet.loadMoreError,
+                    onSelectReaction = viewModel::selectReactionFilter,
+                    onLoadMore = viewModel::loadMoreReactionUsers,
+                    onRetry = viewModel::retryReactionUsers,
+                    onOpenUser = { user ->
+                        viewModel.dismissReactionSheet()
+                        onOpenUser(user)
+                    }
+                )
+            }
+        }
+
         ReplyComposerOverlay(
             visible = ui.composerVisible && ui.composerExpanded,
             title = ui.composerPlaceholder,
@@ -628,7 +661,9 @@ private fun TopicDetailContent(
     // 「上次访问」红线锚楼 id：>0 时该楼底边画红线（对齐鸿蒙 TopicDetailPage.ets:456）。
     lastVisitedAnchorPostId: Long = 0L,
     // 阅读计时上报：可见楼层号变化（滚动/分页）时回调，由上层喂给 ReadingTracker。
-    onVisiblePostNumbers: (List<Int>) -> Unit = {}
+    onVisiblePostNumbers: (List<Int>) -> Unit = {},
+    // 回应人数胶囊点击 → 上层开「谁回应了」弹层。
+    onOpenReactions: (TopicPost) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 只跳一次：posts 会因已读上报(markPostsRead 重建列表)等原因变化，若 key 含 posts
@@ -734,6 +769,11 @@ private fun TopicDetailContent(
                 flashTargetPostId = flashTargetPostId,
                 onOpenLink = onOpenLink,
                 onOpenImages = onOpenImages,
+                // 帖内音频:论坛同源上传件经 host 桥的下载委托过 CF 下到沙箱再播(对齐鸿蒙
+                // TopicDetailPage.ets:476 的 onResolveMedia → bridge.downloadMedia)。
+                onResolveMedia = { url -> ArkWebNetworkBridge.downloadMedia(url) },
+                // 回应人数胶囊 → 「谁回应了」弹层(对齐鸿蒙 TopicDetailPage:483 openReactionUsers)。
+                onOpenReactions = { onOpenReactions(post) },
                 onReply = onReply,
                 onJumpToPost = onJumpToPost,
                 // 「上次访问」红线：只画在锚楼底边（对齐鸿蒙 :456 的 post.id === anchor && anchor > 0）。
