@@ -1,51 +1,35 @@
-# ArkDO-Android 功能缺口分析（v7 · 全量复核）
+# ArkDO-Android 功能缺口分析
 
 > 对标对象：鸿蒙版 ArkDO（ArkTS · `@7680996` · 28 页面 / 47 组件 / 25 服务子域）
-> 本项目：`feat/migrate-vertical-slice` @ `8dd6b3b` **+ 工作区 16 处未提交改动**（见 §一）
-> 复核日期：2026-09-29
-> 上一版：`eb5da45`（记 36 项 + 7 组死代码）
-> 规则：只记「现在还没做的」。已完成项从清单移除，但 delta 在 §一 保留一行。
+> 本项目：`feat/migrate-vertical-slice`
+> 规则：只记「现在还没做的」。做完删一条 —— 不记版本号、不记修复历史、不做已修项记账。
 
 ---
 
 ## 一、结论先行
 
-**还剩 41 项 + 7 组死代码。** 但比数字更重要的是：**你手上有一批已写好、没提交的代码**，它一次消掉了 3 个旧缺口。
+**还剩 39 项 + 7 组死代码。**
 
-### 1.1 工作区未提交改动（本轮最大变数）
-
-`git status` 有 16 处改动，**全部未提交**。它覆盖了旧清单里 3 项：
-
-| 旧编号 | 事项 | 落点 | 状态 |
-|---|---|---|---|
-| P1-7 | 版本公告 / 升级提示 | `services/announce/`（`VersionAnnouncement.kt` 179 行 + `VersionAnnouncePrefs.kt`）| 代码完整，**但被开关静默** |
-| P1-11 | 待审核帖子卡片 | `ui/components/PendingPostCard.kt`、`TopicService.deletePendingPost`、`TopicDetailViewModel` 乐观追加 | 已做 |
-| P1-12 | 抽奖帖提醒卡 | `LotteryNoticeCard.kt`、`LotteryTopicRule.kt`、`LotteryTipPrefs.kt` | 已做（含单测） |
-| S15（部分）| 实验性开关 | `ExperimentalSettingsScreen.kt` +32 行 | 1/6 → **2/6** |
-
-同时旧清单里几条「半截」也已被接通：`ChallengeRecoveryEventBus.subscribeManual` / `forceEscalate` / `notifySheetDismissed` 三个原本零调用的方法，现在都有调用方（`MainActivity.kt:124/126/184`）；`ChallengeShortcutEventBus` 已订阅 + 进页 `reset()`（`TopicDetailViewModel.kt:134/204`）；`extractIncomingHomeTopicId` 已接进首页（`HomeFeatureScreen.kt:69`）。
-
-> ⚠️ **这 16 处改动会让「还差什么」的答案在两版之间漂移。建议先提交或至少 stash 归档**，否则下次审计仍要重新算一遍。
-
-### 1.2 对齐度与缺口分布
+### 1.1 缺口分布
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
-| P1 | 9 | 功能不完整，用起来别扭 |
+| P1 | 7 | 功能不完整，用起来别扭 |
 | 半截 | 11 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
-| **本轮新增** | 6 | 旧清单完全没覆盖的能力缺失 |
+| 能力缺失 | 6 | 目录级对比看不出来的缺失 |
 | P2 | 12 | 工程化与发布 |
 | 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
+| **合计** | **39** | 上表各项之和，与逐行点数一致 |
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 88% / 回帖 80% / 表情 85% / 音视频 90% / 我的 88% / 用户主页 88% / **实验性功能 33%** / **设置 48%** / **多站点 30%** / **系统推送 0%**。
+模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 88% / 回帖 80% / 表情 85% / 音视频 90% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 48%** / **多站点 30%** / **系统推送 0%**。
 
-### 1.3 本轮的增量价值
+### 1.2 隐性缺口（最值钱的三个）
 
-纯目录对比只能得到「少了哪几个文件」。本轮把重心放在**隐性缺口**上，抓到的三个最值钱的：
+纯目录对比只能得到「少了哪几个文件」。真正值钱的是**看着有、其实没接上**的那类：
 
 1. **引用卡是「半截链路」**——三个定位字段解析齐全、单测全绿，**UI 层零消费**，还配了一句谎称已实现的注释（§四 S12）
-2. **徽章点击缺口比上一版记的更广**——不是「某一行没传回调」，而是 **11 个调用点无一传**（§四 S11）
+2. **徽章点击的缺口比清单上记的更广**——不是「某一行没传回调」，而是 **11 个调用点无一传**（§四 S11）
 3. **动态头像不是「开关没做」，是整个能力没做**（§五）
 
 ---
@@ -62,12 +46,10 @@
 
 ---
 
-## 三、P1 · 功能不完整（9 项）
+## 三、P1 · 功能不完整（7 项）
 
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
-| 4 | **正在回复的人 / 输入中** | `services/presence/` + `ReplyingPresenceBar` + `TypingDots` | 不存在。`MessageBusData` 已解析 `entering_users` / `leaving_user_ids`，**零消费者** | `MessageBusEventBus.kt:17/34/35`（全库仅定义处命中）|
-| 5 | **帖内实时新回复** | `RealtimePostsPrefs` | `extractMessageBusTopicId` **仅单测调用**；`RealtimePostsPrefs` 类不存在；`RealtimeTopicsPrefs` **默认值仍反着**（Android `true` vs 鸿蒙 `false`） | `MessageBusEventBus.kt:87`；`RealtimeTopicsPrefs.kt:17/24`；参考 `realtime/RealtimeTopicsPrefs.ets:9` |
 | 6 | **附件 / 视频上传 + 下载分享** | `UploadService` + `VideoTranscoder` + `DownloadService` + `ImageShareService` | **只能传图**：两处均 `PickVisualMedia.ImageOnly`（`NewTopicScreen.kt:168`、`ReplyComposerOverlay.kt:167`）；`VideoTranscoder` 全库 0 命中；`UploadMarkdown.kt:8` 自述「attachment 变体用于附件（**后续切片**）」 | 同上 |
 | 7 | **Markdown 工具栏缺 2 钮** | 12 钮 | **10 钮**，缺 `video`、`file-arrow-up` | `NewTopicScreen.kt:852-864`（实测 10 个 `ToolIcon`）；参考 `MarkdownToolbar.ets:20-31`（12 项）|
 | 8 | **多图批量上传 + 进度** | 多选 + `N/M` 进度 | 单图；`PickMultipleVisualMedia` **0 命中** | 全库 |
@@ -89,15 +71,16 @@
 | S12 | **引用卡不能跳楼 / 不能展开全文**（**半截链路**） | `quoteTopicId` / `quotePostNumber` / `quoteIsReply` **三个字段定义齐全**（`RichContentTypes.kt:129-133`）、**解析并填充**（`CookedHtmlParser.kt:275-296`）、**单测全绿**（`CookedHtmlParserTest.kt:66-88`），但 **UI 层零消费**——`TopicQuoteBlock` 全篇不引用这三个字段，只做了「整卡可点跳 href」。参考实现的引用卡有**折叠 chevron + 展开被引用楼全文**（`QuoteFullStatus` 三态）与**同帖跳转箭头**（`quoteJumpIcon`：同帖按楼号判上/下、跨帖 arrow-right）。另：`CookedHtmlParser.kt:290` 注释谎称「渲染层(`quotePostNumber > 0`)不显示展开箭头」——**渲染层根本没有这段逻辑** | 上述四处；参考 `PostRichContent.ets:589-697` |
 | S13 | 深链不导航 + 无 `onNewIntent` | `arkdo://notification` 净空转；只有 `onCreate` 处理 intent，App 活着时点通知接不到 | `MainActivity.kt:201/210`；Manifest `:41-46`；全库 `onNewIntent` **0 命中** |
 | S14 | 过盾入口的用户开关缺失 | 快捷入口会渲染、订阅与 `reset()` 都已接通，但无 `ChallengeShortcutPrefs`；鸿蒙该开关默认**关** | `TopicDetailViewModel.kt:128` 自述；`NetworkSettingsScreen.kt:52` 自述；参考 `NetworkSettingsPage.ets:199-231` |
-| S15 | 实验性开关只有 2/6 | 有：首页新话题提醒（**默认值反着**）、抽奖帖提醒（本轮新增）。缺 4：帖子内新回复提醒、动态头像、点分类/标签快速筛选、智感握姿（**后者鸿蒙专有，见 §五**） | `ExperimentalSettingsScreen.kt:79-101`；参考 `ExperimentalSettingsPage.ets:40-45`（6 项）|
+| S15 | 实验性开关只有 3/6 | 有：首页新话题提醒（**默认值反着**，见 S20）、抽奖帖提醒、帖子内新回复提醒（默认关，对齐鸿蒙）。缺 3：动态头像、点分类/标签快速筛选、智感握姿（**后者鸿蒙专有，见 §五**） | `ExperimentalSettingsScreen.kt:79-101`；参考 `ExperimentalSettingsPage.ets:40-45`（6 项）|
 | S16 | HTTP 明文放行 | `usesCleartextTraffic="true"`（release 同样允许） | Manifest `:25` |
 | S17 | 诊断能力降级 | 缺详细日志开关、日志大小标签、清空二次确认（仅一个「清空日志」图标，无确认） | `DebugLogScreen.kt:152`；对照 `DiagnosticsSettingsPage.ets:119-196` |
 | S18 | 版本公告「源未定」 | 见 P1-12。功能写好但**默认不生效**，属于典型的「看着有、用起来没有」 | 同 P1-12 |
 | S19 | **文件日志器缺失** | 鸿蒙 `services/logging/` 有 `FileLogger` + `Log`；Android 只有内存态 `DebugLogStore`（无落盘）。这直接影响线上问题取证能力 | 两侧 `services/logging/` 目录实测 |
+| S20 | **`RealtimeTopicsPrefs` 默认值两侧反着** | Android 默认 **开**、鸿蒙默认 **关**（鸿蒙注释：该功能常驻后台长轮询，并非所有用户都需要）。新加的 `RealtimePostsPrefs` 已对齐鸿蒙（默认关），两者相互独立 | `RealtimeTopicsPrefs.kt:17/24`；参考 `realtime/RealtimeTopicsPrefs.ets:9` |
 
 ---
 
-## 五、本轮新增：旧清单完全没覆盖（6 项）
+## 五、能力缺失：目录级对比看不出来（6 项）
 
 | # | 缺口 | 参考实现 | Android 实况 | 证据 |
 |---|---|---|---|---|
@@ -171,14 +154,11 @@
 
 ## 九、建议实施顺序
 
-**第 0 步 · 先处置工作区**
-0. **提交这 16 处未提交改动**（版本公告 / 待审卡 / 抽奖卡 / 实验性开关）。否则后面所有排期都建立在一个会漂移的基线上。
-
 **第 1 步 · 差一次接通的（改动小、风险低）**
 1. **S12 引用卡**：解析层已就绪，只需渲染层消费 `quotePostNumber` / `quoteTopicId` / `quoteIsReply` + 补方向箭头与展开态，**并从 `CookedHtmlParser.kt:290` 删掉那句谎报的注释**
 2. **S11 + N2 一起做**：11 个调用点接 `onTagClick` / `onCategoryClick`，同时补 `BadgeFilterPrefs`（默认关）——入口与开关是**一对**
 3. **S13 深链导航 + `onNewIntent`**（`MainActivity.kt`），补 `POST_NOTIFICATIONS` 运行时申请
-4. **S15 补齐其余开关**（帖子内新回复提醒、动态头像、点分类/标签筛选；智感握姿不补）+ **订正 `RealtimeTopicsPrefs` 默认值**为 `false`
+4. **S15 补齐其余开关**（动态头像、点分类/标签筛选；智感握姿不补）+ **S20 订正 `RealtimeTopicsPrefs` 默认值**为 `false`（属产品决策，需先确认）
 5. **S19 文件日志器** + S17 诊断能力补齐
 6. **S16 关明文 HTTP**（注意 DoH 生效后仍可能有 http 兜底，先确认再关）
 
@@ -190,13 +170,12 @@
 
 **第 3 步 · 横向铺开**
 11. **系统推送全链路**（P0-1）：含 `services/push/` 移植、Relay 配置与同意流程、本地通知渠道、`onNewIntent` 接续
-12. **presence**（P1-4，含 `ReplyingPresenceBar` / `TypingDots`）/ **帖内实时新回复**（P1-5）
-13. **平板双栏**（P1-9）/ **抽屉分组**（P1-10）/ **动态头像**（N1）
+12. **平板双栏**（P1-9）/ **抽屉分组**（P1-10）/ **动态头像**（N1）
 
 **第 4 步 · 发布准备**
-14. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
-15. 崩溃上报、隐私政策与商店素材（P2-26/27）
-16. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
+13. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
+14. 崩溃上报、隐私政策与商店素材（P2-26/27）
+15. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
 
 ---
 
@@ -211,7 +190,7 @@ grep -nE "uses-permission|scheme=" app/src/main/AndroidManifest.xml
 rg -l "NotificationManager|NotificationCompat|NotificationChannel" -g '*.kt'   # 0 命中 = 无本地通知
 rg -n "onNewIntent" -g '*.kt'                                                  # 0 命中 = 前台接不到通知
 
-# ── 半截链路：解析了但没消费（判据 B，本轮 S12 就是这么抓到的）──
+# ── 半截链路：解析了但没消费（判据 B，S12 就是这么抓到的）──
 rg -n "quotePostNumber|quoteTopicId|quoteIsReply" -g '*.kt'
 #   → 命中只有 RichContentTypes(定义) / CookedHtmlParser(填充) / *Test(断言)
 #   → ui/ 下 0 命中 = UI 从不消费
@@ -237,5 +216,5 @@ rg -l "CurrentSite|ForumPrefs|SiteCapabilities" -g '*.kt'
 grep -n "signingConfig" app/build.gradle.kts ; ls -a | grep -E "^\.github" ; ls app/src/main/res/
 ```
 
-> **工具提醒（本轮又踩一次）**：macOS 自带 BSD `grep` **不支持 `\|`**（GNU 扩展）。我用 `grep -rn "尚未迁移\|未迁移"` 查设置页时**静默返回空**，差点把「设置 4 入口未迁移」误判成已修。一律用 `grep -E "a|b"` 或 ripgrep（`rg`）。
+> **工具提醒（又踩一次）**：macOS 自带 BSD `grep` **不支持 `\|`**（GNU 扩展）。用 `grep -rn "尚未迁移\|未迁移"` 查设置页会**静默返回空**，差点把「设置 4 入口未迁移」误判成已修。一律用 `grep -E "a|b"` 或 ripgrep（`rg`）。
 > 另：`find . -path ... | wc -l` 这类长组合会被沙箱 `SIGTERM` 杀掉（exit 137），统计类任务改用 Glob/Grep 工具。
