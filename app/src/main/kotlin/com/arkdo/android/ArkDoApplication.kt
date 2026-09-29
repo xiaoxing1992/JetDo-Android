@@ -8,6 +8,7 @@ import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.core.designsystem.TopicListStyleStore
 import com.arkdo.android.services.announce.VersionAnnouncePrefs
 import com.arkdo.android.services.topic.LotteryTipPrefs
+import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
 import com.arkdo.android.services.network.DohManager
@@ -57,6 +58,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         TopicListStyleStore.init(this)
         FabGlassStore.init(this)
         RealtimeTopicsPrefs.init(this)
+        RealtimePostsPrefs.init(this)
         VersionAnnouncePrefs.init(this)
         LotteryTipPrefs.init(this)
 

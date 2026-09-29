@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.topic.LotteryTipPrefs
 import com.arkdo.android.ui.theme.arkdoColors
@@ -47,6 +48,7 @@ fun ExperimentalSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val enabled by RealtimeTopicsPrefs.enabled.collectAsState()
+    val realtimePostsEnabled by RealtimePostsPrefs.enabled.collectAsState()
     val lotteryTipEnabled by LotteryTipPrefs.enabled.collectAsState()
 
     Column(
@@ -102,6 +104,34 @@ fun ExperimentalSettingsScreen(
                     onCheckedChange = RealtimeTopicsPrefs::setEnabled,
                     colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
                 )
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+            // 帖子内新回复提醒(对齐鸿蒙 ExperimentalSettingsPage 的 RealtimePostsCell,默认关):
+            // 开着进帖子会多订一个 /topic/<id> 频道，「正在回复」presence 也一并启用。
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = arkdoColors.surfaceCard,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("帖子内新回复提醒", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(
+                            "看帖时自动接收他人的新回复",
+                            fontSize = 12.sp,
+                            color = arkdoColors.textFaint,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Switch(
+                        checked = realtimePostsEnabled,
+                        onCheckedChange = RealtimePostsPrefs::setEnabled,
+                        colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(28.dp))
             // 抽奖帖提醒(对齐鸿蒙 ExperimentalSettingsPage:97,默认开):

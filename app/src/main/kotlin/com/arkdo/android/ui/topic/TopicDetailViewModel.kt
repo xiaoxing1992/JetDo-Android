@@ -13,8 +13,14 @@ import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
+import com.arkdo.android.data.models.User
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.CurrentUserHolder
+import com.arkdo.android.services.message.MessageBusEvent
+import com.arkdo.android.services.message.MessageBusEventBus
+import com.arkdo.android.services.message.extractCreatedPostId
+import com.arkdo.android.services.presence.TopicPresenceService
+import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.reading.ReadingTracker
 import com.arkdo.android.services.topic.PostDataSource
 import com.arkdo.android.services.topic.ReactionUsersPager
@@ -65,6 +71,12 @@ private const val DELETED_BY_AUTHOR_HTML = "<p>(帖子已被作者删除)</p>"
 
 /** 回帖/编辑草稿的自动保存防抖，对齐鸿蒙 TopicDetailPage 的 REPLY_DRAFT_SAVE_DEBOUNCE_MS（2 秒）。 */
 private const val REPLY_DRAFT_SAVE_DEBOUNCE_MS = 2000L
+
+/**
+ * 实时新楼去抖窗口：合并 ~400ms 内连着来的多条 created，一次批量拉
+ * （对齐鸿蒙 TopicDetailPage 的 INCOMING_POST_DEBOUNCE_MS）。
+ */
+private const val INCOMING_POST_DEBOUNCE_MS = 400L
 
 /**
  * 话题详情页 ViewModel —— 窗口式加载，对齐鸿蒙 TopicDetailPage 的数据流。
@@ -144,6 +156,9 @@ class TopicDetailViewModel @Inject constructor(
     override fun onCleared() {
         challengeUnsubscribe()
         challengeShortcutUnsubscribe()
+        // 实时链路兜底退订：正常路径由 onDetailDetach 收尾，但 VM 被直接回收（进程内导航栈清理）
+        // 时那个回调未必到，留着订阅会让已销毁的页面继续收事件。
+        releaseRealtime(clearBanner = true)
         renderEngine?.release()
         renderEngine = null
         readingTracker.stop()
@@ -174,6 +189,43 @@ class TopicDetailViewModel @Inject constructor(
     private var lastVisitedSnapshot: Int = 0
     private var lastVisitedAnchorPostId: Long = 0L
 
+    // ===== 帖内实时：新回复（/topic/<id> 的 created）+「正在回复」presence =====
+    // 两者同受「帖子内新回复提醒」开关门控（对齐鸿蒙 TopicDetailPage.realtimePostsEnabled，
+    // 那边 presence 也挂在这一个开关下）。开关默认关 —— 见 RealtimePostsPrefs。
+
+    /** 已挂上实时订阅的 topicId（0 = 未挂）。换帖/退订时复位。 */
+    private var realtimeTopicId = 0L
+    private var messageBusUnsubscribe: (() -> Unit)? = null
+    /** created 只带 post id、不带 cooked：收集待拉 id，去抖后一次 loadMorePosts 批量拉。 */
+    private val pendingCreatedPostIds = mutableListOf<Long>()
+    private var createdFlushJob: Job? = null
+    /** 列表是否停在底部。在底部时新楼直接追加、不计数；否则累计提示条。由屏幕层上报。 */
+    private var listAtEnd = true
+    /** 提示条里首条新楼的楼号（点按跳过去）。0 = 当前没有可跳目标。 */
+    private var incomingFirstNewPostNumber = 0
+
+    /**
+     * 「正在回复」下行服务。bridge 走闭包惰性读取（单例在 Application 里才装配好），
+     * 当前用户 id 每次现取（换号后不必重建服务）。
+     */
+    private val presenceService = TopicPresenceService(
+        scopeProvider = { viewModelScope },
+        bridgeProvider = { ArkWebNetworkBridge },
+        currentUserId = { CurrentUserHolder.currentUser.value?.id ?: 0L },
+        onChange = { users -> _uiState.update { it.copy(presenceUsers = users) } }
+    )
+
+    init {
+        // 开关热切换（对齐鸿蒙 TopicDetailPage 的 @Watch onRealtimePostsToggled）：
+        // 开 ⇒ 补订本帖频道 + 启动 presence；关 ⇒ 退订、停 presence、清提示条。
+        // 首次收值即当前开关态，detail 未就位时 attachRealtime 是 no-op，等 applyDetail 再挂。
+        viewModelScope.launch {
+            RealtimePostsPrefs.enabled.collect { enabled ->
+                if (enabled) attachRealtime() else releaseRealtime(clearBanner = true)
+            }
+        }
+    }
+
     fun loadTopic(
         topicId: Long,
         slug: String?,
@@ -189,6 +241,9 @@ class TopicDetailViewModel @Inject constructor(
             if (targetPostNumber != null) {
                 jumpToPostNumber(targetPostNumber)
             }
+            // 页面重建（配置变更）或离页后再回来会重新走这里：实时订阅可能已被 onDetailDetach
+            // 退掉，这里补挂（幂等——同帖已在挂时 attachRealtime 直接返回）。
+            attachRealtime()
             maybeOpenDraftComposer()
             return
         }
@@ -1346,6 +1401,154 @@ class TopicDetailViewModel @Inject constructor(
         _uiState.update { it.copy(actionMessage = null) }
     }
 
+    // ==================== 帖内实时：新回复 + 正在回复 ====================
+
+    /**
+     * 挂上本帖的实时链路：订阅 MessageBus 总线 + 订 `/topic/<id>` 频道 + 启动 presence 下行。
+     *
+     * 幂等——`applyDetail` 会被 rewindow 反复调用，同帖重复调用直接返回，不会重订阅/重发 GET。
+     * 只在「开关开 + detail 已就位」时才真挂。
+     */
+    private fun attachRealtime() {
+        if (!RealtimePostsPrefs.isEnabled()) return
+        val topicId = currentTopicId ?: return
+        if (realtimeTopicId == topicId) return
+        releaseRealtime(clearBanner = true)
+        realtimeTopicId = topicId
+        messageBusUnsubscribe = MessageBusEventBus.subscribe(::handleMessageBusEvent)
+        subscribeTopicChannel(topicId)
+        presenceService.start(topicId)
+    }
+
+    /**
+     * 卸载实时链路：退总线订阅、退频道、停 presence、清待拉队列与去抖计时器。
+     *
+     * [clearBanner] 控制是否连「N 条新回复」提示条一起清掉——换帖/关开关要清，
+     * 而"同帖重挂"这条路径上提示条本来也该复位（新楼层还会重来）。
+     */
+    private fun releaseRealtime(clearBanner: Boolean) {
+        messageBusUnsubscribe?.invoke()
+        messageBusUnsubscribe = null
+        val topicId = realtimeTopicId
+        realtimeTopicId = 0L
+        if (topicId > 0L) {
+            ArkWebNetworkBridge.unsubscribeTopicChannel(topicId)
+        }
+        presenceService.stop()
+        pendingCreatedPostIds.clear()
+        createdFlushJob?.cancel()
+        createdFlushJob = null
+        if (clearBanner) {
+            incomingFirstNewPostNumber = 0
+            if (_uiState.value.incomingNewPostCount != 0) {
+                _uiState.update { it.copy(incomingNewPostCount = 0) }
+            }
+        }
+    }
+
+    /** 订阅本帖频道，起点游标取详情的 message_bus_last_id（缺失回落 -1，只收新消息）。 */
+    private fun subscribeTopicChannel(topicId: Long) {
+        val position = lastDetail?.messageBusLastId ?: -1L
+        ArkWebNetworkBridge.subscribeTopicChannel(topicId, position)
+    }
+
+    /**
+     * 总线事件入口。Presence 增量与 `/topic` 新楼两条链路都从这里进。
+     *
+     * 新楼只在「已加载到话题结尾」时才接：否则新楼落在已加载窗口之外，原地追加会造成楼号跳断，
+     * 用户翻到末页或重进即可见（与没有实时时行为一致，对齐鸿蒙 handleMessageBusEvent）。
+     */
+    private fun handleMessageBusEvent(event: MessageBusEvent) {
+        // 长轮询循环重启（host 重载 / 前后台切换）后脚本内 state 重建，频道订阅会丢：
+        // 补订本帖频道并重同步 presence（对齐鸿蒙的 config-ready 分支）。
+        if (event.type == "status" && event.stage == "config-ready") {
+            val topicId = realtimeTopicId
+            if (topicId > 0L) subscribeTopicChannel(topicId)
+            presenceService.resync()
+            return
+        }
+        // Presence 增量：独立于下面的新楼门控（服务内部按 started / 频道自守卫）。
+        presenceService.handleBusEvent(event)
+
+        if (!RealtimePostsPrefs.isEnabled()) return
+        val topicId = realtimeTopicId
+        if (topicId <= 0L || event.channel != "/topic/$topicId") return
+        if (_uiState.value.hasMore) return
+        val postId = extractCreatedPostId(event) ?: return
+        // 已加载 / 已在待拉队列的跳过（含用户自己刚发、已本地追加的楼）。
+        if (dataSource.findById(postId) != null || postId in pendingCreatedPostIds) return
+        pendingCreatedPostIds.add(postId)
+        if (createdFlushJob?.isActive == true) return
+        createdFlushJob = viewModelScope.launch {
+            delay(INCOMING_POST_DEBOUNCE_MS)
+            flushCreatedPosts()
+        }
+    }
+
+    /**
+     * 去抖到点：批量拉收集到的新楼并追加到列表尾。
+     *
+     * 在底部 → 只追加不计数（新楼正好补进末尾「加载器 + 底部留白」腾出的位置）；
+     * 不在底部 → 累计「N 条新回复」提示条，记住首条新楼楼号供点按跳转。
+     */
+    private suspend fun flushCreatedPosts() {
+        val topicId = currentTopicId ?: return
+        val ids = pendingCreatedPostIds.filter { dataSource.findById(it) == null }
+        pendingCreatedPostIds.clear()
+        if (ids.isEmpty() || _uiState.value.hasMore) return
+
+        val result = topicService.loadMorePosts(topicId, ids)
+        // 拉取期间可能换窗（rewindowToPost 跳到中段）或已换帖：此时末尾追加会造成楼号跳断，
+        // 或结果根本不属于当前帖 —— 一律放弃本次追加。
+        if (!result.success || result.data.isNullOrEmpty()) return
+        if (currentTopicId != topicId || _uiState.value.hasMore) return
+
+        val before = dataSource.totalCount
+        val added = dataSource.appendPosts(result.data)
+        if (added <= 0) return
+        val firstNewPostNumber = dataSource.posts[before].postNumber
+        val stream = _uiState.value.topic?.postStream?.stream ?: emptyList()
+        val laterCount = PostStreamPager.countLater(stream, dataSource.posts)
+        val atEnd = listAtEnd
+        if (!atEnd && _uiState.value.incomingNewPostCount == 0) {
+            incomingFirstNewPostNumber = firstNewPostNumber
+        }
+        _uiState.update { state ->
+            state.copy(
+                posts = dataSource.snapshotPosts,
+                hasMore = laterCount > 0,
+                loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了",
+                // 在底部时新楼已在眼前，提示条不该再计数。
+                incomingNewPostCount = if (atEnd) 0 else state.incomingNewPostCount + added
+            )
+        }
+        if (atEnd) incomingFirstNewPostNumber = 0
+        Timber.i(
+            "[ArkDO][TopicDetail] realtime created topicId=%s ids=%d added=%d atEnd=%s",
+            topicId, ids.size, added, atEnd
+        )
+    }
+
+    /**
+     * 屏幕层上报「列表是否停在底部」。实时新楼据此分流：底部直接追加不计数，否则累计提示条。
+     *
+     * 对齐鸿蒙 TopicDetailPage.atListEnd：那边由 onScrollIndex 维护，这边由屏幕按
+     * LazyListState 的 canScrollForward 上报（语义一致：还能往下滚 = 不在底部）。
+     */
+    fun updateListAtEnd(atEnd: Boolean) {
+        listAtEnd = atEnd
+    }
+
+    /** 点「N 条新回复」提示条：跳到首条新楼（已在列表中，走 jumpToPostNumber 的已加载滚动分支）。 */
+    fun openIncomingPosts() {
+        val target = incomingFirstNewPostNumber
+        incomingFirstNewPostNumber = 0
+        _uiState.update { it.copy(incomingNewPostCount = 0) }
+        if (target > 0) {
+            jumpToPostNumber(target)
+        }
+    }
+
     /** 整体替换数据源并重算双向余量（首屏/换窗共用）。 */
     private fun applyDetail(detail: TopicDetail) {
         // 留存一份：页面重建后靠它把 tracker 幂等拉起（见 ensureReadingTracker）。
@@ -1398,6 +1601,9 @@ class TopicDetailViewModel @Inject constructor(
         if (trackerStarted) {
             readingTracker.seedRead(collectAlreadyReadPostNumbers(dataSource.posts, detail.lastReadPostNumber))
         }
+        // detail 就位：订阅 /topic/<id> 实时新楼 + 启动「正在回复」presence（仅当开关开）。
+        // 幂等：rewindow 会反复调到这里，同帖不重订阅（presence 服务内部也按 started/topicId 自守卫）。
+        attachRealtime()
     }
 
     /**
@@ -1509,6 +1715,8 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 离开详情页：停表结算 + 把剩余批次发出（对齐鸿蒙 TopicReadController.detach 的两段收尾）。 */
     fun onDetailDetach() {
+        // 退订实时链路：总线退订同步做，频道退订经 WebView 注入（与首页一致，不留悬挂订阅）。
+        releaseRealtime(clearBanner = true)
         // 复位启动标志：本页已收尾，若该 VM 再次被挂载（同一实例复用）需重新起表。
         trackerStarted = false
         if (readingTracker.stopTiming()) {
@@ -1641,7 +1849,12 @@ data class TopicDetailUiState(
     // 「谁回应了」弹层（对齐鸿蒙 ReactionUsersSheet）：非空即弹层可见，请求与分页状态都在这里。
     val reactionSheet: ReactionUsersSheetState? = null,
     // 当前用户在本话题下的待审内容（对齐鸿蒙 pendingPosts）：详情下发 + 发帖被扣审时乐观追加。
-    val pendingPosts: List<PendingPost> = emptyList()
+    val pendingPosts: List<PendingPost> = emptyList(),
+    // ── 帖内实时（受「帖子内新回复提醒」开关门控）──
+    /** 正在回复的用户（已滤掉自己、截到 5 个）。空 = 不显示「正在回复」悬浮条。 */
+    val presenceUsers: List<User> = emptyList(),
+    /** 「N 条新回复」提示条计数：>0 时显示，点按跳首条新楼。 */
+    val incomingNewPostCount: Int = 0
 )
 
 /**

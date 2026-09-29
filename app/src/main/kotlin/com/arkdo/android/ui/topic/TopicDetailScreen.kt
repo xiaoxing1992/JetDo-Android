@@ -109,9 +109,13 @@ import com.arkdo.android.ui.composer.ReplyComposerOverlay
 import com.arkdo.android.ui.components.CommentInputOverlay
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.ImageViewer
+import com.arkdo.android.ui.components.IncomingPostsBanner
+import com.arkdo.android.ui.components.IncomingPostsBannerHeight
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
 import com.arkdo.android.ui.components.PendingPostCard
+import com.arkdo.android.ui.components.ReplyingPresenceBar
+import com.arkdo.android.ui.components.ReplyingPresenceBarHeight
 import com.arkdo.android.ui.components.LotteryNoticeCard
 import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.ReactionUsersSheetContent
@@ -292,6 +296,15 @@ fun TopicDetailScreen(
         val target = pendingJump ?: return@LaunchedEffect
         delay(SCRUBBER_JUMP_TIMEOUT_MS)
         if (pendingJump == target) pendingJump = null
+    }
+
+    // 列表是否停在底部：实时新楼据此分流（在底部直接追加，否则累计「N 条新回复」提示条）。
+    // 语义对齐鸿蒙 TopicDetailPage.atListEnd —— 那边由 onScrollIndex 维护，这边用
+    // canScrollForward 反判（还能往下滚就是不在底部）。底部有 72dp 的 contentPadding，
+    // 滚到它的尽头才算到底，与「最后一楼的操作区完全露出」是同一时刻。
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.canScrollForward }
+            .collect { canForward -> viewModel.updateListAtEnd(!canForward) }
     }
 
     LaunchedEffect(topicId, targetPostNumber) {
@@ -612,6 +625,44 @@ fun TopicDetailScreen(
             }
         }
 
+        // 「N 条新回复」提示条（对齐鸿蒙 TopicDetailPage:854-890）：用户不在底部时实时新楼累计在这里，
+        // 点按跳到首条新楼；在底部时新楼直接追加、不计数（那时本条不显示，见 VM.flushCreatedPosts）。
+        //
+        // 底距算式与鸿蒙一致：FAB 底距 + FAB 半高 − 胶囊半高 = 与悬浮回复按钮垂直居中，
+        // 再抬高 IncomingBannerLift 让位给下方那条「正在回复」。
+        if (ui.incomingNewPostCount > 0 && !ui.composerVisible && viewerState == null) {
+            IncomingPostsBanner(
+                count = ui.incomingNewPostCount,
+                onClick = { viewModel.openIncomingPosts() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(
+                        bottom = FloatingActionMargin + FloatingActionRadius -
+                            IncomingPostsBannerHeight / 2 + IncomingBannerLift
+                    )
+                    .zIndex(3.8f)
+            )
+        }
+
+        // 底部「正在回复」悬浮条：真实 presence 数据驱动（已滤自己、截 5 人）。
+        // 定位与上面一致（满屏容器 + 底距），与右下角悬浮回复按钮垂直居中。
+        if (ui.topic != null && ui.presenceUsers.isNotEmpty() && !ui.composerVisible &&
+            viewerState == null
+        ) {
+            ReplyingPresenceBar(
+                users = ui.presenceUsers,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(
+                        bottom = FloatingActionMargin + FloatingActionRadius -
+                            ReplyingPresenceBarHeight / 2
+                    )
+                    .zIndex(3.8f)
+            )
+        }
+
         // 右下角普通回复按钮：圆内 50% 白，描边 1.5dp、70% 白。不走玻璃。
         // 出现淡入 150ms；消失立即移除（打开浮层时被遮罩盖住，无退场动画）。
         AnimatedVisibility(
@@ -642,6 +693,13 @@ fun TopicDetailScreen(
 
 /** 跳楼气泡的 loading 兜底时长：超过这个时间还没落地就收回高亮（对齐鸿蒙 5s jumpTimer）。 */
 private const val SCRUBBER_JUMP_TIMEOUT_MS = 5000L
+
+/** 悬浮回复按钮的底距/侧距：与 FAB 的 padding 必须同值（下面两条浮层要对齐它的圆心）。 */
+private val FloatingActionMargin = 16.dp
+/** 悬浮回复按钮半径（52dp 的一半）。 */
+private val FloatingActionRadius = 26.dp
+/** 「N 条新回复」在「与 FAB 垂直居中」基准位之上再抬多少——底部那行让给「正在回复」头像区。 */
+private val IncomingBannerLift = 24.dp
 
 /**
  * 楼层 scrubber 的派生状态。
