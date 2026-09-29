@@ -302,6 +302,7 @@ fun TopicDetailScreen(
     // 语义对齐鸿蒙 TopicDetailPage.atListEnd —— 那边由 onScrollIndex 维护，这边用
     // canScrollForward 反判（还能往下滚就是不在底部）。底部有 72dp 的 contentPadding，
     // 滚到它的尽头才算到底，与「最后一楼的操作区完全露出」是同一时刻。
+    // 收到「到底」还会让 ViewModel 收起提示条（对齐鸿蒙 onReachEnd 的 clearIncomingBanner）。
     LaunchedEffect(listState) {
         snapshotFlow { listState.canScrollForward }
             .collect { canForward -> viewModel.updateListAtEnd(!canForward) }
