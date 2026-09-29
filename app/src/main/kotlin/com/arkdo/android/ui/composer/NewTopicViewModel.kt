@@ -3,6 +3,8 @@ package com.arkdo.android.ui.composer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import android.net.Uri
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.services.content.EmojiPreviewHtml
 import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.services.draft.DraftCountStore
@@ -10,10 +12,18 @@ import com.arkdo.android.services.draft.DraftService
 import com.arkdo.android.services.draft.SaveTopicDraftInput
 import com.arkdo.android.services.draft.draftHasContent
 import com.arkdo.android.services.draft.resolveDraftKey
+import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.network.JsonRequestOptions
 import com.arkdo.android.services.network.NetworkResult
 import com.arkdo.android.services.session.CurrentUserHolder
+import com.arkdo.android.services.session.LoginGate
+import com.arkdo.android.services.site.SiteSettingsService
+import com.arkdo.android.services.site.SiteUploadSettings
+import com.arkdo.android.services.site.defaultSiteUploadSettings
 import com.arkdo.android.services.topic.TagSuggestion
 import com.arkdo.android.services.topic.TopicService
+import com.arkdo.android.services.upload.DISGUISE_MIME
+import com.arkdo.android.services.upload.UploadService
 import com.arkdo.android.data.models.DraftTagRef
 import java.io.Serializable
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,8 +35,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import timber.log.Timber
 import javax.inject.Inject
+import kotlin.coroutines.resume
 
 /** 发帖最多可选标签数(对齐鸿蒙 ComposerPage.MAX_TAGS,对应站点 max_tags_per_topic)。 */
 const val COMPOSER_MAX_TAGS = 8
@@ -39,8 +51,8 @@ const val DRAFT_SAVE_DEBOUNCE_MS = 2000L
  * 发新主题 ViewModel —— 首页发帖浮层的数据流(对齐鸿蒙 HomePage.openComposer →
  * ComposerPage(composeTopic) → CreateTopicFlow.submitNewTopic)。
  *
- * 本轮范围:标题/正文/分类/标签 + 提交(POST /posts)+ 图片上传 + 新主题自动存草稿。
- * 视频/附件属后续切片。回帖草稿不在这条链路上。
+ * 本轮范围:标题/正文/分类/标签 + 提交(POST /posts)+ 三类上传(图片/附件/音视频)
+ * + 新主题自动存草稿。回帖草稿不在这条链路上。
  */
 @HiltViewModel
 class NewTopicViewModel @Inject constructor(
@@ -56,6 +68,9 @@ class NewTopicViewModel @Inject constructor(
     private var tagQuerySeq = 0
     private var tagLoadingJob: Job? = null
     private var draftSaveJob: Job? = null
+
+    /** 最近一次拉到的站点上传设置（算体积上限与选择器后缀过滤）。加载完成前是出厂默认值。 */
+    private var uploadSettings: SiteUploadSettings = defaultSiteUploadSettings()
 
     // 草稿运行态不进 UI:key 首次保存才生成,续写沿用带进来的;序号必须用服务端回的下一次值。
     private var draftKey = ""
@@ -100,6 +115,8 @@ class NewTopicViewModel @Inject constructor(
         if (_uiState.value.categoryId != null) {
             loadTags("")
         }
+        // 上传入口的显隐要等站点设置回来才定，先按保守态（只有图片钮）渲染。
+        loadUploadCapabilities()
     }
 
     // ========== 字段编辑 ==========
@@ -189,9 +206,12 @@ class NewTopicViewModel @Inject constructor(
     // ========== 上传 ==========
 
     /**
-     * 上传一张图片:base64 → POST /uploads.json → 返回可插入正文的 markdown 片段。
+     * 上传一张图片（UI 直接调用的单选入口）：base64 → POST /uploads.json → 返回可插入正文的片段。
      * done(snippet, error):snippet 非空=成功;error 空串=用户取消/无需提示;否则失败文案。
-     * 请求期间置 isUploading,UI 据此盖遮罩、禁用重入。
+     *
+     * 重入闸与遮罩状态都留在这一层 —— 它面向用户点击，必须在开跑前挡住连点。执行层
+     * [uploadFile] 会被批量流程内部复用，那时 isUploading 已被批量入口置位，守卫留在那里
+     * 只会把自己挡回去（原因见 uploadFile 注释）。
      */
     fun uploadImage(
         base64: String,
@@ -200,27 +220,145 @@ class NewTopicViewModel @Inject constructor(
         done: (snippet: String?, error: String?) -> Unit
     ) {
         if (_uiState.value.isUploading) return
-        _uiState.update { it.copy(isUploading = true, uploadProgressText = "图片上传中...") }
-        viewModelScope.launch {
-            val response = com.arkdo.android.services.network.ArkWebNetworkBridge.uploadImage(
-                base64 = base64,
-                fileName = fileName,
-                mimeType = mimeType,
-                options = com.arkdo.android.services.network.JsonRequestOptions(notifyChallenge = true, referrer = "${com.arkdo.android.common.constants.AppConstants.BASE_URL}/")
+        _uiState.update {
+            it.copy(
+                isUploading = true,
+                uploadProgressText = ComposerUploadKind.Image.progressText
             )
-            val outcome = parseUploadOutcome(response)
-            _uiState.update {
-                it.copy(
-                    isUploading = false,
-                    uploadProgressText = null,
-                    uploadFailures = if (outcome.error != null && outcome.error.isNotEmpty()) {
-                        it.uploadFailures + outcome.error
-                    } else {
-                        it.uploadFailures
-                    }
+        }
+        uploadFile(ComposerUploadKind.Image, base64, fileName, mimeType) { snippet, error ->
+            _uiState.update { it.copy(isUploading = false, uploadProgressText = null) }
+            done(snippet, error)
+        }
+    }
+
+    /**
+     * 执行一次上传（图片 / 附件 / 音视频共用）：发请求 → 按类型解析 → 回调 done。
+     * 差别只在两处：
+     *  · 音视频要把文件名换成 `.xz`、MIME 换成伪装值（字节不动，见 DISGUISE_EXTENSION）；
+     *  · 结果拼装不同（图片 `![]()`、附件 `[名|attachment]()`、音视频裸 `<video>`）。
+     *
+     * **不设重入闸、不动 isUploading** —— 这两件事归调用入口（[uploadImage] / [uploadPickedFiles]）管。
+     * 执行层再守一道会与批量流程打架：批量入口开跑前已把 isUploading 置 true，执行层一进门就被
+     * 自己挡回、从不调用 done，[uploadOne] 的 suspendCancellableCoroutine 便永远挂住，遮罩不落。
+     *
+     * [localWidth] / [localHeight] 仅音视频用：服务端对 .xz 不回宽高，得靠本地量的
+     * 播放方向尺寸去定 `<video>` 的框，否则竖屏视频会被摆歪。
+     */
+    private fun uploadFile(
+        kind: ComposerUploadKind,
+        base64: String,
+        fileName: String,
+        mimeType: String,
+        localWidth: Int = 0,
+        localHeight: Int = 0,
+        done: (snippet: String?, error: String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val disguised = kind == ComposerUploadKind.Media
+            val response = ArkWebNetworkBridge.uploadImage(
+                base64 = base64,
+                fileName = if (disguised) UploadService.disguisedName(fileName) else fileName,
+                mimeType = if (disguised) DISGUISE_MIME else mimeType,
+                options = JsonRequestOptions(
+                    notifyChallenge = true,
+                    referrer = "${AppConstants.BASE_URL}/"
                 )
+            )
+            val outcome = when (kind) {
+                ComposerUploadKind.Image -> parseUploadOutcome(response)
+                ComposerUploadKind.Attachment -> parseAttachmentOutcome(response)
+                // mediaMimeType 用**原始**类型（video/mp4），不是 .xz 的那个 —— 播放器认 type 属性。
+                ComposerUploadKind.Media -> parseMediaOutcome(response, localWidth, localHeight, mimeType)
+            }
+            // 只累积失败原因：遮罩/重入闸的收尾归入口层，批量中途在这里复位会让遮罩闪烁、闸门敞开。
+            if (outcome.error != null && outcome.error.isNotEmpty()) {
+                _uiState.update { it.copy(uploadFailures = it.uploadFailures + outcome.error) }
             }
             done(outcome.snippet, outcome.error)
+        }
+    }
+
+    /**
+     * 拉本站的上传设置，算出工具栏两个上传入口该不该露出。
+     *
+     * 附件入口的判据与鸿蒙一致（`UploadService.nonImageExtensions` 非空）再叠一道身份门控：
+     * 站点白名单允许非图片扩展名 + 当前用户还能发附件。音视频入口是 linux.do 私有约定，
+     * 走 [UploadService.mediaUploadEnabled]。
+     */
+    fun loadUploadCapabilities() {
+        viewModelScope.launch {
+            val settings = SiteSettingsService.load(ArkWebNetworkBridge)
+            uploadSettings = settings
+            val extensionMimes = UploadService.nonImageExtensions(settings)
+                .map { UploadService.mimeFor(it) }
+                .distinct()
+            _uiState.update {
+                it.copy(
+                    showAttachment = extensionMimes.isNotEmpty() &&
+                        LoginGate.canUploadAttachment(settings.newuserMaxAttachments),
+                    showMedia = UploadService.mediaUploadEnabled(),
+                    attachmentMimeTypes = extensionMimes
+                )
+            }
+        }
+    }
+
+    /**
+     * 选中一批文件后的完整处理：逐个「读字节 → 按类型上传 → 回传可插入的 markdown 片段」。
+     * 选取之间的串行/失败汇总骨架见 [runUploadBatch]（与回帖页共用同一份）。
+     */
+    fun uploadPickedFiles(
+        kind: ComposerUploadKind,
+        uris: List<Uri>,
+        onSnippet: (String) -> Unit
+    ) {
+        if (_uiState.value.isUploading || uris.isEmpty()) return
+        _uiState.update { it.copy(isUploading = true, uploadProgressText = kind.progressText) }
+        viewModelScope.launch {
+            val settings = uploadSettings
+            val limitKb = if (kind == ComposerUploadKind.Image) {
+                settings.maxImageSizeKb
+            } else {
+                settings.maxAttachmentSizeKb
+            }
+            val firstError = try {
+                runUploadBatch(
+                    context = appContext,
+                    kind = kind,
+                    uris = uris,
+                    limitKb = limitKb,
+                    onProgress = { text -> _uiState.update { it.copy(uploadProgressText = text) } },
+                    onSnippet = onSnippet,
+                    uploadOne = { file, width, height -> uploadOne(kind, file, width, height) }
+                )
+            } finally {
+                // 收尾必须在 finally：isUploading 既驱动遮罩，也是三个上传入口的重入闸，
+                // 万一上面抛出来，不兜的话遮罩永远挂着、上传入口全部失效。
+                _uiState.update { it.copy(isUploading = false, uploadProgressText = null) }
+            }
+            firstError?.let { message ->
+                _uiState.update { it.copy(uploadFailures = it.uploadFailures + message) }
+            }
+        }
+    }
+
+    /** 等一次上传结束（把 done 回调适配成挂起函数），供串行批处理使用。 */
+    private suspend fun uploadOne(
+        kind: ComposerUploadKind,
+        file: PreparedRawFile,
+        localWidth: Int,
+        localHeight: Int
+    ): UploadOutcome = suspendCancellableCoroutine { cont ->
+        uploadFile(
+            kind = kind,
+            base64 = file.base64,
+            fileName = file.fileName,
+            mimeType = file.mimeType,
+            localWidth = localWidth,
+            localHeight = localHeight
+        ) { snippet, error ->
+            cont.resume(UploadOutcome(snippet, error))
         }
     }
 
@@ -399,6 +537,12 @@ data class NewTopicUiState(
     val uploadProgressText: String? = null,
     /** 本批上传的失败文案(逐条记,结束后一次性 toast)。 */
     val uploadFailures: List<String> = emptyList(),
+    /** 工具栏「附件」入口是否露出(站点有非图片白名单 + 当前用户还能发附件)。 */
+    val showAttachment: Boolean = false,
+    /** 工具栏「音视频」入口是否露出(linux.do 私有约定)。 */
+    val showMedia: Boolean = false,
+    /** 附件选择器的 MIME 过滤（由站点白名单的非图片扩展名推出）。空 = 不限。 */
+    val attachmentMimeTypes: List<String> = emptyList(),
     val isSubmitting: Boolean = false
 )
 

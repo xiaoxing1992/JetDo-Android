@@ -61,6 +61,8 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         RealtimePostsPrefs.init(this)
         VersionAnnouncePrefs.init(this)
         LotteryTipPrefs.init(this)
+        // 上传短码 → 真实直链：预览解析 URL 时要查它，必须在任何预览渲染之前载入。
+        com.arkdo.android.services.content.UploadShortcodeRegistry.init(this)
 
         // 初始化 DoH (DNS over HTTPS)：DohManager 先把配置种子化到 preferences
         // （首次启动写入内置服务器并选中），DohService 再读配置构造解析器。

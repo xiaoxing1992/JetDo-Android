@@ -614,6 +614,12 @@ fun TopicDetailScreen(
                     done(snippet)
                 }
             },
+            showAttachment = ui.showAttachment,
+            showMedia = ui.showMedia,
+            attachmentMimeTypes = ui.attachmentMimeTypes,
+            onUploadPickedFiles = { kind, uris, onSnippet ->
+                viewModel.uploadPickedFiles(kind, uris, onSnippet)
+            },
             renderPreview = { raw -> viewModel.renderPreview(raw) },
             onClose = viewModel::collapseComposer,
             modifier = Modifier.zIndex(5f)

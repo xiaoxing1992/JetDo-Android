@@ -156,7 +156,7 @@ fun NewTopicScreen(
             viewModel.uploadImage(prepared.base64, prepared.fileName, prepared.mimeType) { snippet, _ ->
                 // 失败文案已计入 uploadFailures,由下方 LaunchedEffect 统一 toast。
                 if (!snippet.isNullOrEmpty()) {
-                    applyMdAction(MdAction.Insert(snippet))
+                    applyMdAction(MdAction.Insert(uploadSnippet(snippet)))
                 }
             }
         }
@@ -167,6 +167,39 @@ fun NewTopicScreen(
         imagePicker.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
         )
+    }
+
+    // 附件：多选。MIME 过滤由站点白名单的非图片扩展名推出（与鸿蒙 picker 的 fileSuffixFilters 同义）；
+    // 白名单没拉到时空过滤 = 不限类型，交给服务端裁决。
+    val attachmentPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        viewModel.uploadPickedFiles(ComposerUploadKind.Attachment, uris) { snippet ->
+            applyMdAction(MdAction.Insert(uploadSnippet(snippet)))
+        }
+    }
+
+    fun openAttachmentPicker() {
+        if (uiState.isUploading) return
+        val mimes = uiState.attachmentMimeTypes.toTypedArray()
+        attachmentPicker.launch(mimes.ifEmpty { arrayOf("*/*") })
+    }
+
+    // 音视频：仅 linux.do。上传时改名 .xz 绕过白名单，正文里插裸 <video> 标签
+    // （详见 UploadService.DISGUISE_EXTENSION）。块级标签，前后留空行见 uploadSnippet。
+    val mediaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.uploadPickedFiles(ComposerUploadKind.Media, listOf(uri)) { snippet ->
+            applyMdAction(MdAction.Insert(uploadSnippet(snippet)))
+        }
+    }
+
+    fun openMediaPicker() {
+        if (uiState.isUploading) return
+        mediaPicker.launch(arrayOf("video/*", "audio/*"))
     }
 
     // 失败文案一次性提示(本批结束后)。
@@ -370,7 +403,11 @@ fun NewTopicScreen(
                 }
                 MarkdownToolbar(
                     uploading = uiState.isUploading,
+                    showAttachment = uiState.showAttachment,
+                    showMedia = uiState.showMedia,
                     onUploadImage = { openImagePicker() },
+                    onUploadAttachment = { openAttachmentPicker() },
+                    onUploadMedia = { openMediaPicker() },
                     onAction = { applyMdAction(it) }
                 )
             } else {
@@ -378,6 +415,8 @@ fun NewTopicScreen(
                     html = previewHtml,
                     rawText = bodyField.text,
                     loading = isPreviewLoading,
+                    // 预览里的音视频要过 CF 下到沙箱才能播，接线方式与详情页一致。
+                    onResolveMedia = { url -> com.arkdo.android.services.network.ArkWebNetworkBridge.downloadMedia(url) },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -405,7 +444,7 @@ fun NewTopicScreen(
                         strokeWidth = 2.dp
                     )
                     Text(
-                        uiState.uploadProgressText ?: "图片上传中...",
+                        uiState.uploadProgressText ?: "上传中...",
                         fontSize = 15.sp,
                         color = colors.textPrimary
                     )
@@ -829,13 +868,23 @@ private fun TagPickerContent(
 // ========== Markdown 工具栏 ==========
 
 /**
- * Markdown 工具栏(对齐鸿蒙 MarkdownToolbar.ets 的常用子集)。
- * 图片按钮本页接入系统相册 → 上传;其余动作纯文本变换后回写编辑区。
+ * Markdown 工具栏(对齐鸿蒙 MarkdownToolbar.ets)。
+ *
+ * 三类上传按钮（图片 / 音视频 / 附件）由页面转成系统选择器，其余动作纯文本变换后回写编辑区。
+ * 按钮顺序与鸿蒙 TOOLBAR_BUTTONS 一致。
+ *
+ * @param showAttachment 站点一个非图片扩展名都不允许时藏掉 —— 留着只会让用户点开选择器
+ *   发现没有任何文件类型可选（鸿蒙同判据：`UploadService.nonImageExtensions` 非空）。
+ * @param showMedia 音视频入口，由站点能力决定（鸿蒙是 SiteCapabilities.mediaUpload）。
  */
 @Composable
 fun MarkdownToolbar(
     uploading: Boolean,
+    showAttachment: Boolean,
+    showMedia: Boolean,
     onUploadImage: () -> Unit,
+    onUploadAttachment: () -> Unit,
+    onUploadMedia: () -> Unit,
     onAction: (MdAction) -> Unit
 ) {
     val colors = arkdoColors
@@ -850,13 +899,18 @@ fun MarkdownToolbar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         ToolIcon("image", enabled = !uploading, onClick = onUploadImage)
+        if (showMedia) {
+            ToolIcon("video", enabled = !uploading, onClick = onUploadMedia)
+        }
+        if (showAttachment) {
+            ToolIcon("file-arrow-up", enabled = !uploading, onClick = onUploadAttachment)
+        }
         DividerSpace()
         ToolIcon("bold", enabled = true) { onAction(MdAction.Wrap("**", "**", "加粗文字")) }
         ToolIcon("italic", enabled = true) { onAction(MdAction.Wrap("_", "_", "斜体文字")) }
-        ToolIcon("code", enabled = true) { onAction(MdAction.Wrap("`", "`", "code")) }
-        DividerSpace()
-        ToolIcon("file-code", enabled = true) { onAction(MdAction.InsertCursor("```\n\n```", 4)) }
         ToolIcon("quote-left", enabled = true) { onAction(MdAction.LinePrefix("> ", ordered = false)) }
+        ToolIcon("code", enabled = true) { onAction(MdAction.Wrap("`", "`", "code")) }
+        ToolIcon("file-code", enabled = true) { onAction(MdAction.InsertCursor("```\n\n```", 4)) }
         ToolIcon("list-ul", enabled = true) { onAction(MdAction.LinePrefix("- ", ordered = false)) }
         ToolIcon("list-ol", enabled = true) { onAction(MdAction.LinePrefix("", ordered = true)) }
         ToolIcon("hashtag", enabled = true) { onAction(MdAction.LinePrefix("# ", ordered = false)) }
