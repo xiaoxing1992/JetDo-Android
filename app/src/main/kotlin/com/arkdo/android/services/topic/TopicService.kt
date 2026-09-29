@@ -526,6 +526,28 @@ class TopicService(private val bridge: JsonNetworkClient) {
     }
 
     /**
+     * 撤回待审帖:DELETE /review/{id}。待审帖本质是 ReviewableQueuedPost,走审核端点而非
+     * /posts/{id}(对齐鸿蒙 deletePendingPost);响应体不消费,只看 HTTP 是否成功。
+     */
+    suspend fun deletePendingPost(pendingId: Long, topicId: Long): NetworkResult<Boolean> {
+        val referrer = "${AppConstants.BASE_URL}/t/topic/$topicId"
+        val response = bridge.deleteForm(
+            "/review/$pendingId",
+            "",
+            JsonRequestOptions(notifyChallenge = true, referrer = referrer)
+        )
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        return NetworkResult(
+            success = true,
+            statusCode = response.statusCode,
+            challengeState = response.challengeState,
+            data = true
+        )
+    }
+
+    /**
      * discourse-reactions:按页读取某楼的反应用户(page 从 0 起,每页 30)。
      * 响应只带用户明细,顶部分类数量由 topic.json 的 reactions 直接提供(对齐鸿蒙 getReactionUsers)。
      */

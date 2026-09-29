@@ -75,6 +75,8 @@ internal fun ReplyComposerOverlay(
     /** 顶栏副标题：回复某人 / 编辑这条回复 / 发一个 boost。 */
     title: String,
     placeholder: String,
+    /** 浮层顶上的一行提醒(抽奖帖规则摘要,空串不渲染;对齐鸿蒙 composerHint)。 */
+    hintText: String = "",
     initialText: String,
     isSubmitting: Boolean,
     isUploading: Boolean,
@@ -255,6 +257,18 @@ internal fun ReplyComposerOverlay(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
             )
             Spacer(modifier = Modifier.height(2.dp))
+        }
+
+        if (hintText.isNotEmpty()) {
+            Text(
+                text = hintText,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = colors.warning,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 6.dp)
+            )
         }
 
         if (editTab) {

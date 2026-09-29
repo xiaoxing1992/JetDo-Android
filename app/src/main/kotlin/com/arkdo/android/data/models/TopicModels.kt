@@ -305,6 +305,9 @@ data class TopicDetail(
     @SerialName("shared_issue_count") val sharedIssueCount: Int? = null,
     @SerialName("pending_posts") val pendingPosts: List<PendingPost>? = null,
     @SerialName("message_bus_last_id") val messageBusLastId: Long? = null,
+    // 审核提醒判定用:已关/已归档的抽奖帖回不了帖,不提醒(对齐鸿蒙 mapTopicDetail 透传)。
+    @SerialName("closed") val closed: Boolean = false,
+    @SerialName("archived") val archived: Boolean = false,
     @SerialName("accepted_answers") val acceptedAnswers: List<AcceptedAnswer>? = null,
     @SerialName("polls_votes") val pollsVotes: Map<String, List<String>>? = null,
     @SerialName("can_vote") val canVote: Boolean? = null

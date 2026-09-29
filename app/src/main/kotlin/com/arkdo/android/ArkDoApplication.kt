@@ -6,6 +6,8 @@ import coil3.SingletonImageLoader
 import com.arkdo.android.common.theme.ThemeModeStore
 import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.core.designsystem.TopicListStyleStore
+import com.arkdo.android.services.announce.VersionAnnouncePrefs
+import com.arkdo.android.services.topic.LotteryTipPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
 import com.arkdo.android.services.network.DohManager
@@ -55,6 +57,8 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         TopicListStyleStore.init(this)
         FabGlassStore.init(this)
         RealtimeTopicsPrefs.init(this)
+        VersionAnnouncePrefs.init(this)
+        LotteryTipPrefs.init(this)
 
         // 初始化 DoH (DNS over HTTPS)：DohManager 先把配置种子化到 preferences
         // （首次启动写入内置服务器并选中），DohService 再读配置构造解析器。

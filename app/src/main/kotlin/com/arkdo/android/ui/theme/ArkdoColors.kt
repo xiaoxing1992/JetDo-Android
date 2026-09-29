@@ -51,6 +51,9 @@ data class ArkdoColorTokens(
     val meTooFg: Color,
     val meTooBorder: Color,
     val boostBubbleBg: Color,
+    // 抽奖帖提醒卡的琥珀底/描边(对齐鸿蒙 lottery_notice_bg / lottery_notice_border)。
+    val lotteryNoticeBg: Color,
+    val lotteryNoticeBorder: Color,
     // 个人主页等灰底容器页(对齐鸿蒙 page_bg_gray:亮 #F2F3F5 / 暗 #000000)。
     val pageBgGray: Color,
     // 白卡底(对齐鸿蒙 surface_card:亮 #FFFFFF / 暗 #191919)。
@@ -102,6 +105,8 @@ val ArkdoLightColors = ArkdoColorTokens(
     meTooFg = Color(0xFF434343),
     meTooBorder = Color(0xFFD3D3D3),
     boostBubbleBg = Color(0xFFE6E8EB),
+    lotteryNoticeBg = Color(0xFFFFF8ED),
+    lotteryNoticeBorder = Color(0xFFF0DDBC),
     pageBgGray = Color(0xFFF2F3F5),
     surfaceCard = Color(0xFFFFFFFF),
     immersiveInputBarBg = Color(0xB3F2F3F5),
@@ -145,6 +150,8 @@ val ArkdoDarkColors = ArkdoColorTokens(
     meTooFg = Color(0xFFC8CCD2),
     meTooBorder = Color(0xFF3A3D42),
     boostBubbleBg = Color(0xFF26292E),
+    lotteryNoticeBg = Color(0xFF241D14),
+    lotteryNoticeBorder = Color(0xFF3F3424),
     pageBgGray = Color(0xFF000000),
     surfaceCard = Color(0xFF191919),
     immersiveInputBarBg = Color(0xB32A2E33),
