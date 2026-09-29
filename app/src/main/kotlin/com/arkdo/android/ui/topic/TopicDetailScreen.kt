@@ -85,14 +85,21 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.R
+import com.arkdo.android.data.models.PendingPost
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.AcceptedAnswer
 import com.arkdo.android.data.models.PostBoost
 import com.arkdo.android.data.models.SharedIssueResult
+import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.TopicTag
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.DownloadEventBus
+import com.arkdo.android.services.session.CurrentUserHolder
+import com.arkdo.android.services.topic.LOTTERY_RULES_TOPIC_URL
+import com.arkdo.android.services.topic.LotteryNoticeContext
+import com.arkdo.android.services.topic.shouldShowLotteryNotice
+import com.arkdo.android.services.topic.LotteryTipPrefs
 import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.network.ArkWebNetworkBridge
@@ -104,6 +111,8 @@ import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.components.ImageViewer
 import com.arkdo.android.ui.components.LocalAnimatedVisibilityScope
 import com.arkdo.android.ui.components.LocalSharedTransitionScope
+import com.arkdo.android.ui.components.PendingPostCard
+import com.arkdo.android.ui.components.LotteryNoticeCard
 import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.components.ReactionUsersSheetContent
 import com.arkdo.android.ui.components.TopicMetadataBadges
@@ -154,6 +163,12 @@ fun TopicDetailScreen(
     val listState = rememberLazyListState()
     // 图片浏览器覆盖层状态（本楼图片组 + 起始下标）。
     var viewerState by remember { mutableStateOf<Pair<List<ViewerImage>, Int>?>(null) }
+    // 当前登录用户:待审卡的头像昵称用(待审内容只有本人可见,作者恒为当前用户)。
+    val currentUser by CurrentUserHolder.currentUser.collectAsState()
+    // 「抽奖帖提醒」开关(实验性设置;卡片是否显示还要过 LotteryTopicRule 的帖子判定)。
+    val lotteryTipEnabled by LotteryTipPrefs.enabled.collectAsState()
+    // 待审卡删除的二次确认(不可逆:审核队列里删掉就没了,原文只在这张卡上)。
+    var pendingDeleteTarget by remember { mutableStateOf<PendingPost?>(null) }
     // 链接路由（LinkRouter，对齐鸿蒙 RootTabPage.handleOpenLink 的四类分流）：
     //   TOPIC    → 原生详情页（本帖内则直接滚动定位，不压栈）
     //   USER     → 原生他人主页
@@ -405,7 +420,15 @@ fun TopicDetailScreen(
                                         onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
                                         onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) },
                                         // 回应胶囊 → 弹层(状态在 VM,对齐鸿蒙 TopicDetailPage:483)。
-                                        onOpenReactions = { viewModel.openReactionSheet(it) }
+                                        showLotteryNotice = lotteryNoticeShowing(
+                                            topic = ui.topic,
+                                            currentUserId = currentUser?.id,
+                                            tipEnabled = lotteryTipEnabled
+                                        ),
+                                        onOpenReactions = { viewModel.openReactionSheet(it) },
+                                        pendingPosts = ui.pendingPosts,
+                                        currentUser = currentUser,
+                                        onDeletePendingPost = { pendingDeleteTarget = it }
                                 )
                             }
                         }
@@ -504,6 +527,24 @@ fun TopicDetailScreen(
                 AndroidView(factory = { engine.webView }, update = {})
             }
         }
+        // 待审帖删除确认(对齐鸿蒙 confirmDeletePending 的 AlertDialog)。
+        pendingDeleteTarget?.let { target ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { pendingDeleteTarget = null },
+                title = { Text("删除待审核内容") },
+                text = { Text("删除后这条内容不会再进入审核，也无法恢复。确定删除吗？") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingDeleteTarget = null
+                        viewModel.deletePendingPost(target)
+                    }) { Text("删除", color = arkdoColors.ldDanger) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDeleteTarget = null }) { Text("取消") }
+                }
+            )
+        }
+
         // 「谁回应了」底部弹层(对齐鸿蒙 TopicDetailPage 的 bindSheet + ReactionUsersSheet)。
         // 状态与分页在 ViewModel,这里只负责挂载/收起与用户跳转。
         ui.reactionSheet?.let { sheet ->
@@ -536,6 +577,7 @@ fun TopicDetailScreen(
         ReplyComposerOverlay(
             visible = ui.composerVisible && ui.composerExpanded,
             title = ui.composerPlaceholder,
+            hintText = ui.composerHint,
             placeholder = ui.composerPlaceholder,
             initialText = ui.pendingReplyText,
             isSubmitting = ui.isSubmittingReply,
@@ -663,7 +705,13 @@ private fun TopicDetailContent(
     // 阅读计时上报：可见楼层号变化（滚动/分页）时回调，由上层喂给 ReadingTracker。
     onVisiblePostNumbers: (List<Int>) -> Unit = {},
     // 回应人数胶囊点击 → 上层开「谁回应了」弹层。
-    onOpenReactions: (TopicPost) -> Unit = {}
+    onOpenReactions: (TopicPost) -> Unit = {},
+    // 抽奖帖提醒卡(判定已在页面层算好,这里只管渲染与跳转)。
+    showLotteryNotice: Boolean = false,
+    // 待审核区:当前用户在本话题下被扣审的内容 + 当前用户(画头像昵称) + 撤回回调。
+    pendingPosts: List<PendingPost> = emptyList(),
+    currentUser: com.arkdo.android.data.models.User? = null,
+    onDeletePendingPost: (PendingPost) -> Unit = {}
 ) {
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 只跳一次：posts 会因已读上报(markPostsRead 重建列表)等原因变化，若 key 含 posts
@@ -734,6 +782,15 @@ private fun TopicDetailContent(
         // 话题标题
         item {
             TopicHeader(topic = topic, categories = categories)
+            // 抽奖帖提醒:挂在摘要与一楼之间,跟着列表滚走。刻意塞进这个已存在的 item 而不新开
+            // 一项——已读上报/顶栏双层标题/scrubber 都硬依赖「index 0 是摘要、楼层从 index 1 起」
+            // 的下标算术,多一项就得让这些偏移量随卡片在不在而变(对齐鸿蒙 TopicDetailPage:437)。
+            if (showLotteryNotice) {
+                LotteryNoticeCard(
+                    // 官方规则帖走站内链接路由,直开原生详情页(不落 WebView)。
+                    onOpenAnnouncement = { onOpenLink(LOTTERY_RULES_TOPIC_URL) }
+                )
+            }
         }
 
         // 窗口式进入时往上补更早楼层（自动触发：出现在列表顶部即拉）。
@@ -801,6 +858,22 @@ private fun TopicDetailContent(
                 onDeletePost = { onDeletePost(it) },
                 onRecoverPost = { onRecoverPost(it) }
             )
+        }
+
+        // 待审核区(对齐鸿蒙 TopicDetailPage:547):铺在楼层流最底部,且只有楼层全部加载完
+        // (!hasMore)才渲染——停在第 3 楼时不该看见它。待审帖不是楼层:不占楼号、不进已读上报。
+        if (!hasMore && pendingPosts.isNotEmpty()) {
+            item(key = "pending_posts") {
+                Column {
+                    pendingPosts.forEach { pending ->
+                        PendingPostCard(
+                            pending = pending,
+                            currentUser = currentUser,
+                            onDelete = { onDeletePendingPost(pending) }
+                        )
+                    }
+                }
+            }
         }
 
         // 加载更多
@@ -1055,4 +1128,23 @@ private fun ErrorView(
             Text("重试")
         }
     }
+}
+
+/** 抽奖帖提醒判定:纯函数(LotteryTopicRule)+ 用户开关,页面层只组装数据。 */
+private fun lotteryNoticeShowing(
+    topic: TopicDetail?,
+    currentUserId: Long?,
+    tipEnabled: Boolean
+): Boolean {
+    topic ?: return false
+    if (!tipEnabled) return false
+    return shouldShowLotteryNotice(
+        LotteryNoticeContext(
+            tags = topic.tags,
+            closed = topic.closed,
+            archived = topic.archived,
+            createdById = topic.createdById ?: 0L,
+            currentUserId = currentUserId ?: 0L
+        )
+    )
 }

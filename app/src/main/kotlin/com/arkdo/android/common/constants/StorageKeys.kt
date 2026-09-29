@@ -54,6 +54,10 @@ object StorageKeys {
 
     // 各类开关 prefs key（DataStore，值见 AppPreferences）
     const val PREFS_REALTIME_TOPICS = "realtimeTopicsEnabled"
+    // 「本版公告已弹过」标记:最近一次弹过「本次更新」的 versionCode。
+    const val PREFS_ANNOUNCE_SHOWN_CODE = "announceShownVersionCode"
+    // 「抽奖帖提醒」开关,默认开。
+    const val PREFS_LOTTERY_TIP = "lotteryTipEnabled"
     const val PREFS_REALTIME_POSTS = "realtimePostsEnabled"
     const val PREFS_FAB_GLASS = "fabGlassEnabled"
     const val PREFS_ANIMATED_AVATAR = "animatedAvatarEnabled"

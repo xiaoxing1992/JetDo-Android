@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.arkdo.android.data.models.TopicDetail
 import com.arkdo.android.common.constants.AppConstants
+import com.arkdo.android.data.models.PendingPost
 import com.arkdo.android.data.models.PostReaction
 import com.arkdo.android.data.models.ReactionUser
 import com.arkdo.android.data.models.ReactionUsersPage
@@ -24,6 +25,11 @@ import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryState
 import com.arkdo.android.services.challenge.ChallengeShortcutEventBus
 import com.arkdo.android.services.site.CategoryIndex
+import com.arkdo.android.services.topic.LotteryTipPrefs
+import com.arkdo.android.services.topic.LOTTERY_REPLY_HINT
+import com.arkdo.android.services.topic.LOTTERY_REPLY_PLACEHOLDER
+import com.arkdo.android.services.topic.LotteryNoticeContext
+import com.arkdo.android.services.topic.shouldShowLotteryNotice
 import com.arkdo.android.services.topic.PollMutation
 import com.arkdo.android.services.topic.TopicService
 import com.arkdo.android.services.content.EmojiPreviewHtml
@@ -684,9 +690,11 @@ class TopicDetailViewModel @Inject constructor(
             return
         }
         resetComposerModes()
+        val lotteryOnResume = showsLotteryNotice()
         _uiState.update {
             it.copy(
-                composerPlaceholder = "回复当前话题",
+                composerPlaceholder = if (lotteryOnResume) LOTTERY_REPLY_PLACEHOLDER else "回复当前话题",
+                composerHint = if (lotteryOnResume) LOTTERY_REPLY_HINT else "",
                 composerReplyToPostNumber = null,
                 composerVisible = true,
                 pendingReplyText = draft.reply
@@ -719,10 +727,12 @@ class TopicDetailViewModel @Inject constructor(
             return
         }
         resetComposerModes()
-        // 抽奖帖占位分支依赖 LotteryTopicRule（未迁移，见切片4），非抽奖恒「回复当前话题」。
+        // 顶层回复 = 参与抽奖的那条:抽奖帖把占位换成社区规则提示语(对齐鸿蒙 TopicDetailPage:1033)。
+        val lottery = showsLotteryNotice()
         _uiState.update {
             it.copy(
-                composerPlaceholder = "回复当前话题",
+                composerPlaceholder = if (lottery) LOTTERY_REPLY_PLACEHOLDER else "回复当前话题",
+                composerHint = if (lottery) LOTTERY_REPLY_HINT else "",
                 composerReplyToPostNumber = null,
                 composerVisible = true
             )
@@ -1146,6 +1156,42 @@ class TopicDetailViewModel @Inject constructor(
      * 提交回复：POST /posts。直接发布 → 新楼追加到列表底部 + 清草稿 + 关浮层；进审核队列 →
      * 只提示不打楼层；失败 → 保留浮层与内容供重试（done(false) 输入条不关）。
      */
+    /**
+     * 当前话题是否该显示抽奖帖提醒(对齐鸿蒙 showsLotteryNotice):
+     * 帖子判定(LotteryTopicRule 纯函数)+ 用户开关。判定失败一律不提醒。
+     */
+    private fun showsLotteryNotice(): Boolean {
+        val topic = _uiState.value.topic ?: return false
+        if (!LotteryTipPrefs.isEnabled()) return false
+        return shouldShowLotteryNotice(
+            LotteryNoticeContext(
+                tags = topic.tags.orEmpty(),
+                closed = topic.closed,
+                archived = topic.archived,
+                createdById = topic.createdById ?: 0L,
+                currentUserId = CurrentUserHolder.currentUser.value?.id ?: 0L
+            )
+        )
+    }
+
+    /** 撤回待审帖:DELETE /review/{id},成功后本地移除(对齐鸿蒙 deletePending)。不可逆,确认框在页面层。 */
+    fun deletePendingPost(pending: PendingPost) {
+        val topicId = currentTopicId ?: return
+        viewModelScope.launch {
+            val result = topicService.deletePendingPost(pending.id, topicId)
+            if (result.success) {
+                _uiState.update {
+                    it.copy(
+                        pendingPosts = it.pendingPosts.filterNot { p -> p.id == pending.id },
+                        actionMessage = "已删除"
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(actionMessage = "删除失败，请稍后重试") }
+            }
+        }
+    }
+
     fun createReply(text: String, typingMs: Long, composerMs: Long, done: (Boolean) -> Unit) {
         val state = _uiState.value
         val topic = state.topic ?: return done(false)
@@ -1170,7 +1216,11 @@ class TopicDetailViewModel @Inject constructor(
                             composerVisible = false,
                             pendingReplyText = "",
                             composerReplyToPostNumber = null,
-                            actionMessage = "评论已提交，等待审核"
+                            actionMessage = "评论已提交，等待审核",
+                            // 服务端把待审快照(id/raw/created_at)随响应回带,乐观追加到底部待审区,
+                            // 不等下次刷新 topic.json(对齐鸿蒙 TopicDetailPage:1394)。
+                            pendingPosts = outcome.pendingPost?.let { p -> it.pendingPosts + p }
+                                ?: it.pendingPosts
                         )
                     }
                 } else if (outcome.post != null) {
@@ -1324,6 +1374,7 @@ class TopicDetailViewModel @Inject constructor(
                 sharedIssueCreated = detail.userCreatedSharedIssue == true,
                 sharedIssueCount = detail.sharedIssueCount ?: 0,
                 sharedIssueCanCreate = detail.canCreateSharedIssue == true,
+                pendingPosts = detail.pendingPosts.orEmpty(),
                 loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了"
             )
         }
@@ -1559,6 +1610,8 @@ data class TopicDetailUiState(
     /** 是否展开成全屏编辑器（紧凑条与全屏编辑器共用同一份 pendingReplyText，切换不丢字）。 */
     val composerExpanded: Boolean = false,
     val composerPlaceholder: String = "回复当前话题",
+    /** 回复浮层顶上的一行提醒(抽奖帖规则摘要,非抽奖为空;对齐鸿蒙 composerHint)。 */
+    val composerHint: String = "",
     val composerReplyToPostNumber: Int? = null,
     val pendingReplyText: String = "",
     val isSubmittingReply: Boolean = false,
@@ -1586,7 +1639,9 @@ data class TopicDetailUiState(
     // 正在软删除或恢复的楼 id（>0 时该楼操作按钮转圈，避免连点）。
     val postActionLoadingId: Long = 0L,
     // 「谁回应了」弹层（对齐鸿蒙 ReactionUsersSheet）：非空即弹层可见，请求与分页状态都在这里。
-    val reactionSheet: ReactionUsersSheetState? = null
+    val reactionSheet: ReactionUsersSheetState? = null,
+    // 当前用户在本话题下的待审内容（对齐鸿蒙 pendingPosts）：详情下发 + 发帖被扣审时乐观追加。
+    val pendingPosts: List<PendingPost> = emptyList()
 )
 
 /**

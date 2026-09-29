@@ -1,5 +1,24 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.arkdo.android.ui.components.PostRichContent
+import com.arkdo.android.ui.theme.arkdoColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
@@ -40,6 +59,10 @@ import com.arkdo.android.navigation.tabEnterTransition
 import com.arkdo.android.navigation.tabExitTransition
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.arkdo.android.services.announce.ANNOUNCE_PROMPT_ENABLED
+import com.arkdo.android.services.announce.ANNOUNCE_TOPIC_ID
+import com.arkdo.android.services.announce.VersionAnnouncementService
+import com.arkdo.android.services.announce.VersionAnnouncePrefs
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.ui.components.ArkDoBottomBar
 import com.arkdo.android.ui.components.ArkDoBottomBarItem
@@ -104,6 +127,84 @@ fun RootTabScreen(
                 context,
                 com.arkdo.android.services.network.ArkWebNetworkBridge
             )
+        }
+    }
+
+    // ── 版本公告(对齐鸿蒙 HomePage.checkVersionAnnouncement)──
+    // 宿主就绪后扫一次公告帖,一趟拿两件事:本版更新内容([v当前code] 那楼)、有没有更高版本。
+    // 冷启动只查一次;「发现新版本」不去重(没升级就每次冷启动提醒),「本次更新」每版只弹一次。
+    var announceUi by remember { mutableStateOf<AnnounceUi?>(null) }
+    var announceChecked by remember { mutableStateOf(false) }
+    LaunchedEffect(isWebViewReady) {
+        if (!isWebViewReady || announceChecked) return@LaunchedEffect
+        announceChecked = true
+        // 公告源未定,整趟静默:不发扫描请求、不弹层(开关在 VersionAnnouncement.kt 顶部)。
+        if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect
+        val versionCode = com.arkdo.android.BuildConfig.VERSION_CODE
+        if (versionCode <= 0) return@LaunchedEffect
+        val currentPending = !VersionAnnouncePrefs.isShown(versionCode)
+        val scan = VersionAnnouncementService(com.arkdo.android.services.network.ArkWebNetworkBridge).scan(versionCode)
+        // 新版本提示优先:两个弹层不能同时上,而「有新版可升级」比「本版更新了啥」更该先看到。
+        // 本版公告的已弹标记这次不写:下次冷启动补弹,不会被升级提示吞掉。
+        val newer = scan.newer
+        if (newer != null) {
+            announceUi = AnnounceUi(title = "发现新版本", cookedHtml = newer.cookedHtml, jumpPost = newer.postNumber)
+            return@LaunchedEffect
+        }
+        if (!currentPending) return@LaunchedEffect
+        val current = scan.current ?: return@LaunchedEffect
+        announceUi = AnnounceUi(title = "本次更新", cookedHtml = current.cookedHtml, jumpPost = 0)
+        VersionAnnouncePrefs.markShown(versionCode)
+    }
+
+    // 版本公告弹层(对齐鸿蒙 AnnouncementSheet 底部弹层:标题 + cooked 正文 + 可选跳楼按钮)。
+    announceUi?.let { announce ->
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { announceUi = null },
+            sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.72f)
+                    .padding(start = 20.dp, end = 20.dp, bottom = 24.dp)
+            ) {
+                Text(
+                    text = announce.title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                // 正文可滚:内容超高一屏时在弹层内滚动(对齐鸿蒙 Scroll layoutWeight(1))。
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    PostRichContent(html = announce.cookedHtml)
+                }
+                if (announce.jumpPost > 0) {
+                    Text(
+                        text = "查看完整更新内容",
+                        fontSize = 15.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(arkdoColors.ldAccent)
+                            .clickable {
+                                val jump = announce.jumpPost
+                                announceUi = null
+                                navController.navigate("${Routes.TOPIC_DETAIL}/$ANNOUNCE_TOPIC_ID?target=$jump")
+                            }
+                            .padding(vertical = 12.dp)
+                    )
+                }
+            }
         }
     }
 
@@ -378,6 +479,9 @@ fun RootTabScreen(
     }
     }
 }
+
+/** 版本公告弹层的展示态:标题 + cooked 正文 + 跳楼目标楼层(0 = 无跳转按钮)。 */
+private data class AnnounceUi(val title: String, val cookedHtml: String, val jumpPost: Int)
 
 /**
  * Tab 项定义
