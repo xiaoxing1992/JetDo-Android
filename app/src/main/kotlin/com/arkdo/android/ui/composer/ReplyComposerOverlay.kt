@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.composer
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -89,6 +90,13 @@ internal fun ReplyComposerOverlay(
     onSubmit: (text: String, typingMs: Long, composerMs: Long, done: (Boolean) -> Unit) -> Unit,
     /** 选好一张图后交给调用方上传；回调给可插入正文的 markdown 片段（失败/取消为 null）。 */
     onUploadImage: (PreparedImage, done: (String?) -> Unit) -> Unit,
+    /** 工具栏「附件」「音视频」入口是否露出（由调用方按站点设置算）。 */
+    showAttachment: Boolean = false,
+    showMedia: Boolean = false,
+    /** 附件选择器的 MIME 过滤；空 = 不限类型。 */
+    attachmentMimeTypes: List<String> = emptyList(),
+    /** 选中一批文件后交给调用方上传；每成功一件回调一个可插入正文的 markdown 片段。 */
+    onUploadPickedFiles: (ComposerUploadKind, List<Uri>, (String) -> Unit) -> Unit = { _, _, _ -> },
     renderPreview: suspend (String) -> String?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -157,7 +165,7 @@ internal fun ReplyComposerOverlay(
                 return@launch
             }
             onUploadImage(prepared) { snippet ->
-                if (!snippet.isNullOrEmpty()) applyAction(MdAction.Insert(snippet))
+                if (!snippet.isNullOrEmpty()) applyAction(MdAction.Insert(uploadSnippet(snippet)))
             }
         }
     }
@@ -165,6 +173,36 @@ internal fun ReplyComposerOverlay(
     fun openImagePicker() {
         if (isUploading) return
         imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
+    // 附件：多选；音视频：单选。两者都只负责选，读字节/上传交给调用方（站点上限在那边）。
+    val attachmentPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        onUploadPickedFiles(ComposerUploadKind.Attachment, uris) { snippet ->
+            applyAction(MdAction.Insert(uploadSnippet(snippet)))
+        }
+    }
+
+    val mediaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        onUploadPickedFiles(ComposerUploadKind.Media, listOf(uri)) { snippet ->
+            applyAction(MdAction.Insert(uploadSnippet(snippet)))
+        }
+    }
+
+    fun openAttachmentPicker() {
+        if (isUploading) return
+        val mimes = attachmentMimeTypes.toTypedArray()
+        attachmentPicker.launch(mimes.ifEmpty { arrayOf("*/*") })
+    }
+
+    fun openMediaPicker() {
+        if (isUploading) return
+        mediaPicker.launch(arrayOf("video/*", "audio/*"))
     }
 
     fun submit() {
@@ -306,7 +344,11 @@ internal fun ReplyComposerOverlay(
             }
             MarkdownToolbar(
                 uploading = isUploading,
+                showAttachment = showAttachment,
+                showMedia = showMedia,
                 onUploadImage = { openImagePicker() },
+                onUploadAttachment = { openAttachmentPicker() },
+                onUploadMedia = { openMediaPicker() },
                 onAction = { applyAction(it) }
             )
         } else {
@@ -314,6 +356,8 @@ internal fun ReplyComposerOverlay(
                 html = previewHtml,
                 rawText = bodyField.text,
                 loading = isPreviewLoading,
+                // 预览里的音视频要过 CF 下到沙箱才能播，接线方式与详情页一致。
+                onResolveMedia = { url -> com.arkdo.android.services.network.ArkWebNetworkBridge.downloadMedia(url) },
                 modifier = Modifier.weight(1f)
             )
         }

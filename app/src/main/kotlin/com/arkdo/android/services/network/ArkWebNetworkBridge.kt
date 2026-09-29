@@ -30,6 +30,13 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private const val MEDIA_DOWNLOAD_TIMEOUT_MS = 120_000L
+
+/**
+ * 上传单独放宽。走的是同一条 WebView fetch 通道，但上传要先 base64 拼进脚本、服务端还要
+ * 转码落盘，15s 的通用闸门实测会误杀（本项目一张 320KB 的竖屏截图稳定失败：
+ * 日志停在 `UPLOAD /uploads.json start` 后再无声息，15s 后 `failed before response envelope`）。
+ */
+private const val UPLOAD_TIMEOUT_MS = 60_000L
 private const val BODY_LOG_CHUNK_SIZE = 3000
 private const val BODY_LOG_MAX_CHARS = 1500
 
@@ -48,7 +55,7 @@ private const val BODY_LOG_MAX_CHARS = 1500
 
 interface ArkWebJsonExecutor {
     /** 运行脚本并返回 JS 侧回传的 payload（信封 JSON 字符串）。 */
-    suspend fun run(script: String): String
+    suspend fun run(script: String, timeoutMs: Long = AppConstants.DEFAULT_TIMEOUT_MS): String
 }
 
 interface ArkWebResultReceiver {
@@ -105,7 +112,7 @@ class WebviewJsonExecutor(
 
     fun getCallbackProxy(): ArkDoBridgeProxy = callbackProxy
 
-    override suspend fun run(script: String): String {
+    override suspend fun run(script: String, timeoutMs: Long): String {
         val requestId = "arkdo_${requestSequence++}"
         Timber.i("[ArkDO][Network] executor start requestId=%s", requestId)
 
@@ -114,7 +121,7 @@ class WebviewJsonExecutor(
 
         // 兜底超时：requestId 未在窗口内被 JS 回传则判失败。
         val timeoutJob = kotlinx.coroutines.MainScope().launch {
-            kotlinx.coroutines.delay(AppConstants.DEFAULT_TIMEOUT_MS)
+            kotlinx.coroutines.delay(timeoutMs)
             pendingRequests.remove(requestId)?.let {
                 if (!it.deferred.isCompleted) {
                     it.deferred.completeExceptionally(IllegalStateException("ArkWeb 请求超时。"))
@@ -135,7 +142,7 @@ class WebviewJsonExecutor(
         }
 
         try {
-            return withTimeout(AppConstants.DEFAULT_TIMEOUT_MS) { deferred.await() }
+            return withTimeout(timeoutMs) { deferred.await() }
         } finally {
             timeoutJob.cancel()
             pendingRequests.remove(requestId)
@@ -665,7 +672,11 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                val job = synchronized(mediaDownloadJobs) { mediaDownloadJobs.remove(id) } ?: return
+                val job = synchronized(mediaDownloadJobs) { mediaDownloadJobs.remove(id) }
+                // 「结算表命中与否」是区分两类故障的分界点（下载没完成 vs 广播/派发对不上），
+                // 出问题时这行是唯一能一眼定性的证据，保留。
+                Timber.i("[ArkDO][Network] download-complete id=%s jobFound=%s", id, job != null)
+                job ?: return
                 val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 runCatching {
                     dm.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
@@ -687,10 +698,16 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             }
         }
         runCatching {
+            // **必须 EXPORTED**：ACTION_DOWNLOAD_COMPLETE 由系统 DownloadManagerService 发出，
+            // 而 RECEIVER_NOT_EXPORTED 的接收者只收同 UID 的广播 —— 实测本 ROM 上收不到它。
+            // 症状极具迷惑性：下载其实已完成、文件已完整落盘，但结算回调从不触发，
+            // 播放器永远停在「加载中」直到 120s 超时（日志里连一条媒体相关记录都没有）。
+            // 安全性：onReceive 里还会用 DownloadManager.query(id) 复核真实状态，伪造的 id
+            // 过不了状态校验；本 receiver 不带 intent-filter、只活在进程内。
             appContext.registerReceiver(
                 receiver,
                 IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-                Context.RECEIVER_NOT_EXPORTED
+                Context.RECEIVER_EXPORTED
             )
             downloadReceiverRegistered = true
             Timber.i("[ArkDO][Network] media download receiver registered")
@@ -701,14 +718,24 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     private fun suggestedFileName(contentDisposition: String?, url: String): String {
         val cd = contentDisposition ?: return ""
+        // 取 `filename="..."` 时**必须截到闭合引号**，不能一路取到串尾：服务端常按 RFC 5987
+        // 同时给两种写法 —— `attachment; filename="x.mp4"; filename*=UTF-8''x.mp4` ——
+        // 取串尾会把 `"; filename*=UTF-8''x.mp4` 也吞进文件名，落盘名变成
+        // `x.mp4"; filename*=UTF-8''x.mp4`，扩展名不再是 mp4，ExoPlayer 认不出容器 →
+        // `player error code=2005 Source error`（预览/详情页里点播放直接失败）。
         val marker = "filename=\""
         val idx = cd.indexOf(marker)
         if (idx >= 0) {
-            return cd.substring(idx + marker.length).trim('"')
+            val rest = cd.substring(idx + marker.length)
+            val end = rest.indexOf('"')
+            val name = (if (end >= 0) rest.substring(0, end) else rest).trim()
+            if (name.isNotEmpty()) return name
         }
         val after = cd.indexOf("filename=")
         if (after >= 0) {
-            return cd.substring(after + "filename=".length).trim('"', ';', ' ')
+            // 无引号写法：值以 `;` 或串尾结束。
+            val name = cd.substring(after + "filename=".length).substringBefore(';').trim().trim('"')
+            if (name.isNotEmpty()) return name
         }
         return url.substringAfterLast('/').substringBefore('?')
     }
@@ -729,7 +756,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         val relative = "${dir.name}/$fileName"
         val localFile = File(context.getExternalFilesDir(null) ?: context.filesDir, relative)
         req.setDestinationInExternalFilesDir(context, null, relative)
-        req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_HIDDEN)
+        // 媒体是缓存到沙箱内部消费的，本不该出现在系统「下载」列表里；但 **VISIBILITY_HIDDEN
+        // 在 Android 10+ 已废弃**：系统会把它改写成 VISIBILITY_VISIBLE_NOTIFY_COMPLETED(2)，
+        // 而该 ROM 的 DownloadProvider 又判 2 非法 ——
+        //   java.lang.SecurityException: Invalid value for visibility: 2
+        //     at DownloadProvider.enforceAllowedValues → checkInsertPermissions → insert
+        // 结果是 enqueue 直接抛异常、媒体永远下不来（表现：预览/详情页里点播放 → 「加载失败」）。
+        // 实测这台设备只接受 VISIBILITY_VISIBLE(0)，故显式设它，不再用废弃的 HIDDEN。
+        req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE)
         req.addRequestHeader("User-Agent", com.arkdo.android.services.web.UserAgentProvider.get(context))
         // 论坛同源媒体(xz 上传件)直连会被 CF 挡:补 webview 会话 cookie(cf_clearance/_t),
         // 与宿主同 UA 才拿得到字节。跨源 CDN 的下载请求不附加——CookieManager 按域返回,
@@ -742,6 +776,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         }
         try {
             val id = dm.enqueue(req)
+            Timber.i("[ArkDO][Network] download enqueued id=%s isMedia=%s mediaUrl=%s", id, isMedia, mediaUrl)
             if (isMedia && mediaUrl != null) {
                 synchronized(mediaDownloadJobs) {
                     mediaDownloadJobs[id] = MediaDownloadJob(mediaUrl, localFile.absolutePath)
@@ -994,7 +1029,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         whenHostReady()
         return runCatching {
             val referrer = options?.referrer ?: ""
-            val raw = executor!!.run(WebFetchScriptFactory.createUploadScript(base64, fileName, mimeType, referrer))
+            val raw = executor!!.run(
+                WebFetchScriptFactory.createUploadScript(base64, fileName, mimeType, referrer),
+                UPLOAD_TIMEOUT_MS
+            )
             convertEnvelope(requestPath, parseEnvelope(raw), "POST", options)
         }.getOrElse {
             Timber.i("[ArkDO][Network] UPLOAD %s failed before response envelope", requestPath)

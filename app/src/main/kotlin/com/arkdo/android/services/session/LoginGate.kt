@@ -79,6 +79,22 @@ object LoginGate {
 
     fun isStaff(): Boolean = staffValue
 
+    /**
+     * 当前用户能否发附件（对齐鸿蒙 LoginGate.canUploadAttachment）。
+     *
+     * Discourse 默认 `newuser_max_attachments = 0`，即 TL0 一个附件都发不出去 —— 编辑器据此
+     * 决定要不要收附件入口，免得让新用户点开选择器、选完传上去才被拒。
+     *
+     * 身份未知时**放行**：trustLevel 初值是「未知」，只有会话检查落地才写真；对版主来说
+     * 首次检查回来之前它会一直是未知。此时若按 TL0 处理，附件入口会凭空消失一段时间。
+     */
+    fun canUploadAttachment(newuserMaxAttachments: Int): Boolean {
+        if (staffValue) return true
+        val level = trustLevelValue
+        if (level == TRUST_LEVEL_UNKNOWN) return true
+        return level > 0 || newuserMaxAttachments > 0
+    }
+
     /** 写操作前置闸门：已登录返回 true 放行；未登录返回 false 并请求弹登录页。 */
     fun ensureLoggedIn(context: Context): Boolean {
         if (isLoggedIn(context)) return true

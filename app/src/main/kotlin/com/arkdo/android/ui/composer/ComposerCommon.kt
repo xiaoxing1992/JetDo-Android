@@ -1,8 +1,10 @@
 package com.arkdo.android.ui.composer
 
 import android.content.ContentResolver
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arkdo.android.services.upload.UploadService
 import com.arkdo.android.ui.components.PostRichContent
 import com.arkdo.android.ui.theme.arkdoColors
 import java.io.ByteArrayOutputStream
@@ -39,12 +42,20 @@ import java.io.ByteArrayOutputStream
 
 // ========== 预览 ==========
 
-/** 预览内容区：编译好的 HTML 走 PostRichContent 富文本渲染；失败/空内容退回原文/占位。 */
+/**
+ * 预览内容区：编译好的 HTML 走 PostRichContent 富文本渲染；失败/空内容退回原文/占位。
+ *
+ * [onResolveMedia] 必须由调用方接上（发帖页与回帖页都传 `ArkWebNetworkBridge.downloadMedia`）：
+ * 预览里插进来的音视频是**站内 uploads 直链**，要过 Cloudflare 下载到沙箱才能播。
+ * PostRichContent 的默认实现是 `error("媒体下载未接入")`，不传的话点播放只会得到
+ * 「加载失败，点击重试」—— 这正是「上传的视频在预览里不能播」的根因。
+ */
 @Composable
 internal fun PreviewPane(
     html: String?,
     rawText: String,
     loading: Boolean,
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
     modifier: Modifier = Modifier
 ) {
     val colors = arkdoColors
@@ -78,9 +89,10 @@ internal fun PreviewPane(
             ) {
                 PostRichContent(
                     html = html,
-                    // 预览里不上传图片解析，预览中的图（如已有 markdown 图链）原样显示链接/兜底。
+                    // 预览里点击图片不弹大图浏览器（编辑中没必要），图片本身照常内联显示。
                     onOpenImages = { _, _ -> },
-                    onLinkClick = {}
+                    onLinkClick = {},
+                    onResolveMedia = onResolveMedia
                 )
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -110,6 +122,19 @@ internal fun PreviewPane(
     }
 }
 
+// ========== 上传片段插入 ==========
+
+/**
+ * 上传件插入正文时的前后包裹 —— 必须是**空行**（`\n\n`），单个换行不够。
+ *
+ * 音视频在正文里是裸 `<video>` 块，而 CommonMark 的 HTML 块**只在空行处结束**：只补一个
+ * 换行时，紧接着插入的 `![](…)` 会被当成该 HTML 块内部的原始文本 → 预览里直接显示成一串
+ * 字面 markdown（`![xxx.jpg|864x1920](upload://…)`），也就是「图片不显示」的第二种成因。
+ * 反方向同理：HTML 块不能打断段落，紧贴在一段文字/一张图后面的 `<video>` 会被吞进段落里。
+ * 所以两侧都要空行。
+ */
+internal fun uploadSnippet(snippet: String): String = "\n\n$snippet\n\n"
+
 // ========== 图片预处理 ==========
 
 /** 选中的一张图片 → base64 + 文件名 + MIME。超宽/过大时先缩放再 JPEG 压缩，避免撞站点上限。 */
@@ -123,9 +148,12 @@ internal fun prepareImageUpload(resolver: ContentResolver, uri: Uri): PreparedIm
 
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
     // 动图/无法解码的格式原样上传；大尺寸位图压到长边 ≤1920（对齐鸿蒙 1920 上限）。
+    // 注意：必须按「长边」判据，而不是只看 width —— 竖屏截图（1080×2400）宽度不超 1920 但长边严重超标，
+    // 用 width>1920 会整张原样上传（320KB PNG），既慢又容易撞上传超时。
     val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    val outBytes = if (bitmap != null && bitmap.width > 1920 && !mimeType.contains("gif")) {
-        val scale = 1920f / maxOf(bitmap.width, bitmap.height)
+    val longEdge = if (bitmap != null) maxOf(bitmap.width, bitmap.height) else 0
+    val outBytes = if (bitmap != null && longEdge > 1920 && !mimeType.contains("gif")) {
+        val scale = 1920f / longEdge
         val scaled = Bitmap.createScaledBitmap(
             bitmap,
             (bitmap.width * scale).toInt().coerceAtLeast(1),
@@ -157,3 +185,100 @@ private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? =
             null
         }
     }
+
+// ========== 附件 / 音视频：原样字节 ==========
+
+/** 一次「原样上传」的载荷：不做任何重编码，字节与文件内容逐字一致。 */
+internal data class PreparedRawFile(
+    val base64: String,
+    val fileName: String,
+    val mimeType: String,
+    val byteLength: Long
+)
+
+/** 读取结果：成功给载荷，失败给可直接展示的文案。 */
+internal sealed interface RawFileResult {
+    data class Ok(val file: PreparedRawFile) : RawFileResult
+    data class Failed(val message: String) : RawFileResult
+}
+
+/**
+ * 读一份文件用于上传（附件 / 音视频共用），**原样字节**。
+ *
+ * 与图片不同，这里绝不重编码：
+ *  · 附件的扩展名决定白名单与体积上限，改名就会被服务端拒；
+ *  · 音视频重编码等于画质净赔（Android 侧还没有转码器，见 P1-6）。
+ *
+ * 体积检查放在读进内存**之前**：超限的文件根本不该被读进来，否则一个 500 MB 的包会在
+ * 「告诉用户传不了」之前先把 App 撑死（对齐鸿蒙 uploadRawFile 的顺序）。
+ */
+internal fun prepareRawUpload(
+    resolver: ContentResolver,
+    uri: Uri,
+    siteLimitKb: Int,
+    kindLabel: String
+): RawFileResult = runCatching {
+    val fileName = queryDisplayName(resolver, uri)
+        ?: uri.lastPathSegment?.substringAfterLast('/')
+        ?: "file"
+    val declaredSize = queryFileSize(resolver, uri)
+    if (declaredSize != null) {
+        val overLimit = UploadService.checkSize(declaredSize, siteLimitKb, kindLabel)
+        if (overLimit.isNotEmpty()) return RawFileResult.Failed(overLimit)
+        if (declaredSize == 0L) return RawFileResult.Failed("文件是空的")
+    }
+    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: return RawFileResult.Failed("文件读取失败")
+    if (bytes.isEmpty()) return RawFileResult.Failed("文件是空的")
+    // provider 不给 SIZE 时（少见）上面那道闸门是空的，读完再兜一次。
+    val afterRead = UploadService.checkSize(bytes.size.toLong(), siteLimitKb, kindLabel)
+    if (afterRead.isNotEmpty()) return RawFileResult.Failed(afterRead)
+    RawFileResult.Ok(
+        PreparedRawFile(
+            base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+            fileName = fileName,
+            mimeType = resolver.getType(uri)
+                ?: UploadService.mimeFor(UploadService.extensionOf(fileName)),
+            byteLength = bytes.size.toLong()
+        )
+    )
+}.getOrElse { RawFileResult.Failed("文件读取失败") }
+
+private fun queryFileSize(resolver: ContentResolver, uri: Uri): Long? =
+    resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (idx >= 0 && !cursor.isNull(idx)) cursor.getLong(idx) else null
+        } else {
+            null
+        }
+    }
+
+/**
+ * 量视频的**播放方向**尺寸（宽高已按旋转角摆正）。
+ *
+ * 服务端对 .xz 回的宽高是 null（它只认得图片），裸 `<video>` 的 width/height 只能自己量，
+ * 否则竖屏视频会被套进横向框摆歪。量不到返回 (0, 0)，由 [UploadService.videoBox] 退回
+ * 640x360 —— 尺寸只影响版面，不该阻断上传。
+ *
+ * 不能用 Kotlin 的 `use`：`MediaMetadataRetriever` 到 API 29 才实现 AutoCloseable，
+ * 本工程 minSdk 26，只能手写 try/finally 释放。
+ */
+internal fun probeVideoDisplaySize(context: Context, uri: Uri): Pair<Int, Int> {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, uri)
+        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            ?.toIntOrNull() ?: 0
+        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            ?.toIntOrNull() ?: 0
+        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+            ?.toIntOrNull() ?: 0
+        if (rotation == 90 || rotation == 270) height to width else width to height
+    } catch (e: Exception) {
+        // 读元数据失败（编码不常见/权限不足）不阻断上传，退回默认框。
+        0 to 0
+    } finally {
+        runCatching { retriever.release() }
+    }
+}

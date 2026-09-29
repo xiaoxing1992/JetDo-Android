@@ -11,11 +11,37 @@ import com.arkdo.android.common.constants.AppConstants
 /** 站内 emoji 图片的相对路径前缀，resolveUrl 据此把它们挂 CDN 而非主站。 */
 private const val EMOJI_PATH_PREFIX = "/images/emoji/"
 
+/**
+ * 上传短码前缀。`upload://<base62(sha1)><ext>` 只出现在**未经服务端 cook 的原始 markdown** 里
+ * —— 也就是本地预览（详情页正文是服务端 cook 过的，服务端已把它换成真实直链，不会有它）。
+ */
+private const val UPLOAD_SHORTCODE_PREFIX = "upload://"
+
+/**
+ * 短码对应的**兜底**路径前缀。两处 hash 段同源：Discourse 的 `Upload#short_url` 与 `#short_path`
+ * 都用 `UrlHelper.encode_base62_sha1(sha1)`，故 `upload://X.ext` → `/uploads/short-url/X.ext`
+ * 是纯字符串替换（由上传响应的 short_url / short_path 字段实测确认）。
+ *
+ * **但它只是兜底，不是正解**：linux.do 是 S3 + CDN 部署，这条路由对图片稳定 404
+ * （带完整浏览器头与会话 cookie 也一样），能取到图片的只有上传响应里的 `url`。
+ * 所以先查 [UploadShortcodeRegistry]（上传成功时记下的短码 → 真实直链），查不到才落到这里。
+ */
+private const val UPLOAD_SHORT_PATH_PREFIX = "/uploads/short-url/"
+
 /** 站点相对路径（/uploads/... 等）挂主站。 */
 fun resolveUrl(rawUrl: String): String {
     val url = rawUrl.trim()
-    if (url.isEmpty() || url.startsWith("upload://")) {
+    if (url.isEmpty()) {
         return url
+    }
+    // 本地预览里的刚上传件：优先换成上传响应给的 CDN 直链（见 UploadShortcodeRegistry 的注释，
+    // short-url 这条路由在 linux.do 上对图片不回字节）。
+    UploadShortcodeRegistry.lookup(url)?.let { return it }
+    if (url.startsWith(UPLOAD_SHORTCODE_PREFIX)) {
+        // 本地预览里的上传件：短码不换成真实直链，<img>/<video> 拿到 upload:// 必然加载不出来
+        // （浏览器/播放器不认这个私有协议）。表里没有时退到 short-url，至少对音视频有效。
+        return "${AppConstants.BASE_URL}$UPLOAD_SHORT_PATH_PREFIX" +
+            url.removePrefix(UPLOAD_SHORTCODE_PREFIX)
     }
     if (url.startsWith("http://") || url.startsWith("https://")) {
         return url

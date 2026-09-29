@@ -9,6 +9,7 @@ import coil3.svg.SvgDecoder
 import coil3.util.DebugLogger
 import com.arkdo.android.BuildConfig
 import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.network.WebViewCookieJar
 import com.arkdo.android.services.auth.AuthService
 import com.arkdo.android.services.notification.NotificationApi
 import com.arkdo.android.services.draft.DraftService
@@ -57,6 +58,11 @@ object AppModule {
                                 .readTimeout(30, TimeUnit.SECONDS)
                                 .writeTimeout(15, TimeUnit.SECONDS)
                                 .callTimeout(90, TimeUnit.SECONDS)
+                                // 必须挂宿主 WebView 的会话 cookie：`/uploads/short-url/*`
+                                // （发帖预览里 `upload://` 短码换出来的直链）在 linux.do 上
+                                // 需要登录态，匿名请求返回 404。Coil 默认没有 cookie jar，
+                                // 于是「上传成功但预览里图片是空白」。
+                                .cookieJar(WebViewCookieJar())
                                 .build()
                         }
                     )
