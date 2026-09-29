@@ -387,6 +387,7 @@ fun TopicDetailScreen(
                                         posts = ui.posts,
                                         isLoadingMore = ui.isLoadingMore,
                                         hasMore = ui.hasMore,
+                                        loadMoreMessage = ui.loadMoreMessage,
                                         onLoadMore = { viewModel.loadMorePosts() },
                                         targetPostNumber = targetPostNumber,
                                         flashTargetPostId = ui.flashTargetPostId,
@@ -718,6 +719,8 @@ private fun TopicDetailContent(
     posts: List<TopicPost>,
     isLoadingMore: Boolean,
     hasMore: Boolean,
+    /** 列表尽头文案（「正在加载更多」/「没有更多了」/失败重试），对齐鸿蒙 loadMoreMessage。 */
+    loadMoreMessage: String = "",
     onLoadMore: () -> Unit,
     targetPostNumber: Int? = null,
     flashTargetPostId: Long? = null,
@@ -934,16 +937,32 @@ private fun TopicDetailContent(
             }
         }
 
-        // 加载更多
-        if (isLoadingMore) {
-            item {
-                Box(
+        // 加载更多：尽头文案行（对齐鸿蒙 TopicDetailPage.ets:563-589——转圈与 13sp 次级色文案
+        // 同排居中，行高 54）。文案由 VM 的 loadMoreMessage 驱动：「正在加载更多」/「没有更多了」/
+        // 「加载更多失败，上拉重试」。兜底 ifBlank 覆盖「刚进帖、hasMore 已被置 false 但还没跑过
+        // loadMorePosts」的空档，否则会渲染一条 54 高的空行。
+        if (posts.isNotEmpty() && (isLoadingMore || !hasMore)) {
+            item(key = "load_more_footer") {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                        .height(54.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CircularProgressIndicator()
+                    if (isLoadingMore) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = arkdoColors.brand,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = loadMoreMessage.ifBlank { "没有更多了" },
+                        fontSize = 13.sp,
+                        color = arkdoColors.textTertiary
+                    )
                 }
             }
         } else if (hasMore) {
