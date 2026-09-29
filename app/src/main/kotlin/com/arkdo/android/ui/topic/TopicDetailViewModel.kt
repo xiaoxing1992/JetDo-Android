@@ -1439,10 +1439,15 @@ class TopicDetailViewModel @Inject constructor(
         createdFlushJob?.cancel()
         createdFlushJob = null
         if (clearBanner) {
-            incomingFirstNewPostNumber = 0
-            if (_uiState.value.incomingNewPostCount != 0) {
-                _uiState.update { it.copy(incomingNewPostCount = 0) }
-            }
+            clearIncomingBanner()
+        }
+    }
+
+    /** 收起「N 条新回复」提示条：计数与点按跳转目标一起复位（对齐鸿蒙 clearIncomingBanner）。 */
+    private fun clearIncomingBanner() {
+        incomingFirstNewPostNumber = 0
+        if (_uiState.value.incomingNewPostCount != 0) {
+            _uiState.update { it.copy(incomingNewPostCount = 0) }
         }
     }
 
@@ -1534,16 +1539,21 @@ class TopicDetailViewModel @Inject constructor(
      *
      * 对齐鸿蒙 TopicDetailPage.atListEnd：那边由 onScrollIndex 维护，这边由屏幕按
      * LazyListState 的 canScrollForward 上报（语义一致：还能往下滚 = 不在底部）。
+     *
+     * 滚到物理底部本身就是「那些新楼我已经看到了」——提示条必须同刻收起，否则挂着
+     * 一个已经读过的新楼数字（对齐鸿蒙 onReachEnd 里的 clearIncomingBanner）。
+     * 但「还有更多没加载」时不算真·到底：那时下方还有没拉进来的楼，人没看到全部，
+     * 提示条留着才对（鸿蒙同样只在 `!hasMorePosts` 分支里清）。
      */
     fun updateListAtEnd(atEnd: Boolean) {
         listAtEnd = atEnd
+        if (atEnd && !_uiState.value.hasMore) clearIncomingBanner()
     }
 
     /** 点「N 条新回复」提示条：跳到首条新楼（已在列表中，走 jumpToPostNumber 的已加载滚动分支）。 */
     fun openIncomingPosts() {
         val target = incomingFirstNewPostNumber
-        incomingFirstNewPostNumber = 0
-        _uiState.update { it.copy(incomingNewPostCount = 0) }
+        clearIncomingBanner()
         if (target > 0) {
             jumpToPostNumber(target)
         }
