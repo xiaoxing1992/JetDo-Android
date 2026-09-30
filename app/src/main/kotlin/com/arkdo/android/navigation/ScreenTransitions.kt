@@ -9,8 +9,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 
-/** 页面级转场时长（push/pop 滑动）。 */
-private const val SCREEN_TRANSITION_DURATION = 320
+/**
+ * 页面级转场时长（push/pop 滑动）。
+ *
+ * internal 而非 private：共享元素的 bounds 补间要用**同一个值**（见 ArkDoNavHost
+ * 下发 SharedSearchTransition.boundsDurationMillis）。两边一旦不同步，页面停稳后
+ * 图标还会自己动一段，看起来像多了一次回弹。
+ */
+internal const val SCREEN_TRANSITION_DURATION = 320
 
 /** Tab 切换交叉淡入时长。 */
 private const val TAB_TRANSITION_DURATION = 220
