@@ -598,6 +598,8 @@ fun TopicDetailScreen(
             isSubmitting = ui.isSubmittingReply,
             isUploading = ui.isUploadingMedia,
             uploadProgressText = ui.uploadProgressText,
+            uploadCancelable = ui.uploadCancelable,
+            onCancelUpload = viewModel::cancelUpload,
             minChars = if (ui.boostTargetPostId > 0 || ui.editingPostId > 0) 1 else 16,
             maxChars = if (ui.boostTargetPostId > 0) 16 else 0,
             editMode = ui.editingPostId > 0,
@@ -607,11 +609,6 @@ fun TopicDetailScreen(
                     ui.editingPostId > 0 -> viewModel.submitEdit(text, done)
                     ui.boostTargetPostId > 0 -> viewModel.submitBoost(text, done)
                     else -> viewModel.createReply(text, typingMs, composerMs, done)
-                }
-            },
-            onUploadImage = { image, done ->
-                viewModel.uploadImage(image.base64, image.fileName, image.mimeType) { snippet, _ ->
-                    done(snippet)
                 }
             },
             showAttachment = ui.showAttachment,

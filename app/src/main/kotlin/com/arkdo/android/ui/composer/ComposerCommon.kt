@@ -176,7 +176,7 @@ internal fun prepareImageUpload(resolver: ContentResolver, uri: Uri): PreparedIm
     )
 }.getOrNull()
 
-private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? =
+internal fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? =
     resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) {
             val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -193,7 +193,26 @@ internal data class PreparedRawFile(
     val base64: String,
     val fileName: String,
     val mimeType: String,
-    val byteLength: Long
+    val byteLength: Long,
+    /**
+     * 音视频专用：本地量到的**播放方向**尺寸（0,0 = 没量到）。
+     *
+     * 服务端对 `.xz` 回的 width/height 是 null（它只认得图片），`<video>` 标签的宽高只能
+     * 自己量，否则竖屏视频会被套进横向框摆歪。放在这里而不是读字节时再探一次：转码路径
+     * 本来就要探测（时长/尺寸决定压到几档），顺带把结果显示带出来，省一遍解容器头。
+     */
+    val displayWidth: Int = 0,
+    val displayHeight: Int = 0
+)
+
+/** 上传浮层的一行进度。 */
+internal data class UploadProgress(
+    val text: String,
+    /**
+     * 此刻能否取消。只有**压缩阶段**为真 —— 压缩可能要几十秒，不给退出口子只能干等；
+     * 上传阶段不给，因为请求已经发出去了，取消也收不回来（对齐鸿蒙 ComposerPage 的浮层）。
+     */
+    val cancelable: Boolean = false
 )
 
 /** 读取结果：成功给载荷，失败给可直接展示的文案。 */
@@ -207,7 +226,7 @@ internal sealed interface RawFileResult {
  *
  * 与图片不同，这里绝不重编码：
  *  · 附件的扩展名决定白名单与体积上限，改名就会被服务端拒；
- *  · 音视频重编码等于画质净赔（Android 侧还没有转码器，见 P1-6）。
+ *  · 音视频走 [prepareMediaForBatch]（在 ComposerUpload.kt）：达标原样传，超了先转码。
  *
  * 体积检查放在读进内存**之前**：超限的文件根本不该被读进来，否则一个 500 MB 的包会在
  * 「告诉用户传不了」之前先把 App 撑死（对齐鸿蒙 uploadRawFile 的顺序）。
@@ -244,7 +263,7 @@ internal fun prepareRawUpload(
     )
 }.getOrElse { RawFileResult.Failed("文件读取失败") }
 
-private fun queryFileSize(resolver: ContentResolver, uri: Uri): Long? =
+internal fun queryFileSize(resolver: ContentResolver, uri: Uri): Long? =
     resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) {
             val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
@@ -254,31 +273,8 @@ private fun queryFileSize(resolver: ContentResolver, uri: Uri): Long? =
         }
     }
 
-/**
- * 量视频的**播放方向**尺寸（宽高已按旋转角摆正）。
- *
- * 服务端对 .xz 回的宽高是 null（它只认得图片），裸 `<video>` 的 width/height 只能自己量，
- * 否则竖屏视频会被套进横向框摆歪。量不到返回 (0, 0)，由 [UploadService.videoBox] 退回
- * 640x360 —— 尺寸只影响版面，不该阻断上传。
- *
- * 不能用 Kotlin 的 `use`：`MediaMetadataRetriever` 到 API 29 才实现 AutoCloseable，
- * 本工程 minSdk 26，只能手写 try/finally 释放。
- */
-internal fun probeVideoDisplaySize(context: Context, uri: Uri): Pair<Int, Int> {
-    val retriever = MediaMetadataRetriever()
-    return try {
-        retriever.setDataSource(context, uri)
-        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-            ?.toIntOrNull() ?: 0
-        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-            ?.toIntOrNull() ?: 0
-        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-            ?.toIntOrNull() ?: 0
-        if (rotation == 90 || rotation == 270) height to width else width to height
-    } catch (e: Exception) {
-        // 读元数据失败（编码不常见/权限不足）不阻断上传，退回默认框。
-        0 to 0
-    } finally {
-        runCatching { retriever.release() }
-    }
-}
+// 视频元数据探测已统一收口到 `VideoTranscoder.probeVideo` / `displaySize`：转码决策与
+// `<video>` 标签的尺寸要的是同一次探测的产物，分成两处只会多解一遍容器头。
+// 那条路**不能**用 Kotlin 的 `use`：`MediaMetadataRetriever` 到 API 29 才实现
+// AutoCloseable，本工程 minSdk 26，只能手写 try/finally 释放。
+

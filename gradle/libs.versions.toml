@@ -44,6 +44,9 @@ compose-material-icons-extended = { group = "androidx.compose.material", name = 
 # Media3 (ExoPlayer)
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "androidx-media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "androidx-media3" }
+# 上传前转码（VideoTranscoder）：Transformer 负责解码→缩放→重编码，Effect 提供 Presentation 缩放
+androidx-media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "androidx-media3" }
+androidx-media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "androidx-media3" }
 
 # Navigation
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "androidx-navigation" }

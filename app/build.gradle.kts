@@ -144,6 +144,9 @@ dependencies {
     // 帖内音视频播放(对齐鸿蒙 AVPlayer 播放器):ExoPlayer 引擎 + PlayerView 控制条
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    // 上传前转码（视频超站点上限时降到目标体积以内），见 services/upload/VideoTranscoder.kt
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
     implementation(libs.backdrop)
     implementation(libs.capsule)
     implementation(libs.okhttp)
