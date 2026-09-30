@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.NotificationAvatar
 import com.arkdo.android.core.designsystem.TopicRow
+import com.arkdo.android.core.designsystem.searchIconSharedElement
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.core.model.SearchHit
@@ -224,7 +225,13 @@ private fun SearchBar(
                     .background(tokens.fillSubtle)
                     .padding(start = 12.dp, end = 4.dp)
             ) {
-                FaIcon("magnifying-glass", tokens.textFaint, 16.dp)
+                // 与首页顶栏的放大镜是同一个共享元素：转场期间这个 16dp 图标即为落点。
+                FaIcon(
+                    "magnifying-glass",
+                    tokens.textFaint,
+                    16.dp,
+                    Modifier.searchIconSharedElement()
+                )
 
                 BasicTextField(
                     value = query,

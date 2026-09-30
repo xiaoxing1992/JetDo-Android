@@ -79,6 +79,7 @@ import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.core.designsystem.GlassFab
 import com.arkdo.android.core.designsystem.bottomBarClearance
+import com.arkdo.android.core.designsystem.searchIconSharedElement
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -401,7 +402,14 @@ private fun HomeTitleBar(
             }
         }
         HomeBarButton(onClick = onSearchClick, contentDescription = "搜索", endMargin = 4.dp) {
-            FaIcon("magnifying-glass", colors.textPrimary, 20.dp)
+            // 挂共享元素的是图标自身、不是外面 40dp 的圆底：目的端（搜索条）那侧
+            // 没有圆底可对应，挂按钮会让整个圆一起飞过去。见 SharedSearchTransition。
+            FaIcon(
+                "magnifying-glass",
+                colors.textPrimary,
+                20.dp,
+                Modifier.searchIconSharedElement()
+            )
         }
         if (isLoggedIn) {
             // 通知铃铛：有未读时挂红色数字角标 + 间歇摇铃（对齐鸿蒙 NotificationBell.ets）。
