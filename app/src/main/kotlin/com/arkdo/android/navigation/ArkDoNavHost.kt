@@ -1,8 +1,10 @@
 package com.arkdo.android.navigation
 
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,6 +19,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.arkdo.android.core.designsystem.LocalSharedSearchTransition
+import com.arkdo.android.core.designsystem.SEARCH_ICON_SHARED_KEY
+import com.arkdo.android.core.designsystem.SharedSearchTransition
 import com.arkdo.android.navigation.slideEnterTransition
 import com.arkdo.android.navigation.slideExitTransition
 import com.arkdo.android.navigation.slidePopEnterTransition
@@ -88,6 +93,15 @@ fun ArkDoNavHost(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+    // 共享元素转场需要有一个 SharedTransitionLayout 作为共同祖先：两端在这个布局的
+    // 坐标系里各自报出 bounds，转场期间由它接管绘制（默认画在 overlay 上）。
+    // 它必须包住 NavHost、而不是包住某一个页面 —— 两端分属两个目的地，
+    // 只有同一个 scope 才能把它们认成一件事。
+    SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+    val sharedScope = this
+    // 同一把 key 只 remember 一次、两端共用。若两端各自 remember，会拿到两个互不相认的
+    // SharedContentState：元素照常渲染但完全不产生动画，且不报任何错（最难查的一种）。
+    val searchIconState = rememberSharedContentState(SEARCH_ICON_SHARED_KEY)
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -99,10 +113,18 @@ fun ArkDoNavHost(
     ) {
         // Root Tab 容器（首页、通知、个人中心）
         composable(Routes.ROOT) {
-            RootTabScreen(
-                isWebViewReady = isWebViewReady,
-                navController = navController
-            )
+            // visibilityScope 逐目的地不同（它就是本目的地这次转场的作用域），
+            // 只能在目的地内部就地提供 —— 见 SharedSearchTransition 的字段注释。
+            val visibilityScope = this
+            CompositionLocalProvider(
+                LocalSharedSearchTransition provides
+                    SharedSearchTransition(sharedScope, searchIconState, visibilityScope)
+            ) {
+                RootTabScreen(
+                    isWebViewReady = isWebViewReady,
+                    navController = navController
+                )
+            }
         }
 
         // 个人中心:首页右上角头像 push 进来的根级全屏页(对齐鸿蒙 AppRouteName.PROFILE)。
@@ -158,20 +180,28 @@ fun ArkDoNavHost(
         }
         // 搜索页:首页顶栏放大镜进入(对齐鸿蒙 SearchOverlay 全屏覆盖)。
         // 压在 ROOT(含底部导航)之上,返回 pop 回原页面。
+        // 顶栏放大镜与搜索条放大镜之间是共享元素转场：转场期间 ROOT 与 SEARCH 同时在场，
+        // 由上面的 SharedTransitionLayout 把两个 20dp / 16dp 的图标当作同一个元素补间。
         composable(Routes.SEARCH) {
-            com.arkdo.android.ui.search.SearchFeatureScreen(
-                isWebViewReady = isWebViewReady,
-                onBack = { navController.popBackStack() },
-                onOpenTopic = { topicId, targetPostNumber ->
-                    val q = targetPostNumber?.let { "?target=$it" } ?: ""
-                    navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
-                },
-                onOpenUser = { username ->
-                    if (username.isNotEmpty()) {
-                        navController.navigate("${Routes.USER_PROFILE}/$username")
+            val visibilityScope = this
+            CompositionLocalProvider(
+                LocalSharedSearchTransition provides
+                    SharedSearchTransition(sharedScope, searchIconState, visibilityScope)
+            ) {
+                com.arkdo.android.ui.search.SearchFeatureScreen(
+                    isWebViewReady = isWebViewReady,
+                    onBack = { navController.popBackStack() },
+                    onOpenTopic = { topicId, targetPostNumber ->
+                        val q = targetPostNumber?.let { "?target=$it" } ?: ""
+                        navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
+                    },
+                    onOpenUser = { username ->
+                        if (username.isNotEmpty()) {
+                            navController.navigate("${Routes.USER_PROFILE}/$username")
+                        }
                     }
-                }
-            )
+                )
+            }
         }
 
         // 话题详情页
@@ -551,6 +581,7 @@ fun ArkDoNavHost(
             )
         }
         }
+    }
 
         // 登录半弹窗盖在导航内容之上（bindSheet 同层语义：sheet 画在根容器顶）。
         if (showLoginSheet) {
