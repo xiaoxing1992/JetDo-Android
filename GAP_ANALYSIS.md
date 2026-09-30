@@ -8,19 +8,19 @@
 
 ## 一、结论先行
 
-**还剩 38 项 + 7 组死代码。**
+**还剩 34 项 + 7 组死代码。**
 
 ### 1.1 缺口分布
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
-| P1 | 6 | 功能不完整，用起来别扭 |
+| P1 | 3 | 功能不完整，用起来别扭 |
 | 半截 | 11 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 6 | 目录级对比看不出来的缺失 |
-| P2 | 12 | 工程化与发布 |
+| P2 | 11 | 工程化与发布 |
 | 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **38** | 上表各项之和，与逐行点数一致 |
+| **合计** | **34** | 上表各项之和，与逐行点数一致 |
 
 模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 48%** / **多站点 30%** / **系统推送 0%**。
 
@@ -40,21 +40,18 @@
 |---|---|---|---|
 | 1 | **系统推送 + 本地通知** | `services/push/` 不存在（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）；全库 **0 处** `NotificationManager` / `NotificationCompat` / `NotificationChannel`；`POST_NOTIFICATIONS` 已声明但**无运行时申请**；App 活着时点通知也接不到（`onNewIntent` **0 命中**） | Manifest `:9`；`MainActivity.kt:210` `handleNotificationIntent` 只打日志；`:201` 仅 `onCreate` 调用 |
 | 2 | **设置 4 入口未迁移** | 「网络与连接 → DoH」已落地；**论坛 / 通知 / 我的站点** 仍弹 Toast；`SETTINGS_PUSH` 常量零引用（悬空） | `SettingsScreen.kt:88`（`NOT_MIGRATED = "尚未迁移"`）、`:163` / `:169` / `:187`（三处 `toastNotMigrated`）；`ArkDoNavHost.kt:587` |
-| 3 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**；Android `services/site/` **5 文件** vs 鸿蒙 **12**，缺 `CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteUrl` / `SiteSwitchCoordinator` / `SiteSettingsService`；鸿蒙的 `ForumsPage` / `SitesPage` / `ForumOnboardingPage` 三页无对应 | `AppConstants.kt:8`、`:21`；两侧 `services/site/` 目录实测 |
+| 3 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**；Android `services/site/` **5 文件** vs 鸿蒙 **12**，缺 `CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteUrl` / `SiteSwitchCoordinator` / `SiteSettingsService`；鸿蒙的 `ForumsPage` / `SitesPage` / `ForumOnboardingPage` 三页无对应。**首页抽屉的「我的站点」快捷条也挂在这里**——它受 `SiteCapabilities.ecosystemSites`（复用主站 OAuth 免登录进生态站点，换站后无从谈起）与设置页开关双重门控，两个前置在 Android 都不存在 | `AppConstants.kt:8`、`:21`；两侧 `services/site/` 目录实测 |
 
 **依赖关系**：`多站点` 是 `设置 4 入口` 里「论坛 / 我的站点」两个子页的前置。做 P0-2 的两个入口前必须先有 `CurrentSite`。
 
 ---
 
-## 三、P1 · 功能不完整（6 项）
+## 三、P1 · 功能不完整（3 项）
 
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
-| 6 | **上传件的下载 / 分享 + 视频转码** | `DownloadService` + `ImageShareService` + `VideoTranscoder` | **上传侧已补齐**：工具栏 12 钮（含 `video` / `file-arrow-up`）、附件与音视频入口、`.xz` 伪装 + 裸 `<video>` 拼装、体积闸门、`N/M` 进度遮罩。仍缺**消费侧**：`DownloadService` / `ImageShareService` / `VideoTranscoder` 全库 **0 命中** —— 帖内附件点不开、媒体不能存相册、上传前不转码 | 全库；对照 `DownloadService.ets` / `ImageShareService.ets` / `VideoTranscoder.ets` |
-| 8 | **多图批量上传** | 多选 + `N/M` 进度 | 图片选择仍是 `PickVisualMedia.ImageOnly`（单图），`PickMultipleVisualMedia` **0 命中**；进度遮罩与批量上传已随 P1-6 落地（附件路径已是批量） | `NewTopicScreen.kt:168`、`ReplyComposerOverlay.kt:175` |
 | 9 | **平板双栏布局** | 横屏双栏 / 竖屏单栏自适应 | `WindowSizeClass` **0 命中** | 全库 |
-| 10 | **分类抽屉缺分组** | 「我的版块 / 所有版块」+ 组内计数；「我的标签 / 热门标签」；「我的站点」快捷条 | 平铺 top-level；热门标签数据有但不分组；无站点快捷条 | `HomeDrawer.kt:427-454`、`:656-736` |
-| 11 | **活动列表 / 徽章 / 已解决 等子页的细节对齐** | — | 「我的」页活动行、他人页简介链接、取关确认**已修**；仍缺：称号全息特效、详情页「在网页中打开」菜单、抽屉 chip 搜索转场动画 | 见 §四 S12 |
+| 11 | **顶栏「放大镜 → 搜索页」共享元素转场** | 顶栏放大镜与搜索页之间做共享元素转场 | 只剩这一条：「我的」页活动行、他人页简介链接、取关二次确认、**称号全息特效**（`HolographicTitle` + `UserTitleText`）、用户主页**「在网页中打开」**菜单**均已落地**。共享元素转场未做 —— 它要求起止两端页面同时在场、各自出一份起止快照，改造面大，建议降优先级 | `ui/components/HolographicTitle.kt`（白名单 `Premium` / `种子用户` / `破界者`）；`UserProfileScreen.kt:180`；`TopicPostItem.kt:418`、`UserProfileScreen.kt:431` |
 | 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告 | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:139`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
 
 ---
@@ -108,7 +105,6 @@
 | 26 | 无崩溃上报 | 无 Crashlytics / Bugly，仅本地 `DebugLogScreen` |
 | 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md:163-165` 未勾选 |
 | 28 | 无多语言、无 `values-night` | `res/` 只有 `drawable mipmap-* raw values xml` |
-| 29 | 非图片附件下载无落地 | 同 P1-6 |
 | 30 | `AppRoutes.kt` 死代码 | 同 D2 |
 | 31 | **文档严重过期** | `TODO.md` 末行仍写「等待实现具体功能」；`MIGRATION.md` 把 20 个已完成页面列为「未做」|
 
@@ -164,17 +160,15 @@
 **第 2 步 · 用户一眼能看到的**
 7. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口（复用 D5 的 `SETTINGS_PUSH` 常量）
 8. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
-9. **多图批量上传**（P1-8）：图片选择改 `PickMultipleVisualMedia`，复用现成的批量上传与进度遮罩
-10. **上传件的下载 / 分享 + 视频转码**（P1-6）：补 `DownloadService` / `ImageShareService` / `VideoTranscoder`
 
 **第 3 步 · 横向铺开**
-11. **系统推送全链路**（P0-1）：含 `services/push/` 移植、Relay 配置与同意流程、本地通知渠道、`onNewIntent` 接续
-12. **平板双栏**（P1-9）/ **抽屉分组**（P1-10）/ **动态头像**（N1）
+9. **系统推送全链路**（P0-1）：含 `services/push/` 移植、Relay 配置与同意流程、本地通知渠道、`onNewIntent` 接续
+10. **平板双栏**（P1-9）/ **动态头像**（N1）
 
 **第 4 步 · 发布准备**
-13. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
-14. 崩溃上报、隐私政策与商店素材（P2-26/27）
-15. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
+11. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
+12. 崩溃上报、隐私政策与商店素材（P2-26/27）
+13. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
 
 ---
 
