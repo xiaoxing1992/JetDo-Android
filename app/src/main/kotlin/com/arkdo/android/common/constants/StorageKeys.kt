@@ -68,6 +68,10 @@ object StorageKeys {
     const val PREFS_DOH_SERVERS = "dohServers"
     const val PREFS_DOH_SEQ = "dohIdSeq"
     const val PREFS_THEME_MODE = "themeMode"
+    // 文件日志器（对齐鸿蒙 FileLogger 的 fileLogEnabled / fileLogVerbose）：
+    // 前者控制是否落盘，后者控制是否连 D 级调试日志一起记。
+    const val PREFS_FILE_LOG_ENABLED = "fileLogEnabled"
+    const val PREFS_FILE_LOG_VERBOSE = "fileLogVerbose"
     const val PREFS_FEED_ENABLED_ORDER = "feedEnabledOrder"
     const val PREFS_USER_SITES = "userSites"
     const val PREFS_SITES_ENTRY_ENABLED = "sitesEntryEnabled"

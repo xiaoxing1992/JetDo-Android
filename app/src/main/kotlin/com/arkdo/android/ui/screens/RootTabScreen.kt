@@ -90,6 +90,15 @@ import com.arkdo.android.ui.notification.NotificationScreen
 fun RootTabScreen(
     isWebViewReady: Boolean = false,
     navController: NavHostController,
+    /**
+     * 通知深链切 tab 的信号，自增即触发一次切到「通知」。
+     *
+     * 由 [com.arkdo.android.navigation.ArkDoNavHost] 下发：宿主先把 ROOT 之上的页面
+     * pop 掉，再把这个数加一。两者配合才能保证冷启动、热启动、从详情页点通知
+     * 三种情况下都停在通知页 —— 单靠 state 传递在「刚 pop 回来、本组件还没组合」
+     * 的那一帧会丢事件，自增计数则会在它组合时立刻生效。
+     */
+    notificationTabSignal: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val tabNavController = rememberNavController()
@@ -105,6 +114,15 @@ fun RootTabScreen(
     val selectedTabIndex = if (matchedTab >= 0) matchedTab else rememberedTab
     SideEffect {
         if (matchedTab >= 0) rememberedTab = matchedTab
+    }
+
+    // 通知深链：把信号变成真实的 tab 切换。key 用信号本身而不是 Unit —— 每次自增
+    // 都重启一次，连点两条通知也能正确回到通知页。launchSingleTop 避免反复点通知
+    // 把 notification 路由在 tab 栈里堆成一摞。
+    LaunchedEffect(notificationTabSignal) {
+        if (notificationTabSignal > 0) {
+            tabNavController.navigate(Routes.NOTIFICATION) { launchSingleTop = true }
+        }
     }
 
     // 首页 ViewModel 提到这一层持有：抽屉宿主要在标签栏之外，得和首页共用同一个实例。

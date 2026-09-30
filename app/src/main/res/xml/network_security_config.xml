@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  明文 HTTP 策略（S16）。
+
+  旧配置是 application 上的 android:usesCleartextTraffic="true"，release 包同样放行，
+  等于任意 http 请求都能发出去。这里改成默认禁止。
+
+  为什么可以放心关：全库 grep "http://" 的 13 处命中全部是「判断传进来的 URL 是不是
+  http 开头」的判定逻辑（MediaSource / UserAvatar / TopicBadgeUtils / HtmlContentUtils …），
+  没有一处是硬编码的 http 端点；站点是 linux.do（https），DoH 服务器也全是 https。
+
+  留白名单的原因：模拟器要连宿主机的本地调试服务（10.0.2.2），
+  本机回环（localhost / 127.0.0.1）也可能被 WebView 或本地联调用到。
+  这三条在真实设备上不会指向任何外部主机，发布包保留无副作用。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <!-- Android 模拟器访问宿主机的固定别名 -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

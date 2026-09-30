@@ -130,14 +130,6 @@ object DebugLogStore {
 
     fun dumpText(): String = buffer.dump(header)
 
-    /** 把当前日志写到 filesDir/logs/ 下的新文件（时间戳命名），供 FileProvider 分享。 */
-    fun dumpToFile(context: Context): File {
-        val dir = File(context.filesDir, "logs").apply { mkdirs() }
-        val file = File(dir, "debug_log_${System.currentTimeMillis()}.txt")
-        file.writeText(dumpText())
-        return file
-    }
-
     fun clear() {
         buffer.clear()
         runCatching { crashFile?.delete() }
