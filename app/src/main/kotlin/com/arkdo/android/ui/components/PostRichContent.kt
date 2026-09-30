@@ -17,16 +17,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -46,6 +52,9 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import coil3.compose.AsyncImage
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.content.CookedHtmlParser
@@ -57,6 +66,7 @@ import com.arkdo.android.services.content.RichInlineType
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.ui.theme.isArkdoInDarkTheme
 import com.arkdo.android.core.designsystem.FaIcon
+import kotlinx.coroutines.launch
 
 // ==========================================================================
 // 楼层正文渲染器，对齐鸿蒙 PostRichContent.ets：把 CookedHtmlParser 产出的
@@ -95,7 +105,14 @@ fun PostRichContent(
     onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
     // 附件（`<a class="attachment">`）点击：参数是 (下载地址, 文件名)。不传则用默认实现
     // （下载 → 交系统「打开方式」面板），见 rememberAttachmentOpener()。
-    onAttachmentClick: ((String, String) -> Unit)? = null
+    onAttachmentClick: ((String, String) -> Unit)? = null,
+    // 引用卡：当前渲染的是第几楼（同帖引用卡据此判跳转箭头朝上还是朝下；0 = 无楼层上下文）。
+    currentPostNumber: Int = 0,
+    // 引用卡右上角跳转箭头点击：同帖由页面滚动定位，跨帖走 fallbackUrl 开详情。
+    // 不传 = 引用卡没有跳转能力（箭头仍渲染，点了没反应），对齐鸿蒙未接线时的表现。
+    onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit = { _, _, _ -> },
+    // 引用卡展开全文：取被引用楼 cooked HTML。空串 = 拉不到，渲染层隐藏展开箭头。
+    onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" }
 ) {
     val attachmentClick = onAttachmentClick ?: rememberAttachmentOpener()
     val blocks = remember(html) { CookedHtmlParser.parse(html) }
@@ -112,18 +129,26 @@ fun PostRichContent(
     MathHostGate(hasMath = hasMath)
 
     ProvideAttachmentClick(attachmentClick) {
-        Column(modifier = modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            blocks.forEachIndexed { index, block ->
-                BlockView(
-                    block = block,
-                    key = "$index",
-                    expandedKeys = expandedKeys,
-                    linkClicks = linkClicks,
-                    viewerImages = viewerImages,
-                    onOpenImages = onOpenImages,
-                    onLinkClick = onLinkClick,
-                    onResolveMedia = onResolveMedia
-                )
+        CompositionLocalProvider(
+            LocalQuoteJump provides QuoteJumpContext(
+                currentPostNumber = currentPostNumber,
+                onJumpToQuote = onJumpToQuote,
+                onResolveQuotedPost = onResolveQuotedPost
+            )
+        ) {
+            Column(modifier = modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                blocks.forEachIndexed { index, block ->
+                    BlockView(
+                        block = block,
+                        key = "$index",
+                        expandedKeys = expandedKeys,
+                        linkClicks = linkClicks,
+                        viewerImages = viewerImages,
+                        onOpenImages = onOpenImages,
+                        onLinkClick = onLinkClick,
+                        onResolveMedia = onResolveMedia
+                    )
+                }
             }
         }
     }
@@ -315,7 +340,21 @@ private fun QuoteAccent(bar: Boolean): Color {
     }
 }
 
-/** 话题/帖子引用卡:头像 + 标题 + 分类徽章头部,正文预览递归渲染,整卡可点跳转。 */
+/** 引用卡展开态（对齐鸿蒙 QuoteFullStatus）：未拉取 / 拉取中 / 已到手 / 拉不到。 */
+private enum class QuoteFullStatus { IDLE, LOADING, LOADED, FAILED }
+
+/**
+ * 话题/帖子引用卡（`<aside class="quote" data-topic>`）。
+ *
+ * 头部：头像 + 标题 + 分类徽章 + 折叠 chevron + 跳转箭头。
+ * 正文：折叠态显示 aside 内 blockquote 的截断预览；展开态显示被引用楼全文（按需拉取）。
+ *
+ * 对齐鸿蒙 PostRichContent.ets 的 TopicQuoteBlock（:589-698）。两处刻意的差异：
+ *  - 鸿蒙把展开态与全文缓存挂在 PostRichContent 实例的 @State 上；这里按本卡块路径 remember，
+ *    表现等价（都会随楼层被 LazyColumn 回收而重置），但不必再往 BlockView 的递归签名里加参数。
+ *  - 鸿蒙 chevron 走「旋转而非换图」是为了绕开 FaIconView「普通成员改属性不刷新」的坑；
+ *    Compose 没有这个坑，但同样用旋转 —— 拿到动画，且只切一个属性。
+ */
 @Composable
 private fun TopicQuoteBlock(
     block: RichBlock,
@@ -323,6 +362,37 @@ private fun TopicQuoteBlock(
     onLinkClick: (String) -> Unit,
     onResolveMedia: suspend (String) -> String
 ) {
+    val jump = LocalQuoteJump.current
+    val scope = rememberCoroutineScope()
+
+    // 每张卡一份展开态与全文缓存，键是本卡块路径；块顺序变化也不会串位。
+    var status by remember(key) { mutableStateOf(QuoteFullStatus.IDLE) }
+    var expanded by remember(key) { mutableStateOf(false) }
+    var fullHtml by remember(key) { mutableStateOf("") }
+
+    val quotedPostNumber = block.quotePostNumber ?: 0
+    // 有被引用楼号才谈得上展开；拉不到（FAILED）后整体收起 —— 对齐鸿蒙「拉不到即隐藏 chevron」。
+    val canExpand = quotedPostNumber > 0 && status != QuoteFullStatus.FAILED
+
+    val previewSource = block.text
+    val previewBlocks = remember(previewSource) {
+        if (previewSource.isNullOrEmpty()) emptyList() else CookedHtmlParser.parse(previewSource)
+    }
+    val fullBlocks = remember(fullHtml) {
+        if (fullHtml.isEmpty()) emptyList() else CookedHtmlParser.parse(fullHtml)
+    }
+    val showFull = expanded && fullBlocks.isNotEmpty()
+    val bodyBlocks = if (showFull) fullBlocks else previewBlocks
+    // 展开态与折叠态用不同的 key 前缀：同一位置的段落 key 若撞车，Compose 会复用到上一态的节点，
+    // 表现为「展开后还显示着预览的最后一段」。
+    val bodyPrefix = if (showFull) "f" else "p"
+
+    val chevronAngle by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 220),
+        label = "quoteChevron"
+    )
+
     Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         Box(
             modifier = Modifier
@@ -337,40 +407,118 @@ private fun TopicQuoteBlock(
                 .clickable { block.href?.let(onLinkClick) }
                 .padding(10.dp)
         ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // 引用卡头像与列表/楼层共用全局 UserAvatar（动图候选 + 首字母回退），尺寸外部控制。
-            UserAvatar(
-                user = User(
-                    id = 0,
-                    username = block.quoteAuthor ?: "",
-                    animatedAvatar = block.quoteAvatarUrl
-                ),
-                avatarSize = 24.dp,
-                showFlair = false
-            )
-            Column(modifier = Modifier.padding(start = 8.dp)) {
-                block.quoteTitle?.let {
-                    Text(plainNodeText(it), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 引用卡头像与列表/楼层共用全局 UserAvatar（动图候选 + 首字母回退），尺寸外部控制。
+                UserAvatar(
+                    user = User(
+                        id = 0,
+                        username = block.quoteAuthor ?: "",
+                        animatedAvatar = block.quoteAvatarUrl
+                    ),
+                    avatarSize = 24.dp,
+                    showFlair = false
+                )
+                // weight(1f)：把右侧 chevron / 箭头顶到行尾，长标题也不会把它们挤出可视区。
+                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                    block.quoteTitle?.let {
+                        Text(plainNodeText(it), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    block.quoteCategory?.let { category ->
+                        Text(
+                            category.name,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                block.quoteCategory?.let { category ->
-                    Text(
-                        category.name,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                // 折叠开关：拉取中显示转圈取代 chevron；否则 chevron-down 折叠 0°、展开 180°（转到底即朝上）。
+                // 外包 padding 放大命中区（16dp 图标对触屏偏小）。
+                if (canExpand) {
+                    Box(
+                        modifier = Modifier.padding(6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (status == QuoteFullStatus.LOADING) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = arkdoColors.textTertiary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .rotate(chevronAngle)
+                                    .clickable {
+                                        when {
+                                            // 已展开 → 折叠；已缓存全文 → 直接展开。
+                                            expanded -> expanded = false
+                                            status == QuoteFullStatus.LOADED -> expanded = true
+                                            else -> {
+                                                status = QuoteFullStatus.LOADING
+                                                scope.launch {
+                                                    val html = jump.onResolveQuotedPost(
+                                                        block.quoteTopicId ?: 0L,
+                                                        quotedPostNumber
+                                                    )
+                                                    if (html.isEmpty()) {
+                                                        // 拉不到：不展开，chevron 随即隐藏，只剩预览。
+                                                        status = QuoteFullStatus.FAILED
+                                                    } else {
+                                                        fullHtml = html
+                                                        status = QuoteFullStatus.LOADED
+                                                        expanded = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                            ) {
+                                FaIcon("chevron-down", arkdoColors.textTertiary, 16.dp)
+                            }
+                        }
+                    }
+                }
+                // 跳转：同帖回复引用 → 按被引用楼在本楼之前/之后给 arrow-up / arrow-down（与官网
+                // quoted-content.gjs 的 navigateToPostIcon 一致）；跨帖引用 → arrow-right。
+                Box(
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .clickable {
+                            if (block.quoteIsReply) {
+                                jump.onJumpToQuote(block.quoteTopicId ?: 0L, quotedPostNumber, block.href)
+                            } else {
+                                block.href?.let(onLinkClick)
+                            }
+                        }
+                ) {
+                    FaIcon(quoteJumpIcon(block, jump.currentPostNumber), arkdoColors.textTertiary, 16.dp)
                 }
             }
-        }
-            // 截断预览：引用 aside 内 blockquote 的内部 HTML，递归解析渲染。
-            if (!block.text.isNullOrEmpty()) {
-                Column(modifier = Modifier.padding(top = 8.dp)) {
-                    CookedHtmlParser.parse(block.text).forEachIndexed { index, inner ->
-                        BlockView(inner, "$key-p$index", mutableStateListOf(), null, emptyList(), { _, _ -> }, onLinkClick, onResolveMedia)
+            // 正文：折叠态是 blockquote 截断预览，展开态是被引用楼全文。高度变化走 animateContentSize，
+            // 与 chevron 的角度动画各驱动一个属性，互不打断（鸿蒙那边踩过「一次点击连开两个 animateTo」的坑）。
+            if (bodyBlocks.isNotEmpty()) {
+                Column(modifier = Modifier.padding(top = 8.dp).animateContentSize()) {
+                    bodyBlocks.forEachIndexed { index, inner ->
+                        BlockView(inner, "$key-$bodyPrefix$index", mutableStateListOf(), null, emptyList(), { _, _ -> }, onLinkClick, onResolveMedia)
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * 引用卡跳转箭头的朝向。跨帖引用打开的是另一个帖子，与楼层前后无关 → 固定 arrow-right。
+ * 同帖引用对齐官网 quoted-content.gjs：被引用楼在本楼之后朝下、之前（或同楼）朝上；
+ * [currentPostNumber] 为 0 表示没有楼层上下文（编辑器预览、公告弹层），退回 arrow-up。
+ *
+ * internal 而非 private：纯函数、判据集中，是这条链路唯一能脱离 Compose 单测的部分
+ * （见 QuoteJumpIconTest）。
+ */
+internal fun quoteJumpIcon(block: RichBlock, currentPostNumber: Int): String {
+    if (!block.quoteIsReply) return "arrow-right"
+    val quoted = block.quotePostNumber ?: 0
+    return if (currentPostNumber > 0 && quoted > currentPostNumber) "arrow-down" else "arrow-up"
 }
 
 /** callout：主色左框 + 图标标题行（可折叠），正文递归渲染。 */

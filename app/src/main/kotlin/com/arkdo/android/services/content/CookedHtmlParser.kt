@@ -287,7 +287,7 @@ object CookedHtmlParser {
             block = RichBlock(
                 type = RichBlockType.TOPIC_QUOTE,
                 quoteTopicId = topicId,
-                // 缺 data-post 保持 0：渲染层(quotePostNumber > 0)不显示展开箭头，避免拉错楼。
+                // 缺 data-post 保持 0：渲染层据此不出展开箭头（没有目标楼，拉全文无从谈起）。
                 quotePostNumber = postNumber.takeIf { it > 0 }?.toInt(),
                 quoteAvatarUrl = avatarUrl.ifEmpty { null },
                 quoteAuthor = username.ifEmpty { null },

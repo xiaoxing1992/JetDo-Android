@@ -783,6 +783,55 @@ class TopicService(private val bridge: JsonNetworkClient) {
     // ========== 发表内容 ==========
 
     /**
+     * 取某楼的 cooked HTML，供引用卡「展开查看被引用楼层全文」按需拉取。
+     * GET /posts/by_number/{topicId}/{postNumber}（对齐鸿蒙 TopicService.getPostByNumber）。
+     *
+     * 调用方（TopicDetailViewModel）会先在已加载楼层里找，找不到才走这里——被引用的楼
+     * 可能不在当前窗口（跨帖引用、或同帖但还没翻到）。拉不到返回失败，渲染层据此隐藏
+     * 展开箭头，只保留折叠预览。
+     */
+    suspend fun getPostByNumber(topicId: Long, postNumber: Int): NetworkResult<String> {
+        if (topicId <= 0L || postNumber <= 0) {
+            return NetworkResults.unexpectedResponse(0, ChallengeState.NONE, "楼层定位参数无效。")
+        }
+        val response = bridge.getJson("/posts/by_number/$topicId/$postNumber")
+        if (!response.success) {
+            return NetworkResults.forwardFailure(response)
+        }
+        val data = response.data
+            ?: return NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点楼层详情响应为空。"
+            )
+        return try {
+            val post = json.decodeFromString<DiscoursePost>(data)
+            val cooked = post.cooked
+            if (cooked == null) {
+                NetworkResults.unexpectedResponse(
+                    response.statusCode,
+                    response.challengeState,
+                    "站点楼层详情响应缺少 cooked。"
+                )
+            } else {
+                NetworkResult(
+                    success = true,
+                    statusCode = response.statusCode,
+                    challengeState = response.challengeState,
+                    data = cooked
+                )
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "[ArkDO][TopicService] getPostByNumber parse failed length=${data.length}")
+            NetworkResults.unexpectedResponse(
+                response.statusCode,
+                response.challengeState,
+                "站点楼层详情响应不是有效 JSON。"
+            )
+        }
+    }
+
+    /**
      * 取某楼的 Markdown 原文，供编辑用。GET /posts/{id}.json。
      *
      * 列表接口（topic.json / posts.json）只回 cooked HTML 不回 raw，所以点开编辑必须单独取一次；
