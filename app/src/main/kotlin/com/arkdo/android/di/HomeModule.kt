@@ -7,6 +7,8 @@ import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.data.search.DefaultSearchRepository
 import com.arkdo.android.core.data.search.SearchRepository
 import com.arkdo.android.core.data.session.SessionVersionSource
+import com.arkdo.android.core.data.session.DefaultSidebarPrefsSource
+import com.arkdo.android.core.data.session.SidebarPrefsSource
 import com.arkdo.android.core.data.site.DefaultCategoryRepository
 import com.arkdo.android.core.network.JsonNetworkClient
 import dagger.Module
@@ -32,6 +34,11 @@ object HomeModule {
     @Singleton
     fun provideCategoryRepository(client: JsonNetworkClient): CategoryRepository =
         DefaultCategoryRepository(client)
+
+    @Provides
+    @Singleton
+    fun provideSidebarPrefsSource(client: JsonNetworkClient): SidebarPrefsSource =
+        DefaultSidebarPrefsSource(client)
 
     @Provides
     @Singleton

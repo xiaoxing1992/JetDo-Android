@@ -158,6 +158,8 @@ fun HomeDrawerOverlay(
                     tagLoading = state.tagLoading,
                     isLoggedIn = isLoggedIn,
                     expandedIds = state.drawerExpandedIds,
+                    myTags = state.myTags,
+                    myCategoryIds = state.myCategoryIds,
                     colors = colors,
                     assetBaseUrl = assetBaseUrl,
                     categoriesLoading = state.isCategoriesLoading,

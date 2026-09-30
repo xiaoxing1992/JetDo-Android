@@ -85,6 +85,12 @@ private const val TAB_INDICATOR_MS = 180
 
 private const val TAB_CATEGORY = 0
 private const val TAB_TAG = 1
+
+// 两个 Tab 内部的手风琴分组：同时最多展开一组，点已展开的那组即两组全收。
+// 只有「我的版块 / 我的标签」非空时手风琴才成立，否则整棵树/热门候选直接铺开。
+private const val GROUP_NONE = -1
+private const val GROUP_MINE = 0
+private const val GROUP_ALL = 1
 /** 未登录点受限入口的提示文案（对齐鸿蒙 CategoryDrawer.ets:257 的 onNotice 文案）。 */
 private const val LOGIN_REQUIRED_HINT = "登录后可查看该入口"
 
@@ -98,6 +104,10 @@ internal fun HomeDrawer(
     tagLoading: Boolean,
     isLoggedIn: Boolean,
     expandedIds: List<Long>,
+    /** 网页版侧栏自选的标签（「我的标签」组）。未登录或没配置过都是空。 */
+    myTags: List<HomeTag> = emptyList(),
+    /** 同上，自选版块的 id（「我的版块」组）。只有 id，名字/颜色去 categories 里查。 */
+    myCategoryIds: List<Long> = emptyList(),
     categoriesLoading: Boolean = false,
     categoriesError: String? = null,
     onRetryCategories: () -> Unit = {},
@@ -113,6 +123,19 @@ internal fun HomeDrawer(
     modifier: Modifier = Modifier
 ) {
     var activeTab by remember { mutableIntStateOf(TAB_CATEGORY) }
+
+    // 两个 Tab 各自的手风琴状态。默认展开「我的」：自选的那几个是高频入口，
+    // 整棵树/热门候选收着，想翻再点。不提到宿主持有（与 draft/expandedIds 不同）：
+    // 每次开抽屉回到这个默认正是想要的行为，而抽屉内容关闭即卸载，组件内状态天然复位。
+    var categoryGroup by remember { mutableIntStateOf(GROUP_MINE) }
+    var tagGroup by remember { mutableIntStateOf(GROUP_MINE) }
+
+    // 标签页的手风琴只在「有自选标签且没在搜索」时成立：一旦打了字，就该只剩搜索结果，
+    // 两组并排会分不清哪个是搜出来的。
+    val tagAccordion = myTags.isNotEmpty() && tagQuery.trim().isEmpty()
+    // 热门候选/搜索结果这一段此刻要不要显示。它同时是「该不该发请求」的判据：
+    // 收在手风琴里没显示就不发，展开或进入搜索态时才发。
+    val hotTagListVisible = !tagAccordion || tagGroup == GROUP_ALL
 
     // 抽屉铺满整屏（含系统栏），底色因此能盖住状态栏与导航栏；
     // 内容再各自让开这两块，对齐鸿蒙的 padding({ top: sysTopInset }) 与
@@ -155,8 +178,11 @@ internal fun HomeDrawer(
             onSelect = { activeTab = it }
         )
 
-        LaunchedEffect(activeTab) {
-            if (activeTab == TAB_TAG) onTagTabShown()
+        LaunchedEffect(activeTab, hotTagListVisible) {
+            // 热门候选只在它真要显示时才取：手风琴默认收着热门组，
+            // 一切过来就打一次请求是白打。展开热门组由下面的点按单独触发
+            // （那时 hotTagListVisible 会变，这个 effect 也会重跑）。
+            if (activeTab == TAB_TAG && hotTagListVisible) onTagTabShown()
         }
 
         Column(
@@ -171,6 +197,11 @@ internal fun HomeDrawer(
                     categories = categories,
                     isLoggedIn = isLoggedIn,
                     expandedIds = expandedIds,
+                    myCategoryIds = myCategoryIds,
+                    categoryGroup = categoryGroup,
+                    onToggleGroup = { group ->
+                        categoryGroup = if (categoryGroup == group) GROUP_NONE else group
+                    },
                     colors = colors,
                     assetBaseUrl = assetBaseUrl,
                     loading = categoriesLoading,
@@ -193,6 +224,12 @@ internal fun HomeDrawer(
                     tagQuery = tagQuery,
                     tagResults = tagResults,
                     tagLoading = tagLoading,
+                    myTags = myTags,
+                    accordion = tagAccordion,
+                    tagGroup = tagGroup,
+                    onToggleGroup = { group ->
+                        tagGroup = if (tagGroup == group) GROUP_NONE else group
+                    },
                     colors = colors,
                     onQueryChange = onTagQueryChange,
                     onPick = { tag ->
@@ -416,6 +453,9 @@ private fun CategoryTab(
     categories: List<HomeCategory>,
     isLoggedIn: Boolean,
     expandedIds: List<Long>,
+    myCategoryIds: List<Long>,
+    categoryGroup: Int,
+    onToggleGroup: (Int) -> Unit,
     colors: HomeVisualTokens,
     assetBaseUrl: String,
     loading: Boolean,
@@ -425,6 +465,7 @@ private fun CategoryTab(
     onToggleExpand: (Long) -> Unit
 ) {
     val topLevel = remember(categories) { categories.topLevel() }
+    val mine = remember(categories, myCategoryIds) { categories.sidebarOrdered(myCategoryIds) }
 
     ScopeAllRow(
         iconId = "layer-group",
@@ -440,17 +481,127 @@ private fun CategoryTab(
         return
     }
 
-    CategoryTree(
-        roots = topLevel,
-        categories = categories,
-        draft = draft,
-        isLoggedIn = isLoggedIn,
-        expandedIds = expandedIds,
+    // 没有自选版块就退回原样：整棵树直接铺开、不套分组标题，
+    // 免得未登录的人对着两个空标题发愣。
+    if (mine.isEmpty()) {
+        CategoryTree(
+            roots = topLevel,
+            categories = categories,
+            draft = draft,
+            isLoggedIn = isLoggedIn,
+            expandedIds = expandedIds,
+            colors = colors,
+            assetBaseUrl = assetBaseUrl,
+            onPick = onPick,
+            onToggleExpand = onToggleExpand
+        )
+        return
+    }
+
+    GroupHeader(
+        label = "我的版块",
+        count = mine.size,
+        open = categoryGroup == GROUP_MINE,
         colors = colors,
-        assetBaseUrl = assetBaseUrl,
-        onPick = onPick,
-        onToggleExpand = onToggleExpand
+        onClick = { onToggleGroup(GROUP_MINE) }
     )
+    ExpandBlock(visible = categoryGroup == GROUP_MINE) {
+        Column {
+            MyCategoryList(
+                mine = mine,
+                categories = categories,
+                draft = draft,
+                isLoggedIn = isLoggedIn,
+                expandedIds = expandedIds,
+                colors = colors,
+                assetBaseUrl = assetBaseUrl,
+                onPick = onPick,
+                onToggleExpand = onToggleExpand
+            )
+        }
+    }
+
+    GroupHeader(
+        label = "所有版块",
+        count = topLevel.size,
+        open = categoryGroup == GROUP_ALL,
+        colors = colors,
+        onClick = { onToggleGroup(GROUP_ALL) }
+    )
+    ExpandBlock(visible = categoryGroup == GROUP_ALL) {
+        CategoryTree(
+            roots = topLevel,
+            categories = categories,
+            draft = draft,
+            isLoggedIn = isLoggedIn,
+            expandedIds = expandedIds,
+            colors = colors,
+            assetBaseUrl = assetBaseUrl,
+            onPick = onPick,
+            onToggleExpand = onToggleExpand
+        )
+    }
+}
+
+/**
+ * 「我的版块」：网页版侧栏自选的那批，置顶一份。
+ *
+ * 同一个版块在「所有版块」那棵树里还会再出现一次，这是有意的 ——
+ * 置顶组是快捷方式，不是把版块从树里搬走（与 Discourse 侧栏行为一致）。
+ *
+ * 展示逻辑与那棵树完全相同：主版块带展开箭头、子版块从箭头里出来。侧栏通常只勾主版块，
+ * 子版块并不在 sidebar_category_ids 里，靠这里补齐，否则置顶组就成了「点不进子版块」的
+ * 一串死链。子版块展开态与树共用 expandedIds，两处同步开合是有意的。
+ */
+@Composable
+private fun MyCategoryList(
+    mine: List<HomeCategory>,
+    categories: List<HomeCategory>,
+    draft: HomeQuery,
+    isLoggedIn: Boolean,
+    expandedIds: List<Long>,
+    colors: HomeVisualTokens,
+    assetBaseUrl: String,
+    onPick: (HomeCategory?) -> Unit,
+    onToggleExpand: (Long) -> Unit
+) {
+    mine.forEach { category ->
+        val children = categories.childrenOf(category.id)
+        CategoryRow(
+            category = category,
+            // 置顶组里的版块可能是子版块，图标兜底要拿它的父版块；取不到就用自身。
+            parent = categories.parentOrSelf(category),
+            isChild = false,
+            selected = draft.categoryId == category.id,
+            isLoggedIn = isLoggedIn,
+            expandable = children.isNotEmpty(),
+            expanded = category.id in expandedIds,
+            colors = colors,
+            assetBaseUrl = assetBaseUrl,
+            onPick = onPick,
+            onToggleExpand = { onToggleExpand(category.id) }
+        )
+
+        ExpandBlock(visible = category.id in expandedIds) {
+            Column {
+                children.forEach { child ->
+                    CategoryRow(
+                        category = child,
+                        parent = category,
+                        isChild = true,
+                        selected = draft.categoryId == child.id,
+                        isLoggedIn = isLoggedIn,
+                        expandable = false,
+                        expanded = false,
+                        colors = colors,
+                        assetBaseUrl = assetBaseUrl,
+                        onPick = onPick,
+                        onToggleExpand = {}
+                    )
+                }
+            }
+        }
+    }
 }
 
 /** 版块为空时的状态位：加载中 / 失败可重试 / 站点确实没有版块。 */
@@ -659,6 +810,10 @@ private fun TagTab(
     tagQuery: String,
     tagResults: List<TagSuggestion>,
     tagLoading: Boolean,
+    myTags: List<HomeTag>,
+    accordion: Boolean,
+    tagGroup: Int,
+    onToggleGroup: (Int) -> Unit,
     colors: HomeVisualTokens,
     onQueryChange: (String) -> Unit,
     onPick: (HomeTag?) -> Unit
@@ -679,7 +834,13 @@ private fun TagTab(
         ) {
             FaIcon("magnifying-glass", colors.textTertiary, 14.dp, Modifier.padding(end = 8.dp))
 
-            Box(modifier = Modifier.weight(1f)) {
+            // 占位文字必须和输入框共用一个垂直基准：BasicTextField 带
+            // padding(vertical = 8.dp) 把自己撑到 ~35dp，而 Box 默认 TopStart 会把
+            // 不带 padding 的占位文字顶到框顶 —— 实测占位比左侧放大镜高 7dp，
+            // 看上去就是「文字没在搜索框里居中」。库里另两处搜索框
+            // （SearchScreen / SearchFilterPanel）都用 decorationBox + CenterStart，
+            // 这里保持同样的对齐语义。
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (tagQuery.isEmpty()) {
                     Text("搜索标签", fontSize = 14.sp, color = colors.textTertiary)
                 }
@@ -716,23 +877,99 @@ private fun TagTab(
     )
 
     val searching = tagQuery.trim().isNotEmpty()
-    if (tagResults.isNotEmpty()) {
-        tagResults.forEach { suggestion ->
-            TagRow(name = suggestion.name, selected = draft.tag == suggestion.name, colors = colors) {
+    // 手风琴在场时，热门组里剔掉已经在「我的标签」里的那些，同一个标签不两组各出现一次。
+    // 搜索态不剔：那时手风琴不在场，再剔就等于搜不到自己的标签了。
+    val myTagNames = remember(myTags) { myTags.mapTo(HashSet()) { it.name } }
+    val hotResults = remember(tagResults, myTagNames, accordion) {
+        if (accordion) tagResults.filter { it.name !in myTagNames } else tagResults
+    }
+
+    if (accordion) {
+        GroupHeader(
+            label = "我的标签",
+            count = myTags.size,
+            open = tagGroup == GROUP_MINE,
+            colors = colors,
+            onClick = { onToggleGroup(GROUP_MINE) }
+        )
+        ExpandBlock(visible = tagGroup == GROUP_MINE) {
+            // 「我的标签」不显示每个标签的计数：sidebar_tags 不回 count，
+            // 硬凑一个还得为每个标签单独打一次请求，不值得。
+            myTags.forEach { tag ->
+                TagRow(name = tag.name, selected = draft.tag == tag.name, colors = colors) {
+                    onPick(tag)
+                }
+            }
+        }
+
+        GroupHeader(
+            label = "热门标签",
+            count = hotResults.size,
+            open = tagGroup == GROUP_ALL,
+            colors = colors,
+            onClick = { onToggleGroup(GROUP_ALL) }
+        )
+        ExpandBlock(visible = tagGroup == GROUP_ALL) {
+            TagResultList(
+                results = hotResults,
+                selectedName = draft.tag,
+                tagLoading = tagLoading,
+                searching = searching,
+                colors = colors,
+                onPick = onPick
+            )
+        }
+        return
+    }
+
+    // 搜索态 / 没有自选标签：热门候选就是唯一的列表，直接铺开，不套分组标题。
+    TagResultList(
+        results = hotResults,
+        selectedName = draft.tag,
+        tagLoading = tagLoading,
+        searching = searching,
+        colors = colors,
+        onPick = onPick
+    )
+}
+
+/**
+ * 标签候选（热门 / 搜索结果）列表，「热门标签」与搜索态共用。
+ *
+ * 空且不在加载中时给一句占位 —— 展开着却取不到东西（请求失败、或该版块下没标签）
+ * 才该说这句；收在手风琴里的时候调用方根本不会渲染到这里。
+ */
+@Composable
+private fun TagResultList(
+    results: List<TagSuggestion>,
+    selectedName: String?,
+    tagLoading: Boolean,
+    searching: Boolean,
+    colors: HomeVisualTokens,
+    onPick: (HomeTag?) -> Unit
+) {
+    if (results.isNotEmpty()) {
+        results.forEach { suggestion ->
+            TagRow(
+                name = suggestion.name,
+                selected = selectedName == suggestion.name,
+                colors = colors
+            ) {
                 onPick(HomeTag(name = suggestion.name, id = suggestion.id))
             }
         }
-    } else if (!tagLoading) {
-        Text(
-            text = if (searching) "没有匹配的标签" else "暂无可选标签",
-            fontSize = 13.sp,
-            color = colors.textTertiary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp)
-        )
+        return
     }
+    if (tagLoading) return
+    Text(
+        text = if (searching) "没有匹配的标签" else "暂无可选标签",
+        fontSize = 13.sp,
+        color = colors.textTertiary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp)
+    )
 }
 
 @Composable
@@ -781,6 +1018,52 @@ private fun TagRow(
 }
 
 // ========== 公共行 ==========
+
+/**
+ * 分组标题（我的版块 / 所有版块 / 我的标签 / 热门标签）。
+ * 左侧箭头指示展开态，整行都是热区。
+ * 与版块行的箭头是两回事：那个开合子版块，这个开合整组。
+ */
+@Composable
+private fun GroupHeader(
+    label: String,
+    count: Int,
+    open: Boolean,
+    colors: HomeVisualTokens,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ROW_HEIGHT)
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(18.dp)
+                .padding(end = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Chevron(expanded = open, size = 15.dp, colors = colors)
+        }
+
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = colors.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+
+        // 组内条数：收起时它是「这组里有什么」的唯一线索；为 0 时不显示
+        //（热门标签还没取回来时就是 0）。
+        if (count > 0) {
+            Text("$count", fontSize = 12.sp, color = colors.textTertiary)
+        }
+    }
+}
 
 /** 「不限版块」/「不限标签」行。 */
 @Composable
@@ -897,6 +1180,55 @@ private fun List<HomeCategory>.topLevel(): List<HomeCategory> =
 
 private fun List<HomeCategory>.childrenOf(parentId: Long): List<HomeCategory> =
     filter { it.parentCategoryId == parentId }
+
+/** 取某版块的父版块；取不到（它本就是顶级、或父节点不在集合里）就用自身。 */
+private fun List<HomeCategory>.parentOrSelf(category: HomeCategory): HomeCategory {
+    val parentId = category.parentCategoryId ?: return category
+    return find { it.id == parentId } ?: category
+}
+
+/**
+ * 「我的版块」置顶组的取值与排序：对齐 Discourse 网页版侧栏。
+ *
+ * 官方实现（`sidebar/common/categories-section.gjs` 的 sortedCategories）分三步，顺序不能颠倒：
+ *   ① 取**全站**版块，按 /site.json 的顺序（即 `site.rb` 的 `.order(:position)`，
+ *      后台拖出来的那个顺序。linux.do 打开了 fixed_category_positions，实测侧栏是
+ *      position 序而非名字序）
+ *   ② `Category.sortCategories` 把子版块紧跟到各自父版块后面
+ *   ③ 最后才按 sidebar 的 id 过滤
+ * 先过滤再排会丢掉第 ② 步的父子归组，所以必须在全集上排完再筛。
+ *
+ * 与官方的一处有意偏差：父版块也被勾选时，这里丢掉它下面同样被勾选的子版块 ——
+ * 置顶组是可展开的树（子版块从父版块的箭头里出来），两处都列会重复一次。
+ */
+private fun List<HomeCategory>.sidebarOrdered(sidebarIds: List<Long>): List<HomeCategory> {
+    if (sidebarIds.isEmpty() || isEmpty()) return emptyList()
+
+    val flattened = ArrayList<HomeCategory>(size)
+    appendWithChildren(parentId = null, out = flattened)
+
+    val result = ArrayList<HomeCategory>(sidebarIds.size)
+    for (category in flattened) {
+        if (category.id !in sidebarIds || category.isUncategorized()) continue
+        // 父版块也在选中集里：该子版块交给父版块的展开箭头去显示。
+        val parentId = category.parentCategoryId
+        if (parentId != null && parentId in sidebarIds) continue
+        result += category
+    }
+    return result
+}
+
+/** `Category.sortCategories` 的等价实现：深度优先展开，同层顺序保持传入顺序。 */
+private fun List<HomeCategory>.appendWithChildren(
+    parentId: Long?,
+    out: MutableList<HomeCategory>
+) {
+    for (category in this) {
+        if (category.parentCategoryId != parentId) continue
+        out += category
+        appendWithChildren(category.id, out)
+    }
+}
 
 @Composable
 private fun DrawerChoiceChip(

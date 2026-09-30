@@ -1,6 +1,7 @@
 package com.arkdo.android.core.data.site
 
 import com.arkdo.android.core.data.notification.FakeJsonNetworkClient
+import com.arkdo.android.core.model.TagSuggestion
 import com.arkdo.android.core.network.ChallengeState
 import com.arkdo.android.core.network.NetworkError
 import com.arkdo.android.core.network.NetworkErrorCode
@@ -90,5 +91,72 @@ class DefaultCategoryRepositoryTest {
         val result = DefaultCategoryRepository(client).load()
 
         assertTrue(result is CategoryLoadResult.Failure)
+    }
+
+    /**
+     * top_tags 只有 {id,name,slug}，没有 count/description —— 抽屉的「热门标签」组用它，
+     * 免得空查询去打受 max_tag_search_results(默认 5) 限制的 /tags/filter/search。
+     */
+    @Test
+    fun load_maps_top_tags_from_same_site_payload() = runTest {
+        val client = FakeJsonNetworkClient().apply {
+            getResponse = NetworkResult(
+                success = true,
+                statusCode = 200,
+                challengeState = ChallengeState.NONE,
+                data = """
+                    {"categories":[{"id":1,"name":"开发"}],
+                     "top_tags":[
+                       {"id":1461,"name":"纯水","slug":"1461-tag"},
+                       {"id":1436,"name":"快问快答","slug":"1436-tag"},
+                       {"name":"无名氏"}
+                     ]}
+                """.trimIndent()
+            )
+        }
+
+        val top = (DefaultCategoryRepository(client).load() as CategoryLoadResult.Success).topTags
+
+        assertEquals(3, top.size)
+        assertEquals(TagSuggestion(id = 1461L, name = "纯水", text = "纯水", count = 0), top[0])
+        // 缺 id 的一条不丢，退到 0 —— 抽屉的标签行只用到 name。
+        assertEquals(0L, top[2].id)
+        assertEquals("无名氏", top[2].name)
+    }
+
+    @Test
+    fun load_returns_empty_top_tags_when_field_absent() = runTest {
+        val client = FakeJsonNetworkClient().apply {
+            getResponse = NetworkResult(
+                success = true,
+                statusCode = 200,
+                challengeState = ChallengeState.NONE,
+                data = """{"categories":[{"id":1,"name":"开发"}]}"""
+            )
+        }
+
+        val result = DefaultCategoryRepository(client).load() as CategoryLoadResult.Success
+
+        assertTrue(result.topTags.isEmpty())
+    }
+
+    @Test
+    fun suggestTags_appends_category_id_only_when_present() = runTest {
+        val client = FakeJsonNetworkClient().apply {
+            getResponse = NetworkResult(true, 200, ChallengeState.NONE, data = """{"results":[]}""")
+        }
+        val repository = DefaultCategoryRepository(client)
+
+        repository.suggestTags("安卓", categoryId = 12L)
+        assertEquals(
+            "/tags/filter/search?q=%E5%AE%89%E5%8D%93&limit=5&categoryId=12&filterForInput=true",
+            client.lastGetPath
+        )
+
+        repository.suggestTags("安卓", categoryId = null)
+        assertEquals(
+            "/tags/filter/search?q=%E5%AE%89%E5%8D%93&limit=5&filterForInput=true",
+            client.lastGetPath
+        )
     }
 }
