@@ -1,10 +1,14 @@
 package com.arkdo.android.core.designsystem
 
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 
 /**
@@ -32,12 +36,30 @@ import androidx.compose.ui.Modifier
  *
  * 装饰器退化成 `this`（原样返回），因此**单独预览/单测不受影响**：没接宿主就只是普通图标。
  * [Modifier.searchIconSharedElement] 因此可以安全地挂在任意一处放大镜上。
+ *
+ * ## 为什么要显式指定 [boundsDurationMillis]
+ *
+ * `Modifier.sharedElement` 若不传 `boundsTransform`，走的是 Compose 内置默认值
+ * `spring(dampingRatio = NoBouncy, stiffness = StiffnessMediumLow)` —— 这个 spring 在这段
+ * 位移下要 ~400~500ms 才 settle 到 1px 以内，**明显长于页面自身的 320ms 滑动**。
+ *
+ * 两个后果：
+ * 1. 页面已经停稳，图标还在做最后一段"贴上去"的位移 —— 观感上像到位后又动了一下；
+ * 2. 用共享元素做逐相位采样取证时，把页面转场拉长后**图标不会跟着变慢**（spring 时长与
+ *    那个常量无关），于是视频里会出现"图标早早飞到空位上、等容器慢慢滑过来"的假象。
+ *
+ * 所以这里显式换成与页面转场**同一条 tween 曲线、同一个时长**，两个动画共用一个时钟。
  */
 @Immutable
 data class SharedSearchTransition(
     val scope: SharedTransitionScope? = null,
     val contentState: SharedTransitionScope.SharedContentState? = null,
-    val visibilityScope: AnimatedVisibilityScope? = null
+    val visibilityScope: AnimatedVisibilityScope? = null,
+    /**
+     * 图标 bounds 补间时长（毫秒），**必须与页面级转场时长一致**
+     * （app 模块 `ScreenTransitions.SCREEN_TRANSITION_DURATION`），由 NavHost 下发。
+     */
+    val boundsDurationMillis: Int = 320
 )
 
 /** 未接入共享元素转场时的空值（默认值），装饰器据此原样放行。 */
@@ -72,10 +94,21 @@ fun Modifier.searchIconSharedElement(): Modifier {
     val scope = transition.scope
     val state = transition.contentState
     val visible = transition.visibilityScope
-    return if (scope != null && state != null && visible != null) {
-        // sharedElement 是 SharedTransitionScope 的成员扩展，必须先 with(scope) 才能调。
-        with(scope) { this@searchIconSharedElement.sharedElement(state, visible) }
-    } else {
-        this
+    if (scope == null || state == null || visible == null) return this
+    // 与页面转场同曲线同时长：不显式指定的话会落到 Compose 默认的
+    // spring(StiffnessMediumLow)，它比 320ms 的页面滑动长一截（见类注释）。
+    val duration = transition.boundsDurationMillis
+    val boundsTransform = remember(duration) {
+        BoundsTransform { _, _ ->
+            tween(durationMillis = duration, easing = FastOutSlowInEasing)
+        }
+    }
+    // sharedElement 是 SharedTransitionScope 的成员扩展，必须先 with(scope) 才能调。
+    return with(scope) {
+        this@searchIconSharedElement.sharedElement(
+            sharedContentState = state,
+            animatedVisibilityScope = visible,
+            boundsTransform = boundsTransform
+        )
     }
 }

@@ -118,7 +118,12 @@ fun ArkDoNavHost(
             val visibilityScope = this
             CompositionLocalProvider(
                 LocalSharedSearchTransition provides
-                    SharedSearchTransition(sharedScope, searchIconState, visibilityScope)
+                    SharedSearchTransition(
+                        scope = sharedScope,
+                        contentState = searchIconState,
+                        visibilityScope = visibilityScope,
+                        boundsDurationMillis = SCREEN_TRANSITION_DURATION
+                    )
             ) {
                 RootTabScreen(
                     isWebViewReady = isWebViewReady,
@@ -186,7 +191,12 @@ fun ArkDoNavHost(
             val visibilityScope = this
             CompositionLocalProvider(
                 LocalSharedSearchTransition provides
-                    SharedSearchTransition(sharedScope, searchIconState, visibilityScope)
+                    SharedSearchTransition(
+                        scope = sharedScope,
+                        contentState = searchIconState,
+                        visibilityScope = visibilityScope,
+                        boundsDurationMillis = SCREEN_TRANSITION_DURATION
+                    )
             ) {
                 com.arkdo.android.ui.search.SearchFeatureScreen(
                     isWebViewReady = isWebViewReady,
