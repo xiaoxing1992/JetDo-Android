@@ -4,13 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.session.SessionVersionSource
+import com.arkdo.android.core.data.session.SidebarPrefsSource
 import com.arkdo.android.core.data.site.CategoryLoadResult
 import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
+import com.arkdo.android.core.model.SidebarPrefs
 import com.arkdo.android.core.model.TagSuggestion
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -51,13 +54,19 @@ internal data class HomeUiState(
     val drawerExpandedIds: List<Long> = emptyList(),
     val tagQuery: String = "",
     val tagResults: List<TagSuggestion> = emptyList(),
-    val tagLoading: Boolean = false
+    val tagLoading: Boolean = false,
+    /** 抽屉「热门标签」组的兜底数据，来自 /site.json 的 top_tags。 */
+    val topTags: List<TagSuggestion> = emptyList(),
+    /** 抽屉「我的版块 / 我的标签」置顶组，来自 /session/current.json 的侧栏自选。 */
+    val myCategoryIds: List<Long> = emptyList(),
+    val myTags: List<HomeTag> = emptyList()
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: HomeRepository,
     private val categoryRepository: CategoryRepository,
+    private val sidebarPrefsSource: SidebarPrefsSource,
     private val sessionVersion: SessionVersionSource
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -75,6 +84,7 @@ class HomeViewModel @Inject constructor(
     private var incomingRequestEpoch = 0
     private var categoriesRequested = false
     private var categoryLoadFailed = false
+    private var sidebarRequested = false
     private var handledSessionVersion = sessionVersion.currentVersion()
     private val unsubscribeSession = sessionVersion.subscribe(::handleSessionChanged)
     private var tagRequestEpoch = 0
@@ -96,6 +106,10 @@ class HomeViewModel @Inject constructor(
     private fun handleSessionChanged(version: Long) {
         if (version <= handledSessionVersion) return
         handledSessionVersion = version
+        // 换号/登出后侧栏自选也换了人：置回未拉取，下次开抽屉重新取；
+        // 同时就地清空已有的一组，免得拉开抽屉先闪一下上一个账号的版块。
+        sidebarRequested = false
+        _uiState.update { it.copy(myCategoryIds = emptyList(), myTags = emptyList()) }
         if (requestInFlight || _uiState.value.isLoadingIncoming) {
             _uiState.update { it.copy(pendingSessionRefresh = true) }
             return
@@ -125,6 +139,7 @@ class HomeViewModel @Inject constructor(
                 is CategoryLoadResult.Success -> _uiState.update {
                     it.copy(
                         categories = result.categories,
+                        topTags = result.topTags,
                         isCategoriesLoading = false,
                         categoriesError = if (result.categories.isEmpty()) "站点未返回任何版块" else null
                     )
@@ -167,6 +182,22 @@ class HomeViewModel @Inject constructor(
         ensureCategoriesLoaded()
     }
 
+    /**
+     * 侧栏自选（抽屉的「我的版块 / 我的标签」）。
+     *
+     * 推迟到抽屉真要打开时才拉 —— 多数人开 App 只是刷首页，为它每次冷启动都打一次
+     * /session/current.json 不划算。失败不重试（拿到空就是空，抽屉退回只有「所有版块 /
+     * 热门标签」），会话变化时由 [handleSessionChanged] 置回未拉取。
+     */
+    fun ensureSidebarLoaded() {
+        if (sidebarRequested) return
+        sidebarRequested = true
+        viewModelScope.launch {
+            val prefs = runCatching { sidebarPrefsSource.load() }.getOrElse { SidebarPrefs.Empty }
+            _uiState.update { it.copy(myCategoryIds = prefs.categoryIds, myTags = prefs.tags) }
+        }
+    }
+
     fun updateFabMode(scrollOffset: Float, viewportHeight: Float) {
         if (viewportHeight <= 0f) return
         val ratio = scrollOffset / viewportHeight
@@ -194,6 +225,7 @@ class HomeViewModel @Inject constructor(
             state.drawerExpandedIds
         }
         if (state.categories.isEmpty()) ensureCategoriesLoaded()
+        ensureSidebarLoaded()
         val draft = state.query.withoutLoginOnlyFeeds(isLoggedIn)
         _uiState.update {
             it.copy(
@@ -215,7 +247,11 @@ class HomeViewModel @Inject constructor(
         val draft = next.withoutLoginOnlyFeeds(isLoggedIn)
         val categoryChanged = draft.categoryId != _uiState.value.draftQuery.categoryId
         _uiState.update { it.copy(draftQuery = draft) }
-        if (categoryChanged && _uiState.value.tagQuery.isNotBlank()) {
+        // 版块变了，标签候选的上下文跟着变（带 categoryId 后只回该版块下的标签）。
+        // 正在搜索、或热门组此刻已经列着东西时才重取；两者都不是说明标签页压根没在看，
+        // 记着等它真要显示时再说（这里用一个便宜的条件代替抽屉里的手风琴状态）。
+        val showingTags = _uiState.value.tagQuery.isNotBlank() || _uiState.value.tagResults.isNotEmpty()
+        if (categoryChanged && showingTags) {
             loadTagSuggestions(_uiState.value.tagQuery)
         }
     }
@@ -253,11 +289,25 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun loadTagSuggestions(query: String) {
+        val state = _uiState.value
+        val categoryId = state.draftQuery.categoryId
+
+        // 「没输搜索词 + 没选版块」= 要的是站点热门标签，而不是一次联想查询。
+        // 这份数据 /site.json 里就有(top_tags)，首页早已为版块树拉过那个接口 ——
+        // 直接读缓存，既省一次请求，又绕开 /tags/filter/search 的 max_tag_search_results
+        // 上限(默认只有 5，超了整条请求会被拒，表现为「暂无可选标签」)。
+        if (query.isEmpty() && categoryId == null && state.topTags.isNotEmpty()) {
+            tagSearchJob?.cancel()
+            _uiState.update { it.copy(tagLoading = false, tagResults = it.topTags) }
+            return
+        }
+
         val epoch = ++tagRequestEpoch
         _uiState.update { it.copy(tagLoading = true) }
         viewModelScope.launch {
             val results = runCatching {
-                categoryRepository.suggestTags(query)
+                // 选了版块就带上 categoryId：标签挂在版块上，几百个全站标签里翻没有意义。
+                categoryRepository.suggestTags(query, categoryId)
             }.getOrElse { emptyList() }
             if (epoch != tagRequestEpoch) return@launch
             _uiState.update { it.copy(tagLoading = false, tagResults = results) }

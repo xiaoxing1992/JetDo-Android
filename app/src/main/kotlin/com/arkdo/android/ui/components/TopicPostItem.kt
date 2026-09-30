@@ -415,12 +415,9 @@ private fun PostAuthorHeader(
                     overflow = TextOverflow.Ellipsis
                 )
                 post.userTitle?.let { title ->
-                    Text(
-                        text = title,
-                        fontSize = 13.sp,
+                    UserTitleText(
+                        title = title,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(start = if (post.username.isNullOrEmpty()) 0.dp else 6.dp)
                     )
                 }

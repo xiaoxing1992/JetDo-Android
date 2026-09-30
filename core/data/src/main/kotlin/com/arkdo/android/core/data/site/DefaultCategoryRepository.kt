@@ -50,14 +50,23 @@ class DefaultCategoryRepository(
         return runCatching {
             val payload = json.decodeFromString<DiscourseSiteResponse>(data)
             val categories = payload.categories ?: return CategoryLoadResult.Failure("站点信息响应缺少 categories")
-            CategoryLoadResult.Success(categories.mapNotNull(::mapCategory))
+            CategoryLoadResult.Success(
+                categories = categories.mapNotNull(::mapCategory),
+                topTags = payload.topTags.orEmpty().mapNotNull(::mapTopTag)
+            )
         }.getOrElse {
             CategoryLoadResult.Failure("站点信息响应不是有效 JSON")
         }
     }
 
-    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> {
-        val path = "/tags/filter/search?q=${encode(query.trim())}&limit=$limit&filterForInput=true"
+    override suspend fun suggestTags(query: String, categoryId: Long?, limit: Int): List<TagSuggestion> {
+        val path = buildString {
+            append("/tags/filter/search?q=")
+            append(encode(query.trim()))
+            append("&limit=$limit")
+            if (categoryId != null) append("&categoryId=$categoryId")
+            append("&filterForInput=true")
+        }
         val response = client.getJson(path)
         if (!response.success) return emptyList()
         val data = response.data ?: return emptyList()
@@ -98,11 +107,33 @@ class DefaultCategoryRepository(
             readRestricted = source.readRestricted == true
         )
     }
+
+    /**
+     * `top_tags` 只有 `{id,name,slug}`，没有 `count`/`text` —— 抽屉的标签行只用到 name，
+     * 缺的字段给默认值即可，不必为此再查一遍。
+     */
+    private fun mapTopTag(source: DiscourseTopTag): TagSuggestion? {
+        val name = source.name ?: return null
+        return TagSuggestion(
+            id = source.id ?: 0L,
+            name = name,
+            text = name,
+            count = 0
+        )
+    }
 }
 
 @Serializable
 internal data class DiscourseSiteResponse(
-    @SerialName("categories") val categories: List<DiscourseCategory>? = null
+    @SerialName("categories") val categories: List<DiscourseCategory>? = null,
+    @SerialName("top_tags") val topTags: List<DiscourseTopTag>? = null
+)
+
+@Serializable
+internal data class DiscourseTopTag(
+    @SerialName("id") val id: Long? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("slug") val slug: String? = null
 )
 
 @Serializable

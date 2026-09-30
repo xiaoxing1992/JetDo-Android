@@ -26,10 +26,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,8 +74,10 @@ import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.core.designsystem.FaIcon
+import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.ui.components.InlineText
 import com.arkdo.android.ui.components.UserAvatar
+import com.arkdo.android.ui.components.UserTitleText
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.core.common.RelativeTime
@@ -161,6 +166,30 @@ fun UserProfileScreen(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+            // 「在网页中打开」：对齐鸿蒙 UserProfilePage 的顶栏菜单（开 BASE_URL/u/<username>）。
+            // 话题详情页**没有**这一项 —— 那边鸿蒙菜单里只有「手动验证」，别照搬过来。
+            val profileUsername = state.profile?.username?.takeIf { it.isNotEmpty() } ?: state.username
+            if (profileUsername.isNotEmpty()) {
+                var menuOpen by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("在网页中打开") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenWeb(
+                                    "${AppConstants.BASE_URL}/u/$profileUsername",
+                                    state.profile?.displayName?.takeIf { it.isNotEmpty() }
+                                        ?: state.displayName.takeIf { it.isNotEmpty() }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
         }
         HorizontalDivider(color = arkdoColors.border, thickness = 0.5.dp)
 
@@ -399,12 +428,9 @@ private fun IdentityCard(
                     val title = profile?.title
                     if (!title.isNullOrEmpty()) {
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = title,
-                            fontSize = 13.sp,
-                            color = colors.textTertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        UserTitleText(
+                            title = title,
+                            color = colors.textTertiary
                         )
                     }
                 }

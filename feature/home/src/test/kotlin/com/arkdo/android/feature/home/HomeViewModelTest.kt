@@ -2,6 +2,7 @@ package com.arkdo.android.feature.home
 
 import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.session.SessionVersionSource
+import com.arkdo.android.core.data.session.SidebarPrefsSource
 import com.arkdo.android.core.data.site.CategoryLoadResult
 import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.model.HomeCategory
@@ -9,8 +10,10 @@ import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomePage
 import com.arkdo.android.core.model.HomePageResult
 import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
+import com.arkdo.android.core.model.SidebarPrefs
 import com.arkdo.android.core.model.TagSuggestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,8 +46,9 @@ class HomeViewModelTest {
     private fun viewModel(
         repository: HomeRepository = FakeHomeRepository(),
         categories: CategoryRepository = FakeCategoryRepository(),
+        sidebar: SidebarPrefsSource = FakeSidebarPrefsSource(),
         session: SessionVersionSource = FakeSessionVersionSource()
-    ): HomeViewModel = HomeViewModel(repository, categories, session)
+    ): HomeViewModel = HomeViewModel(repository, categories, sidebar, session)
 
     @Test
     fun loadInitial_publishesTopicsAndPaginationState() = runTest {
@@ -148,6 +152,73 @@ class HomeViewModelTest {
         assertEquals(2L, state.draftQuery.categoryId)
         assertEquals(HomeFeed.HOT, state.draftQuery.feed)
         assertEquals(listOf(1L), state.drawerExpandedIds)
+    }
+
+    @Test
+    fun openDrawer_loadsSidebarPrefsOncePerSession() = runTest {
+        val sidebar = FakeSidebarPrefsSource(
+            SidebarPrefs(
+                categoryIds = listOf(4L, 9L),
+                tags = listOf(HomeTag(name = "纯水", id = 1461L))
+            )
+        )
+        val session = FakeSessionVersionSource()
+        val viewModel = viewModel(sidebar = sidebar, session = session)
+
+        viewModel.openDrawer(isLoggedIn = true)
+        advanceUntilIdle()
+        assertEquals(listOf(4L, 9L), viewModel.uiState.value.myCategoryIds)
+        assertEquals(1, sidebar.callCount)
+
+        // 再开一次不重复拉：侧栏自选不在每次开抽屉时变。
+        viewModel.closeDrawer()
+        viewModel.openDrawer(isLoggedIn = true)
+        advanceUntilIdle()
+        assertEquals(1, sidebar.callCount)
+
+        // 会话变了（登录/登出/换号）→ 置回未拉取，下次开抽屉重新取，并先清空旧账号的那组。
+        session.emit(1L)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.myCategoryIds.isEmpty())
+        viewModel.openDrawer(isLoggedIn = true)
+        advanceUntilIdle()
+        assertEquals(2, sidebar.callCount)
+    }
+
+    @Test
+    fun blankTagQueryWithNoCategoryUsesTopTagsWithoutHittingTheNetwork() = runTest {
+        val categories = FakeCategoryRepository(
+            CategoryLoadResult.Success(
+                categories = listOf(HomeCategory(id = 42L, name = "Android")),
+                topTags = listOf(TagSuggestion(id = 1461L, name = "纯水", text = "纯水"))
+            )
+        )
+        val viewModel = viewModel(categories = categories)
+        viewModel.ensureCategoriesLoaded()
+        advanceUntilIdle()
+        viewModel.openDrawer(isLoggedIn = true)
+
+        viewModel.loadHotTagsIfNeeded()
+        advanceUntilIdle()
+
+        assertEquals(listOf("纯水"), viewModel.uiState.value.tagResults.map(TagSuggestion::name))
+        assertTrue(categories.tagCalls.isEmpty())
+    }
+
+    @Test
+    fun tagSuggestionsAreScopedToTheDraftCategory() = runTest {
+        val categories = FakeCategoryRepository()
+        val viewModel = viewModel(categories = categories)
+        viewModel.openDrawer(isLoggedIn = true)
+        viewModel.updateDraft(
+            HomeQuery(categoryId = 42L, categoryName = "Android"),
+            isLoggedIn = true
+        )
+
+        viewModel.onTagQueryChanged("安")
+        advanceUntilIdle()
+
+        assertEquals(listOf("安" to 42L), categories.tagCalls)
     }
 
     @Test
@@ -512,10 +583,29 @@ private class FakeCategoryRepository(
     )
 ) : CategoryRepository {
     var callCount = 0
+    val tagCalls = mutableListOf<Pair<String, Long?>>()
+
     override suspend fun load(): CategoryLoadResult {
         callCount += 1
         return result
     }
 
-    override suspend fun suggestTags(query: String, limit: Int): List<TagSuggestion> = emptyList()
+    override suspend fun suggestTags(
+        query: String,
+        categoryId: Long?,
+        limit: Int
+    ): List<TagSuggestion> {
+        tagCalls += query to categoryId
+        return emptyList()
+    }
+}
+
+private class FakeSidebarPrefsSource(
+    private val prefs: SidebarPrefs = SidebarPrefs.Empty
+) : SidebarPrefsSource {
+    var callCount = 0
+    override suspend fun load(): SidebarPrefs {
+        callCount += 1
+        return prefs
+    }
 }
