@@ -8,19 +8,19 @@
 
 ## 一、结论先行
 
-**还剩 33 项 + 7 组死代码。**
+**还剩 32 项 + 7 组死代码。**
 
 ### 1.1 缺口分布
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
-| P1 | 3 | 功能不完整，用起来别扭 |
+| P1 | 2 | 功能不完整，用起来别扭 |
 | 半截 | 10 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 6 | 目录级对比看不出来的缺失 |
 | P2 | 11 | 工程化与发布 |
 | 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **33** | 上表各项之和，与逐行点数一致 |
+| **合计** | **32** | 上表各项之和，与逐行点数一致 |
 
 模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 48%** / **多站点 30%** / **系统推送 0%**。
 
@@ -28,9 +28,9 @@
 
 纯目录对比只能得到「少了哪几个文件」。真正值钱的是**看着有、其实没接上**的那类：
 
-1. **引用卡是「半截链路」**——三个定位字段解析齐全、单测全绿，**UI 层零消费**，还配了一句谎称已实现的注释（§四 S12）
-2. **徽章点击的缺口比清单上记的更广**——不是「某一行没传回调」，而是 **11 个调用点无一传**（§四 S11）
-3. **动态头像不是「开关没做」，是整个能力没做**（§五）
+1. **徽章点击的缺口比清单上记的更广**——不是「某一行没传回调」，而是 **11 个调用点无一传**（§四 S11）
+2. **动态头像不是「开关没做」，是整个能力没做**（§五 N1）
+3. **诊断只有内存态**——`DebugLogStore` 不落盘，App 一杀证据全没；线上问题取证能力为零（§四 S19）
 
 ---
 
@@ -46,17 +46,16 @@
 
 ---
 
-## 三、P1 · 功能不完整（3 项）
+## 三、P1 · 功能不完整（2 项）
 
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
 | 9 | **平板双栏布局** | 横屏双栏 / 竖屏单栏自适应 | `WindowSizeClass` **0 命中** | 全库 |
-| 11 | **顶栏「放大镜 → 搜索页」共享元素转场** | 顶栏放大镜与搜索页之间做共享元素转场 | 只剩这一条：「我的」页活动行、他人页简介链接、取关二次确认、**称号全息特效**（`HolographicTitle` + `UserTitleText`）、用户主页**「在网页中打开」**菜单**均已落地**。共享元素转场未做 —— 它要求起止两端页面同时在场、各自出一份起止快照，改造面大，建议降优先级 | `ui/components/HolographicTitle.kt`（白名单 `Premium` / `种子用户` / `破界者`）；`UserProfileScreen.kt:180`；`TopicPostItem.kt:418`、`UserProfileScreen.kt:431` |
 | 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告 | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:139`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
 
 ---
 
-## 四、半截 · 差一次接通（11 项）
+## 四、半截 · 差一次接通（10 项）
 
 **这类最该先修**：骨架、数据、组件往往都已就位，只差一行转发或一次订阅。
 
@@ -201,6 +200,9 @@ rg -l "PickMultipleVisualMedia" -g '*.kt'               # 多图上传
 rg -l "Transcod" -g '*.kt'                              # 视频转码
 rg -l "AnimatedAvatar|BadgeFilter" -g '*.kt'            # N1 / N2
 rg -l "CurrentSite|ForumPrefs|SiteCapabilities" -g '*.kt'
+# 顶栏放大镜共享元素转场的接线点（P1-11 已落地；查它是否被拆掉/退化）：
+#   宿主 SharedTransitionLayout → core/designsystem/SharedSearchTransition.kt → 两端 searchIconSharedElement()
+rg -n "SharedTransitionLayout|searchIconSharedElement|SEARCH_ICON_SHARED_KEY" -g '*.kt'
 
 # ── 工程化 ──
 grep -n "signingConfig" app/build.gradle.kts ; ls -a | grep -E "^\.github" ; ls app/src/main/res/
