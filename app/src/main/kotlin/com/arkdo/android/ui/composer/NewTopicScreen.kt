@@ -143,22 +143,14 @@ fun NewTopicScreen(
         viewModel.setBody(next.text)
     }
 
+    // 图片：多选。逐张按长边 ≤1920 压缩后**串行**上传，插入顺序与选择顺序一致
+    // （并发返回会乱序，对齐鸿蒙 ComposerPage.runUploadBatch）。
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val prepared = withContext(Dispatchers.IO) { prepareImageUpload(context.contentResolver, uri) }
-            if (prepared == null) {
-                Toast.makeText(context, "图片读取失败", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            viewModel.uploadImage(prepared.base64, prepared.fileName, prepared.mimeType) { snippet, _ ->
-                // 失败文案已计入 uploadFailures,由下方 LaunchedEffect 统一 toast。
-                if (!snippet.isNullOrEmpty()) {
-                    applyMdAction(MdAction.Insert(uploadSnippet(snippet)))
-                }
-            }
+        ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        viewModel.uploadPickedFiles(ComposerUploadKind.Image, uris) { snippet ->
+            applyMdAction(MdAction.Insert(uploadSnippet(snippet)))
         }
     }
 
@@ -448,6 +440,19 @@ fun NewTopicScreen(
                         fontSize = 15.sp,
                         color = colors.textPrimary
                     )
+                    // 压缩阶段才给取消：一段 1080p 压下来可能几十秒，不给口子只能干等。
+                    // 上传阶段不给 —— 请求已经发出去了，取消也收不回来。
+                    if (uiState.uploadCancelable) {
+                        Text(
+                            "取消",
+                            fontSize = 14.sp,
+                            color = colors.ldAccent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { viewModel.cancelUpload() }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }

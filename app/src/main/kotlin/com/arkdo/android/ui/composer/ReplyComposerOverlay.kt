@@ -82,14 +82,15 @@ internal fun ReplyComposerOverlay(
     isSubmitting: Boolean,
     isUploading: Boolean,
     uploadProgressText: String?,
+    /** 上传提示行是否显示「取消」（仅视频压缩阶段为真）。 */
+    uploadCancelable: Boolean = false,
+    onCancelUpload: () -> Unit = {},
     minChars: Int,
     maxChars: Int,
     /** 编辑态：提交按钮换对勾（保存），与回复态的纸飞机区分。 */
     editMode: Boolean,
     onTextChange: (String) -> Unit,
     onSubmit: (text: String, typingMs: Long, composerMs: Long, done: (Boolean) -> Unit) -> Unit,
-    /** 选好一张图后交给调用方上传；回调给可插入正文的 markdown 片段（失败/取消为 null）。 */
-    onUploadImage: (PreparedImage, done: (String?) -> Unit) -> Unit,
     /** 工具栏「附件」「音视频」入口是否露出（由调用方按站点设置算）。 */
     showAttachment: Boolean = false,
     showMedia: Boolean = false,
@@ -154,19 +155,13 @@ internal fun ReplyComposerOverlay(
         onTextChange(next.text)
     }
 
+    // 图片：多选，与发帖页同一条批量通道（逐张压缩后串行上传，插入顺序 = 选择顺序）。
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val prepared = withContext(Dispatchers.IO) { prepareImageUpload(context.contentResolver, uri) }
-            if (prepared == null) {
-                Toast.makeText(context, "图片读取失败", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            onUploadImage(prepared) { snippet ->
-                if (!snippet.isNullOrEmpty()) applyAction(MdAction.Insert(uploadSnippet(snippet)))
-            }
+        ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        onUploadPickedFiles(ComposerUploadKind.Image, uris) { snippet ->
+            applyAction(MdAction.Insert(uploadSnippet(snippet)))
         }
     }
 
@@ -364,12 +359,28 @@ internal fun ReplyComposerOverlay(
 
         // 上传中的进度提示（发帖页是盖遮罩，这里只在工具栏上方一行，避免全屏挡编辑）。
         if (isUploading && uploadProgressText != null) {
-            Text(
-                text = uploadProgressText,
-                fontSize = 12.5.sp,
-                color = colors.ldAccent,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-            )
+            ) {
+                Text(
+                    text = uploadProgressText,
+                    fontSize = 12.5.sp,
+                    color = colors.ldAccent
+                )
+                // 压缩阶段才给取消（一段 1080p 可能压几十秒）；上传阶段请求已发出，取消收不回来。
+                if (uploadCancelable) {
+                    Text(
+                        text = "取消",
+                        fontSize = 12.5.sp,
+                        color = colors.textSecondary,
+                        modifier = Modifier
+                            .clickable { onCancelUpload() }
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
 
         if (submitting) {

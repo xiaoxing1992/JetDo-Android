@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -91,8 +92,12 @@ fun PostRichContent(
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit = {},
     // 媒体解析(论坛同源上传件下载过 CF → 本地路径),音频播放条用;未接入时点播报错误态。
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") }
+    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    // 附件（`<a class="attachment">`）点击：参数是 (下载地址, 文件名)。不传则用默认实现
+    // （下载 → 交系统「打开方式」面板），见 rememberAttachmentOpener()。
+    onAttachmentClick: ((String, String) -> Unit)? = null
 ) {
+    val attachmentClick = onAttachmentClick ?: rememberAttachmentOpener()
     val blocks = remember(html) { CookedHtmlParser.parse(html) }
     // 本楼全部图片（原图 url + 优化图兜底），供图片浏览器整组翻页。
     val viewerImages = remember(blocks) { collectViewerImages(blocks) }
@@ -106,20 +111,34 @@ fun PostRichContent(
     // 离屏引擎按楼门控;渲染请求由 MathBlock/行内公式各自异步发起,产物走全局缓存。
     MathHostGate(hasMath = hasMath)
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-        blocks.forEachIndexed { index, block ->
-            BlockView(
-                block = block,
-                key = "$index",
-                expandedKeys = expandedKeys,
-                linkClicks = linkClicks,
-                viewerImages = viewerImages,
-                onOpenImages = onOpenImages,
-                onLinkClick = onLinkClick,
-                onResolveMedia = onResolveMedia
-            )
+    ProvideAttachmentClick(attachmentClick) {
+        Column(modifier = modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            blocks.forEachIndexed { index, block ->
+                BlockView(
+                    block = block,
+                    key = "$index",
+                    expandedKeys = expandedKeys,
+                    linkClicks = linkClicks,
+                    viewerImages = viewerImages,
+                    onOpenImages = onOpenImages,
+                    onLinkClick = onLinkClick,
+                    onResolveMedia = onResolveMedia
+                )
+            }
         }
     }
+}
+
+/**
+ * 附件点击处理的下发点。单独包一层而不是把 `onAttachmentClick` 逐级传下去，
+ * 理由见 [LocalAttachmentClick] 的注释。
+ */
+@Composable
+internal fun ProvideAttachmentClick(
+    handler: ((String, String) -> Unit)?,
+    content: @Composable () -> Unit
+) {
+    CompositionLocalProvider(LocalAttachmentClick provides handler, content = content)
 }
 
 /**
@@ -707,6 +726,9 @@ internal fun InlineText(
     val iconMutedColor = if (isDark) Color(0xFF5C626B) else Color(0xFFBDBDBD)
 
     val imageContents = mutableMapOf<String, InlineTextContent>()
+    // CompositionLocal 必须在 @Composable 作用域读出来：下面的 buildAnnotatedString 及其
+    // 内的 linkInteractionListener 都是普通 lambda，读不到 .current。
+    val attachmentClick = LocalAttachmentClick.current
     val text = buildAnnotatedString {
         if (inlines.isEmpty() && !fallbackText.isNullOrEmpty()) {
             append(plainNodeText(fallbackText))
@@ -740,13 +762,21 @@ internal fun InlineText(
                         }
                         appendInlineContent(downloadId, " ")
                     }
+                    val attachmentName = plainNodeText(token.text)
                     withLink(
                         LinkAnnotation.Clickable(
                             tag = token.href ?: "",
                             styles = TextLinkStyles(
                                 base.copy(color = colors.brand, background = Color.Unspecified, fontFamily = null, fontSize = TextUnit.Unspecified)
                             ),
-                            linkInteractionListener = { token.href?.let(onLinkClick) }
+                            linkInteractionListener = { _ ->
+                                val href = token.href
+                                // 附件优先走「下载 → 交系统」那条路；没人接管时保持原有的普通链接行为。
+                                val handler = if (token.attachment) attachmentClick else null
+                                if (href != null) {
+                                    if (handler != null) handler(href, attachmentName) else onLinkClick(href)
+                                }
+                            }
                         )
                     ) { append(plainNodeText(token.text)) }
 

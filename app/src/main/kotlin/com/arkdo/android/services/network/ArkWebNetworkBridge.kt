@@ -22,7 +22,9 @@ import com.arkdo.android.services.message.MessageBusEventBus
 import com.arkdo.android.services.network.webscript.MessageBusScriptTemplate
 import com.arkdo.android.services.web.WebSessionManager
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 import java.io.File
@@ -30,6 +32,15 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private const val MEDIA_DOWNLOAD_TIMEOUT_MS = 120_000L
+
+/**
+ * 附件下载的等待窗口，比音视频更宽。
+ *
+ * 音视频要的是「尽快起播」，超时短反而是保护；附件则是一次性把整个包拉下来 —— 论坛的
+ * 上传上限可到几十 MB，弱网下 2 分钟并不够。等待期间界面上有「正在下载」的提示，
+ * 卡住也不会让人以为没反应。
+ */
+private const val ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 300_000L
 
 /**
  * 上传单独放宽。走的是同一条 WebView fetch 通道，但上传要先 base64 拼进脚本、服务端还要
@@ -75,7 +86,14 @@ private data class PendingJsonRequest(
 
 data class DownloadIntent(
     val isMedia: Boolean,
-    val url: String
+    val url: String,
+    /**
+     * 调用方在**等落盘路径**（`downloadMedia` / `downloadAttachment`）。
+     *
+     * 旧路径 `startDownload` 是「页面触发的下载」，只在 enqueue 时往 [DownloadEventBus] 抛一条
+     * 「已开始下载」，不认领完成事件；awaited 的调用则要进结算表、由系统广播 settle 回来。
+     */
+    val awaited: Boolean = false
 )
 
 /**
@@ -200,18 +218,20 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     private var downloadContext: Context? = null
     private var downloadDelegateReady = false
-    private val mediaWaiters = mutableMapOf<String, CompletableDeferred<String>>()
+    // 按源 URL 等「下载完成 → 落盘路径」。媒体与附件共用一张表：两者 URL 不会撞，
+    // 且它们的调用方（播放器 / 附件打开器）本来就是在等同一个东西。
+    private val fileWaiters = mutableMapOf<String, CompletableDeferred<String>>()
     private val mediaInflight = mutableMapOf<String, kotlinx.coroutines.Deferred<String>>()
     private val mediaCache = mutableMapOf<String, String>()
     private val downloadIntents = mutableListOf<DownloadIntent>()
 
-    // 媒体下载结算表:DownloadManager enqueue id → (媒体源 URL, 落盘路径)。
+    // 下载结算表:DownloadManager enqueue id → (源 URL, 落盘路径)。
     // 下载委托是「loadUrl 触发下载导航 → 系统下载」的两段式,完成事件只能靠系统广播接回,
-    // ACTION_DOWNLOAD_COMPLETE 里按 id 查回媒体 URL,才能 settle 到 downloadMedia 的 waiter。
-    private val mediaDownloadJobs = mutableMapOf<Long, MediaDownloadJob>()
+    // ACTION_DOWNLOAD_COMPLETE 里按 id 查回源 URL,才能 settle 到 fileWaiters 的 waiter。
+    private val downloadJobs = mutableMapOf<Long, FileDownloadJob>()
     private var downloadReceiverRegistered = false
 
-    private data class MediaDownloadJob(val mediaUrl: String, val localPath: String)
+    private data class FileDownloadJob(val url: String, val localPath: String)
 
     // ---------- host 生命周期 ----------
 
@@ -602,6 +622,18 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         }.getOrDefault(false)
     }
 
+    /**
+     * 用 host webview 发起一次「下载导航」。
+     *
+     * WebView 的方法**只能在主线程**调用；而媒体/附件的触发点可能来自任意调度器
+     * （附件点击就跑在 `Dispatchers.IO` 上）。在错误线程上调 `loadUrl` 不会抛异常，
+     * Android 只打一条 `WebViewMethodCalledOnWrongThreadViolation` 警告然后**什么也不做** ——
+     * 表现为「点了没反应，最后超时报下载失败」，极难定位。所以这里统一收口到主线程。
+     */
+    private suspend fun loadForDownload(web: android.webkit.WebView, url: String) {
+        withContext(Dispatchers.Main.immediate) { web.loadUrl(url) }
+    }
+
     /** 触发一次媒体下载（音视频），返回下到沙箱后的本地路径。走 host webview 下载委托过 CF。 */
     suspend fun downloadMedia(url: String): String {
         mediaCache[url]?.let { return it }
@@ -610,29 +642,56 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
         val result = CompletableDeferred<String>()
         mediaInflight[url] = result
-        mediaWaiters[url] = result
-        downloadIntents.add(DownloadIntent(true, url))
-        runCatching { web.loadUrl(url) }.onFailure {
+        fileWaiters[url] = result
+        downloadIntents.add(DownloadIntent(true, url, awaited = true))
+        runCatching { loadForDownload(web, url) }.onFailure {
             downloadIntents.removeLastOrNull()
-            settleMediaFailure(url, IllegalStateException("媒体下载启动失败"))
+            settleFileFailure(url, IllegalStateException("媒体下载启动失败"))
         }
         try {
             return withTimeout(MEDIA_DOWNLOAD_TIMEOUT_MS) { result.await() }
         } catch (e: Exception) {
-            settleMediaFailure(url, e)
+            settleFileFailure(url, e)
             throw e
         }
     }
 
-    private fun settleMediaSuccess(url: String, path: String) {
-        mediaInflight.remove(url)
-        mediaCache[url] = path
-        mediaWaiters.remove(url)?.complete(path)
+    /**
+     * 触发一次附件下载，返回下到沙箱后的本地路径。
+     *
+     * 与 [downloadMedia] 同一条路（host webview 的下载委托 + 会话 Cookie 过 CF），差别只在
+     * 落盘目录与时长：附件落 `<ext>/download/`；且附件常常是个几十 MB 的包，比音视频更需要
+     * 宽裕的等待窗口。**不做缓存** —— 附件是一次性消费（下完立刻交系统打开/分享），
+     * 缓存只会白占空间。
+     */
+    suspend fun downloadAttachment(url: String): String {
+        fileWaiters[url]?.let { return it.await() }
+        val web = webView ?: throw IllegalStateException("宿主尚未就绪")
+
+        val result = CompletableDeferred<String>()
+        fileWaiters[url] = result
+        downloadIntents.add(DownloadIntent(false, url, awaited = true))
+        runCatching { loadForDownload(web, url) }.onFailure {
+            downloadIntents.removeLastOrNull()
+            settleFileFailure(url, IllegalStateException("附件下载启动失败"))
+        }
+        try {
+            return withTimeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS) { result.await() }
+        } catch (e: Exception) {
+            settleFileFailure(url, e)
+            throw e
+        }
     }
 
-    private fun settleMediaFailure(url: String, reason: Throwable) {
+    private fun settleFileSuccess(url: String, path: String) {
         mediaInflight.remove(url)
-        mediaWaiters.remove(url)?.completeExceptionally(reason)
+        mediaCache[url] = path
+        fileWaiters.remove(url)?.complete(path)
+    }
+
+    private fun settleFileFailure(url: String, reason: Throwable) {
+        mediaInflight.remove(url)
+        fileWaiters.remove(url)?.completeExceptionally(reason)
     }
 
     /** 给 host 挂下载委托：onDownloadStart 选沙箱保存路径。完成/失败经 DownloadEventBus 通知页面。 */
@@ -642,13 +701,17 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         // 媒体缓存目录必须与 DownloadManager 实际落盘目录一致(getExternalFilesDir);
         // 之前用 filesDir 推路径,内/外目录对不上,缓存命中与冷启动清理都落空。
         val mediaBase = context.getExternalFilesDir(null) ?: context.filesDir
-        val attachmentDir = File(context.filesDir, "download")
+        // 附件目录也必须在**外置**专属目录：真实落盘由 startSystemDownload 的
+        // setDestinationInExternalFilesDir 决定（外置），这里若按 filesDir 预建，目录会白建，
+        // 且 FileProvider 的 external-files-path 映射也会落空。
+        val attachmentDir = File(mediaBase, "download")
         val mediaDir = File(mediaBase, "media_cache")
 
         webView?.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
-            // 按发起顺序出队意图，辨别媒体/附件。
+            // 按发起顺序出队意图，辨别媒体/附件，以及调用方是否在等落盘路径。
             val intent = downloadIntents.firstOrNull()
             val isMedia = intent?.isMedia == true
+            val awaited = intent?.awaited == true
             val dir = if (isMedia) mediaDir else attachmentDir
             runCatching { if (!dir.exists()) dir.mkdirs() }.onFailure {
                 Timber.i("[ArkDO][Network] download dir failed msg=%s", it.message)
@@ -658,21 +721,21 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             downloadIntents.removeFirstOrNull()
 
             // 交给系统 DownloadManager 下到应用专属外部目录。
-            startSystemDownload(context, url, fileName, dir, isMedia, intent?.url)
+            startSystemDownload(context, url, fileName, dir, isMedia, intent?.url, awaited)
         })
         registerMediaDownloadReceiver(context)
         downloadDelegateReady = true
         Timber.i("[ArkDO][Network] download delegate configured")
     }
 
-    /** 注册系统下载完成广播:媒体下载的结算出口(settleMediaSuccess 的唯一触发点)。 */
+    /** 注册系统下载完成广播:媒体与附件下载的统一结算出口(settleFileSuccess 的唯一触发点)。 */
     private fun registerMediaDownloadReceiver(appContext: Context) {
         if (downloadReceiverRegistered) return
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                val job = synchronized(mediaDownloadJobs) { mediaDownloadJobs.remove(id) }
+                val job = synchronized(downloadJobs) { downloadJobs.remove(id) }
                 // 「结算表命中与否」是区分两类故障的分界点（下载没完成 vs 广播/派发对不上），
                 // 出问题时这行是唯一能一眼定性的证据，保留。
                 Timber.i("[ArkDO][Network] download-complete id=%s jobFound=%s", id, job != null)
@@ -684,16 +747,20 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                             cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) ==
                                 DownloadManager.STATUS_SUCCESSFUL
                         if (success) {
-                            Timber.i("[ArkDO][Network] media download complete url=%s path=%s", job.mediaUrl, job.localPath)
-                            settleMediaSuccess(job.mediaUrl, job.localPath)
+                            // 优先用系统回给的真实落盘位置：重名时 DownloadManager 会自行改名
+                            // （`x.zip` → `x-1.zip`），我们预推的路径就对不上了。预推路径仍在
+                            // 且存在时优先用它（媒体热路径，行为与本轮之前完全一致）。
+                            val resolved = resolveLocalPath(cursor, job.localPath)
+                            Timber.i("[ArkDO][Network] download complete url=%s path=%s", job.url, resolved)
+                            settleFileSuccess(job.url, resolved)
                         } else {
-                            Timber.i("[ArkDO][Network] media download failed url=%s", job.mediaUrl)
-                            settleMediaFailure(job.mediaUrl, IllegalStateException("媒体下载失败"))
+                            Timber.i("[ArkDO][Network] download failed url=%s", job.url)
+                            settleFileFailure(job.url, IllegalStateException("下载失败"))
                         }
                     }
                 }.onFailure {
-                    Timber.i("[ArkDO][Network] media download query failed msg=%s", it.message)
-                    settleMediaFailure(job.mediaUrl, it)
+                    Timber.i("[ArkDO][Network] download query failed msg=%s", it.message)
+                    settleFileFailure(job.url, it)
                 }
             }
         }
@@ -740,13 +807,40 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         return url.substringAfterLast('/').substringBefore('?')
     }
 
+    /**
+     * 系统回给的真实落盘位置。
+     *
+     * 为什么需要它：`setDestinationInExternalFilesDir` 只是「建议路径」，重名时
+     * DownloadManager 会自行改名（`x.zip` → `x-1.zip`），此时我们预先推出来的路径就是错的，
+     * 拿它去 `File.exists()` 会落空、交给系统打开会报「文件不存在」。
+     *
+     * 但媒体热路径（缓存命中、播放器路径）依赖的一直是预推路径，且它实测可用，
+     * 所以判据是「预推路径真的存在就用它」，只有当它落空时才回头问系统要真路径。
+     */
+    private fun resolveLocalPath(cursor: android.database.Cursor, fallback: String): String {
+        if (File(fallback).exists()) return fallback
+        val idx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+        if (idx < 0 || cursor.isNull(idx)) return fallback
+        val raw = cursor.getString(idx) ?: return fallback
+        val path = if (raw.startsWith("file://")) android.net.Uri.parse(raw).path else raw
+        return if (!path.isNullOrEmpty() && File(path).exists()) path else fallback
+    }
+
+    /**
+     * 把下载交给系统 DownloadManager，落进应用专属外部目录。
+     *
+     * [awaited] 为 true 时（媒体播放 / 附件打开）登记结算表，由 ACTION_DOWNLOAD_COMPLETE
+     * 广播 reclaim 回 [requestUrl] 对应的 waiter；否则按旧行为只在 enqueue 时向
+     * [DownloadEventBus] 抛一条「已开始下载」（页面触发的下载不需要等结果）。
+     */
     private fun startSystemDownload(
         context: Context,
         url: String,
         fileName: String,
         dir: File,
         isMedia: Boolean,
-        mediaUrl: String?
+        requestUrl: String?,
+        awaited: Boolean
     ) {
         // 走系统 DownloadManager 下到应用专属外部目录;媒体完成后经 ACTION_DOWNLOAD_COMPLETE 广播结算。
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
@@ -765,10 +859,11 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         // 实测这台设备只接受 VISIBILITY_VISIBLE(0)，故显式设它，不再用废弃的 HIDDEN。
         req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE)
         req.addRequestHeader("User-Agent", com.arkdo.android.services.web.UserAgentProvider.get(context))
-        // 论坛同源媒体(xz 上传件)直连会被 CF 挡:补 webview 会话 cookie(cf_clearance/_t),
-        // 与宿主同 UA 才拿得到字节。跨源 CDN 的下载请求不附加——CookieManager 按域返回,
-        // 天然只带该域自己的 cookie,不会把论坛会话泄给第三方。
-        if (isMedia && MediaSource.needsDownloadBridge(url)) {
+        // 论坛同源媒体/附件(xz 上传件、附件包)直连会被 CF 挡:补 webview 会话 cookie
+        // (cf_clearance/_t)，与宿主同 UA 才拿得到字节。跨源 CDN 的下载请求不附加 ——
+        // CookieManager 按域返回，天然只带该域自己的 cookie，不会把论坛会话泄给第三方。
+        // 附件与媒体一样要过这道：linux.do 的 `/uploads/short-url/*` 对匿名请求直接 404。
+        if (MediaSource.needsDownloadBridge(url)) {
             val cookie = CookieManager.getInstance().getCookie(url)
             if (!cookie.isNullOrEmpty()) {
                 req.addRequestHeader("Cookie", cookie)
@@ -776,10 +871,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         }
         try {
             val id = dm.enqueue(req)
-            Timber.i("[ArkDO][Network] download enqueued id=%s isMedia=%s mediaUrl=%s", id, isMedia, mediaUrl)
-            if (isMedia && mediaUrl != null) {
-                synchronized(mediaDownloadJobs) {
-                    mediaDownloadJobs[id] = MediaDownloadJob(mediaUrl, localFile.absolutePath)
+            Timber.i("[ArkDO][Network] download enqueued id=%s isMedia=%s awaited=%s url=%s", id, isMedia, awaited, requestUrl)
+            if (requestUrl != null && (isMedia || awaited)) {
+                synchronized(downloadJobs) {
+                    downloadJobs[id] = FileDownloadJob(requestUrl, localFile.absolutePath)
                 }
             } else {
                 DownloadEventBus.notify(
@@ -792,8 +887,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 )
             }
         } catch (e: Exception) {
-            if (isMedia && mediaUrl != null) {
-                settleMediaFailure(mediaUrl, e)
+            if (requestUrl != null && (isMedia || awaited)) {
+                settleFileFailure(requestUrl, e)
             } else {
                 DownloadEventBus.notify(DownloadResult(false, fileName, "", "下载失败"))
             }

@@ -3,4 +3,10 @@
     <files-path name="logs" path="logs/" />
     <!-- 图片浏览器分享：高清图下载到 cache 后经 FileProvider 交系统分享面板。 -->
     <cache-path name="shared_images" path="shared_images/" />
+    <!-- 帖内附件：host webview 的下载委托把它下到「应用专属外部目录」的 download/ 下
+         （见 ArkWebNetworkBridge.startSystemDownload 的 setDestinationInExternalFilesDir），
+         随后经 FileProvider 换成 content:// 交给系统「打开方式 / 分享」面板。
+         必须是 external-files-path 而不是 files-path —— 真身在外置，写错会让
+         FileProvider.getUriForFile 抛 IllegalArgumentException。 -->
+    <external-files-path name="attachments" path="download/" />
 </paths>

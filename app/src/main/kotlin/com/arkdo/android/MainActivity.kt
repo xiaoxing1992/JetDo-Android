@@ -22,6 +22,7 @@ import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.AppStateEventBus
 import com.arkdo.android.services.session.observeLifecycle
+import com.arkdo.android.services.upload.VideoTranscoder
 import com.arkdo.android.services.web.WebSessionManager
 import com.arkdo.android.ui.components.ArkWebHost
 import com.arkdo.android.ui.screens.PrivateDnsGuideScreen
@@ -73,6 +74,9 @@ class MainActivity : ComponentActivity() {
 
         // 清理媒体缓存（冷启动）
         ArkWebNetworkBridge.clearMediaCacheDir(this)
+        // 同理清掉遗留的视频转码产物：压缩一段 1080p 要十几秒，期间切后台被系统回收或崩溃时
+        // finally 不会跑，产物（可能几十 MB）会永久留在 cacheDir 里。只删我们自己的前缀。
+        VideoTranscoder.clearStaleOutputs(this)
 
         // Edge-to-Edge:沉浸式状态栏和导航栏。全 app 各页自行垫 statusBars/navigationBars inset
         // (RootTabScreen 已把 Scaffold 的 contentWindowInsets 关掉)。曾因 WebView 输入框不随键盘

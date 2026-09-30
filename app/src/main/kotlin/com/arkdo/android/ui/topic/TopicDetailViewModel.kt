@@ -37,6 +37,7 @@ import com.arkdo.android.services.site.SiteUploadSettings
 import com.arkdo.android.services.site.defaultSiteUploadSettings
 import com.arkdo.android.services.upload.DISGUISE_MIME
 import com.arkdo.android.services.upload.UploadService
+import com.arkdo.android.services.upload.VideoTranscoder
 import com.arkdo.android.services.topic.LotteryTipPrefs
 import com.arkdo.android.services.topic.LOTTERY_REPLY_HINT
 import com.arkdo.android.services.topic.LOTTERY_REPLY_PLACEHOLDER
@@ -1190,31 +1191,6 @@ class TopicDetailViewModel @Inject constructor(
     // ========== 上传与预览（全屏编辑器用） ==========
 
     /**
-     * 上传一张图（UI 直接调用的单选入口）：base64 → POST /uploads.json → 返回可插入正文的片段。
-     *
-     * 重入闸与遮罩状态留在这一层；执行层 [uploadFile] 会被批量流程内部复用
-     * （那时 isUploadingMedia 已被批量入口置位），守卫留在那里只会把自己挡回去。
-     */
-    fun uploadImage(
-        base64: String,
-        fileName: String,
-        mimeType: String,
-        done: (snippet: String?, error: String?) -> Unit
-    ) {
-        if (_uiState.value.isUploadingMedia) return
-        _uiState.update {
-            it.copy(
-                isUploadingMedia = true,
-                uploadProgressText = ComposerUploadKind.Image.progressText
-            )
-        }
-        uploadFile(ComposerUploadKind.Image, base64, fileName, mimeType) { snippet, error ->
-            _uiState.update { it.copy(isUploadingMedia = false, uploadProgressText = null) }
-            done(snippet, error)
-        }
-    }
-
-    /**
      * 执行一次上传（图片 / 附件 / 音视频共用），与发帖页 [NewTopicViewModel] 同构。
      * 差别只在两处：音视频要把文件名换成 `.xz`、MIME 换成伪装值（字节不动）；
      * 结果拼装不同（图片 `![]()`、附件 `[名|attachment]()`、音视频裸 `<video>`）。
@@ -1261,7 +1237,9 @@ class TopicDetailViewModel @Inject constructor(
         onSnippet: (String) -> Unit
     ) {
         if (_uiState.value.isUploadingMedia || uris.isEmpty()) return
-        _uiState.update { it.copy(isUploadingMedia = true, uploadProgressText = kind.progressText) }
+        _uiState.update {
+            it.copy(isUploadingMedia = true, uploadProgressText = kind.progressText, uploadCancelable = false)
+        }
         viewModelScope.launch {
             val settings = uploadSettings
             val limitKb = if (kind == ComposerUploadKind.Image) {
@@ -1275,18 +1253,32 @@ class TopicDetailViewModel @Inject constructor(
                     kind = kind,
                     uris = uris,
                     limitKb = limitKb,
-                    onProgress = { text -> _uiState.update { it.copy(uploadProgressText = text) } },
+                    onProgress = { progress ->
+                        _uiState.update {
+                            it.copy(uploadProgressText = progress.text, uploadCancelable = progress.cancelable)
+                        }
+                    },
                     onSnippet = onSnippet,
                     uploadOne = { file, width, height -> uploadOne(kind, file, width, height) }
                 )
             } finally {
                 // 收尾必须在 finally：isUploadingMedia 既是遮罩、也是上传入口的重入闸。
-                _uiState.update { it.copy(isUploadingMedia = false, uploadProgressText = null) }
+                _uiState.update {
+                    it.copy(isUploadingMedia = false, uploadProgressText = null, uploadCancelable = false)
+                }
             }
             firstError?.let { message ->
                 _uiState.update { it.copy(actionMessage = message) }
             }
         }
+    }
+
+    /**
+     * 中断正在进行的视频压缩。只有压缩阶段有出口（见 [UploadProgress.cancelable]）：
+     * 上传阶段的请求已经发出去了，取消也收不回来。
+     */
+    fun cancelUpload() {
+        VideoTranscoder.cancelActive()
     }
 
     /** 等一次上传结束（把 done 回调适配成挂起函数），供串行批处理使用。 */
@@ -1974,6 +1966,8 @@ data class TopicDetailUiState(
     /** 全屏编辑器里上传中（进度文案随行显示，不盖全屏遮罩）。 */
     val isUploadingMedia: Boolean = false,
     val uploadProgressText: String? = null,
+    /** 上传提示行是否显示「取消」。仅视频压缩阶段为真。 */
+    val uploadCancelable: Boolean = false,
     /** 编辑器工具栏「附件」入口是否露出(站点有非图片白名单 + 当前用户还能发附件)。 */
     val showAttachment: Boolean = false,
     /** 编辑器工具栏「音视频」入口是否露出(linux.do 私有约定)。 */

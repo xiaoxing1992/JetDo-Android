@@ -2,8 +2,10 @@ package com.arkdo.android.ui.composer
 
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
 import com.arkdo.android.services.network.NetworkResult
 import com.arkdo.android.services.upload.UploadService
+import com.arkdo.android.services.upload.VideoTranscoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -13,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import timber.log.Timber
+import java.io.File
 
 /**
  * 上传结果解析：发帖（[NewTopicViewModel]）与回帖（`TopicDetailViewModel`）共用一份。
@@ -125,29 +128,49 @@ internal suspend fun runUploadBatch(
     kind: ComposerUploadKind,
     uris: List<Uri>,
     limitKb: Int,
-    onProgress: (String) -> Unit,
+    onProgress: (UploadProgress) -> Unit,
     onSnippet: (String) -> Unit,
     uploadOne: suspend (PreparedRawFile, Int, Int) -> UploadOutcome,
 ): String? {
     if (uris.isEmpty()) return null
     var firstError: String? = null
     val resolver = context.contentResolver
+
+    /** 除「压缩进度」外的常态文案。压缩阶段由 [prepareMediaForBatch] 自己往外发。 */
+    fun phaseText(index: Int) = UploadProgress(
+        if (uris.size > 1) "${kind.label}上传中 (${index + 1}/${uris.size})" else "${kind.label}上传中..."
+    )
+
     uris.forEachIndexed { index, uri ->
-        onProgress(
-            if (uris.size > 1) "${kind.label}上传中 (${index + 1}/${uris.size})" else "${kind.label}上传中..."
-        )
+        onProgress(phaseText(index))
         when (val prepared = withContext(Dispatchers.IO) {
-            prepareRawUpload(resolver, uri, limitKb, kind.label)
+            // 三条入口的「读字节」各不相同：
+            //  · 图片先缩到长边 ≤1920 再编码，否则一张 1080×2400 的截图会以 320 KB PNG
+            //    原样上传 —— 既慢又容易撞上传超时；
+            //  · 音视频在超站点上限时**先转码**再读字节（见 VideoTranscoder），转码那几十秒
+            //    的百分比进度与取消口子经 onProgress 传出去；
+            //  · 附件原样读，绝不重编码（扩展名决定白名单与限额，改名就会被服务端拒）。
+            when (kind) {
+                ComposerUploadKind.Image -> prepareImageForBatch(resolver, uri, limitKb, kind.label)
+                ComposerUploadKind.Attachment -> prepareRawUpload(resolver, uri, limitKb, kind.label)
+                ComposerUploadKind.Media -> prepareMediaForBatch(context, uri, limitKb, onProgress)
+            }
         }) {
-            is RawFileResult.Failed -> if (firstError == null) firstError = prepared.message
+            is RawFileResult.Failed -> {
+                // 空文案 = 用户主动取消（见 prepareMediaForBatch），不当失败上报 ——
+                // 对齐鸿蒙「空 error = 用户主动取消，上层不该再弹提示」。
+                if (prepared.message.isNotEmpty() && firstError == null) firstError = prepared.message
+            }
             is RawFileResult.Ok -> {
-                // 视频要自己量播放方向尺寸：服务端对 .xz 不回宽高，不量的话竖屏视频会被摆歪。
-                val size = if (kind == ComposerUploadKind.Media) {
-                    withContext(Dispatchers.IO) { probeVideoDisplaySize(context, uri) }
-                } else {
-                    0 to 0
-                }
-                val outcome = uploadOne(prepared.file, size.first, size.second)
+                // 转码结束后把浮层切回「上传中」—— 否则会一直停在「压缩中 100%」，而真正
+                // 在跑的是上传。
+                onProgress(phaseText(index))
+                // 视频的播放方向尺寸由 prepareMediaForBatch 顺带探出来（转码路径本来就要探）。
+                val outcome = uploadOne(
+                    prepared.file,
+                    prepared.file.displayWidth,
+                    prepared.file.displayHeight
+                )
                 outcome.snippet?.let(onSnippet)
                 val error = outcome.error
                 if (!error.isNullOrEmpty() && firstError == null) firstError = error
@@ -155,6 +178,117 @@ internal suspend fun runUploadBatch(
         }
     }
     return firstError
+}
+
+/**
+ * 音视频版的「读字节」：超站点上限时先转码到目标体积以内，再读字节。
+ *
+ * 已经达标就**不再编一遍** —— 重编码是纯画质净赔。不达标才落到 [VideoTranscoder]：
+ * 手机实拍 1080p 约 17 Mbps，随便一段都远超 4 MB，不压等于这个入口没法用。
+ *
+ * 转码产物落 cacheDir（前缀 `arkdo_transcode_`），读完字节**一定**删掉；冷启动还会
+ * 由 `VideoTranscoder.clearStaleOutputs` 兜一次（崩溃/被回收时 finally 不会跑）。
+ */
+private suspend fun prepareMediaForBatch(
+    context: Context,
+    uri: Uri,
+    siteLimitKb: Int,
+    onProgress: (UploadProgress) -> Unit
+): RawFileResult {
+    val resolver = context.contentResolver
+    val fileName = queryDisplayName(resolver, uri)
+        ?: uri.lastPathSegment?.substringAfterLast('/')
+        ?: "video"
+
+    // 探一次，两件事一起拿：播放方向尺寸（给 <video> 标签）与时长/分辨率（转码决策要用）。
+    val probe = runCatching { VideoTranscoder.probeVideo(context, uri) }.getOrNull()
+    val display = probe?.let { VideoTranscoder.displaySize(it) }
+    val displayWidth = display?.width ?: 0
+    val displayHeight = display?.height ?: 0
+
+    val declaredSize = queryFileSize(resolver, uri) ?: -1L
+    val limitBytes = UploadService.effectiveLimitBytes(siteLimitKb)
+
+    /** 把一份源（原始 uri 或转码产物文件）读成载荷。 */
+    fun readBytesOf(target: Uri): RawFileResult = runCatching {
+        val bytes = resolver.openInputStream(target)?.use { it.readBytes() }
+            ?: return RawFileResult.Failed("视频读取失败")
+        if (bytes.isEmpty()) return RawFileResult.Failed("文件是空的")
+        RawFileResult.Ok(
+            PreparedRawFile(
+                base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+                fileName = fileName,
+                mimeType = resolver.getType(uri)
+                    ?: UploadService.mimeFor(UploadService.extensionOf(fileName)),
+                byteLength = bytes.size.toLong(),
+                displayWidth = displayWidth,
+                displayHeight = displayHeight
+            )
+        )
+    }.getOrElse { RawFileResult.Failed("视频读取失败") }
+
+    // 体积未知（provider 不给 SIZE）时不敢断言「已达标」，走转码那条路更安全 ——
+    // 但探不出元数据时转码也无从下手，此时只能原样传，由服务端去拒。
+    if (declaredSize in 0..limitBytes) {
+        return readBytesOf(uri)
+    }
+    if (probe == null) {
+        return readBytesOf(uri)
+    }
+
+    val transcoder = VideoTranscoder(context)
+    VideoTranscoder.markActive(transcoder)
+    val result = try {
+        transcoder.fit(
+            sourceUri = uri,
+            targetBytes = limitBytes,
+            known = probe,
+            onPlan = { plan ->
+                if (plan.willDegrade) {
+                    onProgress(UploadProgress("视频较长，压缩后画质会明显下降", cancelable = true))
+                }
+            },
+            onProgress = { percent, pass ->
+                val round = if (pass > 1) "（第 $pass 遍）" else ""
+                onProgress(UploadProgress("视频压缩中$round $percent%", cancelable = true))
+            }
+        )
+    } finally {
+        VideoTranscoder.markActive(null)
+    }
+
+    val producedPath = result.path
+    if (producedPath.isNullOrEmpty()) {
+        // 空文案 = 用户主动取消，浮层正在被入口层收掉，不必再报错。
+        return RawFileResult.Failed(result.error.orEmpty())
+    }
+    return try {
+        readBytesOf(Uri.fromFile(File(producedPath)))
+    } finally {
+        VideoTranscoder.discard(producedPath)
+    }
+}
+
+/**
+ * 图片版的「读字节」：复用 [prepareImageUpload]（长边 ≤1920 + JPEG 重编码），
+ * 再把产物适配成批量通道统一的 [RawFileResult]。
+ *
+ * 体积闸门用 base64 长度反推（`len / 4 * 3`，误差来自 padding），不再解一次码 ——
+ * 这里只是拦下「压缩完仍超站点上限」的极端情况，精度够用。
+ */
+private fun prepareImageForBatch(
+    resolver: android.content.ContentResolver,
+    uri: android.net.Uri,
+    limitKb: Int,
+    kindLabel: String
+): RawFileResult {
+    val prepared = prepareImageUpload(resolver, uri) ?: return RawFileResult.Failed("图片读取失败")
+    val approxBytes = prepared.base64.length.toLong() / 4L * 3L
+    val overLimit = UploadService.checkSize(approxBytes, limitKb, kindLabel)
+    if (overLimit.isNotEmpty()) return RawFileResult.Failed(overLimit)
+    return RawFileResult.Ok(
+        PreparedRawFile(prepared.base64, prepared.fileName, prepared.mimeType, approxBytes)
+    )
 }
 
 /** 解析 /uploads.json 响应：成功取 short_url 拼 markdown 图；失败给用户可读文案。 */

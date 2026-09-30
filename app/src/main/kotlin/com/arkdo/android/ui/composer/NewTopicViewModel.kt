@@ -15,6 +15,7 @@ import com.arkdo.android.services.draft.resolveDraftKey
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.network.JsonRequestOptions
 import com.arkdo.android.services.network.NetworkResult
+import com.arkdo.android.services.upload.VideoTranscoder
 import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.site.SiteSettingsService
@@ -206,33 +207,6 @@ class NewTopicViewModel @Inject constructor(
     // ========== 上传 ==========
 
     /**
-     * 上传一张图片（UI 直接调用的单选入口）：base64 → POST /uploads.json → 返回可插入正文的片段。
-     * done(snippet, error):snippet 非空=成功;error 空串=用户取消/无需提示;否则失败文案。
-     *
-     * 重入闸与遮罩状态都留在这一层 —— 它面向用户点击，必须在开跑前挡住连点。执行层
-     * [uploadFile] 会被批量流程内部复用，那时 isUploading 已被批量入口置位，守卫留在那里
-     * 只会把自己挡回去（原因见 uploadFile 注释）。
-     */
-    fun uploadImage(
-        base64: String,
-        fileName: String,
-        mimeType: String,
-        done: (snippet: String?, error: String?) -> Unit
-    ) {
-        if (_uiState.value.isUploading) return
-        _uiState.update {
-            it.copy(
-                isUploading = true,
-                uploadProgressText = ComposerUploadKind.Image.progressText
-            )
-        }
-        uploadFile(ComposerUploadKind.Image, base64, fileName, mimeType) { snippet, error ->
-            _uiState.update { it.copy(isUploading = false, uploadProgressText = null) }
-            done(snippet, error)
-        }
-    }
-
-    /**
      * 执行一次上传（图片 / 附件 / 音视频共用）：发请求 → 按类型解析 → 回调 done。
      * 差别只在两处：
      *  · 音视频要把文件名换成 `.xz`、MIME 换成伪装值（字节不动，见 DISGUISE_EXTENSION）；
@@ -314,7 +288,9 @@ class NewTopicViewModel @Inject constructor(
         onSnippet: (String) -> Unit
     ) {
         if (_uiState.value.isUploading || uris.isEmpty()) return
-        _uiState.update { it.copy(isUploading = true, uploadProgressText = kind.progressText) }
+        _uiState.update {
+            it.copy(isUploading = true, uploadProgressText = kind.progressText, uploadCancelable = false)
+        }
         viewModelScope.launch {
             val settings = uploadSettings
             val limitKb = if (kind == ComposerUploadKind.Image) {
@@ -328,19 +304,33 @@ class NewTopicViewModel @Inject constructor(
                     kind = kind,
                     uris = uris,
                     limitKb = limitKb,
-                    onProgress = { text -> _uiState.update { it.copy(uploadProgressText = text) } },
+                    onProgress = { progress ->
+                        _uiState.update {
+                            it.copy(uploadProgressText = progress.text, uploadCancelable = progress.cancelable)
+                        }
+                    },
                     onSnippet = onSnippet,
                     uploadOne = { file, width, height -> uploadOne(kind, file, width, height) }
                 )
             } finally {
                 // 收尾必须在 finally：isUploading 既驱动遮罩，也是三个上传入口的重入闸，
                 // 万一上面抛出来，不兜的话遮罩永远挂着、上传入口全部失效。
-                _uiState.update { it.copy(isUploading = false, uploadProgressText = null) }
+                _uiState.update {
+                    it.copy(isUploading = false, uploadProgressText = null, uploadCancelable = false)
+                }
             }
             firstError?.let { message ->
                 _uiState.update { it.copy(uploadFailures = it.uploadFailures + message) }
             }
         }
+    }
+
+    /**
+     * 中断正在进行的视频压缩。只有压缩阶段有出口（见 [UploadProgress.cancelable]）：
+     * 上传阶段的请求已经发出去了，取消也收不回来。
+     */
+    fun cancelUpload() {
+        VideoTranscoder.cancelActive()
     }
 
     /** 等一次上传结束（把 done 回调适配成挂起函数），供串行批处理使用。 */
@@ -535,6 +525,8 @@ data class NewTopicUiState(
     val tagLoading: Boolean = false,
     val isUploading: Boolean = false,
     val uploadProgressText: String? = null,
+    /** 上传浮层是否显示「取消」。仅视频压缩阶段为真。 */
+    val uploadCancelable: Boolean = false,
     /** 本批上传的失败文案(逐条记,结束后一次性 toast)。 */
     val uploadFailures: List<String> = emptyList(),
     /** 工具栏「附件」入口是否露出(站点有非图片白名单 + 当前用户还能发附件)。 */
