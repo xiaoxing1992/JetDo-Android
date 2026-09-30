@@ -22,13 +22,14 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ArkDO"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:hardwareAccelerated="true"
         android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.ArkDO"
             android:windowSoftInputMode="adjustResize"
             android:hardwareAccelerated="true">
@@ -37,12 +38,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 深链接支持：推送通知跳转 -->
-            <intent-filter android:autoVerify="true">
+            <!--
+              深链接：推送通知跳转。
+
+              launchMode="singleTop" 是配套的硬要求：没有它，App 活着时点通知会再起一个
+              MainActivity 实例（standard 模式），Compose 整棵树连同 navController 栈、
+              WebView 会话一起重建，用户观感是「点一下通知 App 重开了一遍」。
+
+              原先这里挂着 android:autoVerify="true" —— 那是 http/https App Links 的东西，
+              对自定义 scheme 没有任何作用，Android 也不会去校验，纯属误导，已去掉。
+
+              host 不写死成 notification：解析统一在 DeepLinkEventBus.parse 里做，
+              以后加 arkdo://topic/123 这类形态不用再动 Manifest。
+            -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="arkdo" android:host="notification" />
+                <data android:scheme="arkdo" />
             </intent-filter>
         </activity>
 

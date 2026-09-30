@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,6 +94,31 @@ fun ArkDoNavHost(
         onDispose { unsubscribe() }
     }
 
+    // 通知深链切 tab 的信号。用自增数字而不是布尔值：连着点两条通知时布尔一直是 true、
+    // LaunchedEffect 的 key 不变就不会重启，第二次点等于没反应。
+    var notificationTabSignal by remember { mutableIntStateOf(0) }
+
+    // 推送通知深链（arkdo://notification[?topicId=N&postNumber=M]）。
+    // 订阅挂在这里而不是 RootTabScreen：RootTabScreen 只在 ROOT 目的地组合，
+    // 用户正停在详情页/设置页时点通知，它根本不在组合里，事件就没人收了。
+    androidx.compose.runtime.DisposableEffect(navController) {
+        val unsubscribe = DeepLinkEventBus.subscribe { target ->
+            when (target) {
+                is DeepLinkTarget.Topic -> {
+                    val query = target.postNumber?.let { "?target=$it" }.orEmpty()
+                    navController.navigate("${Routes.TOPIC_DETAIL}/${target.topicId}$query")
+                }
+                DeepLinkTarget.NotificationInbox -> {
+                    // 先把 ROOT 之上的页面摘掉再切 tab：用户点通知的预期是「回到通知中心」，
+                    // 不是在原来的详情页/设置页之上再压一层。
+                    navController.popBackStack(Routes.ROOT, inclusive = false)
+                    notificationTabSignal++
+                }
+            }
+        }
+        onDispose { unsubscribe() }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
     // 共享元素转场需要有一个 SharedTransitionLayout 作为共同祖先：两端在这个布局的
     // 坐标系里各自报出 bounds，转场期间由它接管绘制（默认画在 overlay 上）。
@@ -127,7 +154,8 @@ fun ArkDoNavHost(
             ) {
                 RootTabScreen(
                     isWebViewReady = isWebViewReady,
-                    navController = navController
+                    navController = navController,
+                    notificationTabSignal = notificationTabSignal
                 )
             }
         }

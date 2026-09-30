@@ -1,5 +1,6 @@
 package com.arkdo.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,9 +17,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.arkdo.android.navigation.ArkDoNavHost
+import com.arkdo.android.navigation.DeepLinkEventBus
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryCoordinator
 import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
+import com.arkdo.android.services.logging.FileLoggerDaemon
 import com.arkdo.android.services.network.ArkWebNetworkBridge
 import com.arkdo.android.services.session.AppStateEventBus
 import com.arkdo.android.services.session.observeLifecycle
@@ -66,6 +69,10 @@ class MainActivity : ComponentActivity() {
                 lifecycleScope.launch {
                     WebSessionManager.saveCookies("onBackground")
                 }
+                // 文件日志同步刷盘。进程退到后台后随时可能被系统回收，缓冲里最后这几秒
+                // 不落盘就永远没了 —— 而这几秒往往正是出问题的那一刻。必须同步做，
+                // 丢进协程的话协同进程一起被杀，等于没做。
+                FileLoggerDaemon.onBackground()
             }
         }
 
@@ -211,14 +218,30 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /**
+     * App 还活着时又点了一条通知（或从外部点开 `arkdo://` 链接）。
+     *
+     * 必须配合 Manifest 里的 `android:launchMode="singleTop"`：否则 standard 模式下
+     * 系统会再建一个 MainActivity 实例，用户看到的是「点通知后 App 重开了一遍」——
+     * Compose 那棵大树（含 WebView 会话、navController 栈）全部重建，过盾状态也可能丢。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 必须回写：handleNotificationIntent 读的是 activity.intent，
+        // 不 setIntent 的话它拿到的还是启动时那个旧 intent。
+        setIntent(intent)
+        Timber.i("[ArkDO][MainActivity] onNewIntent ts=%d", System.currentTimeMillis())
+        handleNotificationIntent()
+    }
+
+    /**
+     * 处理推送通知深链接（冷启动走 onCreate，热启动走 onNewIntent）。
+     *
+     * 这里只负责「解析 + 广播」，不做导航 —— 导航权在 ArkDoNavHost 的 navController 上。
+     * 冷启动时 NavHost 尚未组合，事件会先积压一份，等它订阅时补发（见 DeepLinkEventBus）。
+     */
     private fun handleNotificationIntent() {
-        val data = intent?.data
-        if (data?.scheme == "arkdo" && data.host == "notification") {
-            // 解析并导航到对应页面（Topic / Notification）
-            val topicId = data.getQueryParameter("topicId")
-            val postNumber = data.getQueryParameter("postNumber")
-            Timber.i("[ArkDO][MainActivity] notification intent topicId=$topicId postNumber=$postNumber")
-            // TODO: 通过 Navigation 跳转到详情页
-        }
+        val target = DeepLinkEventBus.parse(intent?.dataString) ?: return
+        DeepLinkEventBus.dispatch(target)
     }
 }

@@ -11,6 +11,7 @@ import com.arkdo.android.services.topic.LotteryTipPrefs
 import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
+import com.arkdo.android.services.logging.FileLoggerDaemon
 import com.arkdo.android.services.network.DohManager
 import com.arkdo.android.services.network.DohService
 import com.arkdo.android.services.session.LoginGate
@@ -42,12 +43,19 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         // 否则最早的异常抓不到。RecordingTree 把 Timber 输出抄进内存环形缓冲，
         // 崩溃瞬间落盘，下次启动在「设置 → 诊断日志」里回读、一键复制。
         Timber.plant(DebugLogStore.tree())
+        // 第二条腿：同一个 Timber 出口再抄一份进沙箱文件（app_logs/arkdo.log），
+        // 支持 1MB 轮转与合并导出。内存缓冲只在崩溃瞬间落盘一次，App 正常跑一天
+        // 再被系统回收的话现场全丢 —— 脱机跑一天后导出日志靠的就是这条。
+        Timber.plant(FileLoggerDaemon.tree())
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
             // chrome://inspect 直接看 WebView(含 Turnstile iframe)的 console/network,排障用。
             android.webkit.WebView.setWebContentsDebuggingEnabled(true)
         }
         DebugLogStore.install(this)
+        // 必须排在 DebugLogStore.install 之后：崩溃钩子是「包装上一个 handler」的链式结构，
+        // 谁后装谁在外层。文件日志先刷盘，再交给内存缓冲那条去写 debug_log.txt。
+        FileLoggerDaemon.init(this)
 
         Timber.i("[ArkDO][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
 
