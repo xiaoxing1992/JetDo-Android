@@ -68,6 +68,9 @@ fun AcceptedAnswerPanel(
     onOpenLink: (String) -> Unit = {},
     // 采纳答案正文里也可能带音频:透传媒体解析回调(同 PostRichContent)。
     onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    // 引用卡：采纳答案里的引用卡也要能展开全文 / 跳转（对齐鸿蒙 AcceptedAnswerPanel 透传同名回调）。
+    onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit = { _, _, _ -> },
+    onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" },
     modifier: Modifier = Modifier
 ) {
     if (answers.isEmpty()) return
@@ -129,7 +132,9 @@ fun AcceptedAnswerPanel(
                 onJumpToPost = onJumpToPost,
                 onOpenImages = onOpenImages,
                 onOpenLink = onOpenLink,
-                onResolveMedia = onResolveMedia
+                onResolveMedia = onResolveMedia,
+                onJumpToQuote = onJumpToQuote,
+                onResolveQuotedPost = onResolveQuotedPost
             )
         }
     }
@@ -142,7 +147,9 @@ private fun AcceptedAnswerCard(
     onJumpToPost: (Int) -> Unit,
     onOpenImages: (List<ViewerImage>, Int) -> Unit,
     onOpenLink: (String) -> Unit,
-    onResolveMedia: suspend (String) -> String
+    onResolveMedia: suspend (String) -> String,
+    onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit,
+    onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String
 ) {
     val colors = com.arkdo.android.ui.theme.arkdoColors
     var collapsed by remember(answer.postNumber) { mutableStateOf(initiallyCollapsed) }
@@ -229,6 +236,10 @@ private fun AcceptedAnswerCard(
                             onOpenImages = onOpenImages,
                             onLinkClick = onOpenLink,
                             onResolveMedia = onResolveMedia,
+                            // 楼层上下文用被采纳答案自己的楼号（对齐鸿蒙 AcceptedAnswerPanel.ets:161）。
+                            currentPostNumber = answer.postNumber,
+                            onJumpToQuote = onJumpToQuote,
+                            onResolveQuotedPost = onResolveQuotedPost,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

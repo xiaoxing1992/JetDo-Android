@@ -410,6 +410,9 @@ fun TopicDetailScreen(
                                         onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
                                         onCopyPostLink = { p -> viewModel.postLink(p) },
                                         onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
+                                        onResolveQuotedPost = { quotedTopicId, quotedPostNumber ->
+                                            viewModel.resolveQuotedPost(quotedTopicId, quotedPostNumber)
+                                        },
                                         // 「上次访问」红线锚楼（VM 按进入时的已读水位算一次，锚定后不再变）。
                                         lastVisitedAnchorPostId = ui.lastVisitedAnchorPostId,
                                         onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
@@ -741,6 +744,8 @@ private fun TopicDetailContent(
     onToggleBookmark: (TopicPost, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     onCopyPostLink: (TopicPost) -> String? = { null },
     onJumpToPost: (Int) -> Unit = {},
+    // 引用卡展开全文：取被引用楼 cooked（VM 先翻已加载楼层，再 GET /posts/by_number）。空串 = 拉不到。
+    onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" },
     onRepliesLoad: (TopicPost, (List<TopicPost>?) -> Unit) -> Unit = { _, done -> done(null) },
     onReply: (TopicPost) -> Unit = {},
     topicCreatedById: Long = -1,
@@ -898,6 +903,17 @@ private fun TopicDetailContent(
                 onOpenReactions = { onOpenReactions(post) },
                 onReply = onReply,
                 onJumpToPost = onJumpToPost,
+                // 引用卡右上角跳转箭头：同帖（被引用楼就在本帖里）走 jumpToPostNumber 滚动定位，
+                // 跨帖走 href 打开另一个帖子。对齐鸿蒙 TopicDetailPage.jumpToQuote（:1646）。
+                onJumpToQuote = { quotedTopicId, quotedPostNumber, fallbackUrl ->
+                    when (val target = resolveQuoteJump(quotedTopicId, quotedPostNumber, fallbackUrl, topic.id)) {
+                        is QuoteJumpTarget.Post -> onJumpToPost(target.postNumber)
+                        is QuoteJumpTarget.Link -> onOpenLink(target.url)
+                        QuoteJumpTarget.None -> Unit
+                    }
+                },
+                // 引用卡展开全文：先翻已加载楼层，再按需 GET /posts/by_number。
+                onResolveQuotedPost = onResolveQuotedPost,
                 // 「上次访问」红线：只画在锚楼底边（对齐鸿蒙 :456 的 post.id === anchor && anchor > 0）。
                 showLastVisitedLine = lastVisitedAnchorPostId > 0L && post.id == lastVisitedAnchorPostId,
                 // 「俺也一样」：话题级功能，仅一楼渲染（页面只对一楼下发，对齐鸿蒙）。

@@ -8,7 +8,7 @@
 
 ## 一、结论先行
 
-**还剩 34 项 + 7 组死代码。**
+**还剩 33 项 + 7 组死代码。**
 
 ### 1.1 缺口分布
 
@@ -16,11 +16,11 @@
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
 | P1 | 3 | 功能不完整，用起来别扭 |
-| 半截 | 11 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
+| 半截 | 10 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 6 | 目录级对比看不出来的缺失 |
 | P2 | 11 | 工程化与发布 |
 | 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **34** | 上表各项之和，与逐行点数一致 |
+| **合计** | **33** | 上表各项之和，与逐行点数一致 |
 
 模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 48%** / **多站点 30%** / **系统推送 0%**。
 
@@ -64,7 +64,6 @@
 |---|---|---|---|
 | S7 | 圆形头像先方后圆闪一下 | `onOpenUser` 未透传 userId，种子 `id=0`。**待实机复核**：判据是 `id == 1L` 走方形，种子恒为圆形，静态推不出该现象 | `UserProfileScreen.kt:99`、`UserProfileViewModel.kt:72` |
 | S11 | **分类 / 标签徽章不可点筛选** | `TopicMetadataBadges` **11 个调用点，无一传** `onTagClick` / `onCategoryClick`（组件本身支持这两个参数；全库唯二命中在死代码 `TopicListItem.kt` 与组件定义处） | `TopicMetadataBadges.kt:67-68`（定义）；调用点见 `TopicRow.kt:113`、`BookmarksScreen.kt:226`、`UserProfileScreen.kt:1104/1178/1238`、`SolvedPostsScreen.kt:212`、`ActivityScreen.kt:209`、`TopicDetailScreen.kt:1022/1075`、`ProfileScreen.kt:788` |
-| S12 | **引用卡不能跳楼 / 不能展开全文**（**半截链路**） | `quoteTopicId` / `quotePostNumber` / `quoteIsReply` **三个字段定义齐全**（`RichContentTypes.kt:129-133`）、**解析并填充**（`CookedHtmlParser.kt:275-296`）、**单测全绿**（`CookedHtmlParserTest.kt:66-88`），但 **UI 层零消费**——`TopicQuoteBlock` 全篇不引用这三个字段，只做了「整卡可点跳 href」。参考实现的引用卡有**折叠 chevron + 展开被引用楼全文**（`QuoteFullStatus` 三态）与**同帖跳转箭头**（`quoteJumpIcon`：同帖按楼号判上/下、跨帖 arrow-right）。另：`CookedHtmlParser.kt:290` 注释谎称「渲染层(`quotePostNumber > 0`)不显示展开箭头」——**渲染层根本没有这段逻辑** | 上述四处；参考 `PostRichContent.ets:589-697` |
 | S13 | 深链不导航 + 无 `onNewIntent` | `arkdo://notification` 净空转；只有 `onCreate` 处理 intent，App 活着时点通知接不到 | `MainActivity.kt:201/210`；Manifest `:41-46`；全库 `onNewIntent` **0 命中** |
 | S14 | 过盾入口的用户开关缺失 | 快捷入口会渲染、订阅与 `reset()` 都已接通，但无 `ChallengeShortcutPrefs`；鸿蒙该开关默认**关** | `TopicDetailViewModel.kt:128` 自述；`NetworkSettingsScreen.kt:52` 自述；参考 `NetworkSettingsPage.ets:199-231` |
 | S15 | 实验性开关只有 3/6 | 有：首页新话题提醒（**默认值反着**，见 S20）、抽奖帖提醒、帖子内新回复提醒（默认关，对齐鸿蒙）。缺 3：动态头像、点分类/标签快速筛选、智感握姿（**后者鸿蒙专有，见 §五**） | `ExperimentalSettingsScreen.kt:79-101`；参考 `ExperimentalSettingsPage.ets:40-45`（6 项）|
@@ -124,8 +123,6 @@
 | D6 | 死 Prefs 常量 | `StorageKeys.kt:63` `PREFS_ANIMATED_AVATAR`（零引用，**做 N1 时复用**）；同批另有 6 个：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY` | 均只在定义处出现 |
 | D7 | `core:datastore` 空模块 | 无 `src/main` | 同 P2-23 |
 
-**顺带一个「活代码里的过期注释」**：`CookedHtmlParser.kt:290` 写「渲染层(`quotePostNumber > 0`)不显示展开箭头」，但渲染层**没有这段逻辑**——S12 的半截链路正是被它掩盖的。另 `TopicPostItem.kt:79` 仍写「待后续切片：boost 行与火箭、shared issue『俺也一样』、采纳答案面板」，但这三项**早已修完**。
-
 ---
 
 ## 八、不用做：Android 已反超鸿蒙（12 条）
@@ -150,25 +147,24 @@
 ## 九、建议实施顺序
 
 **第 1 步 · 差一次接通的（改动小、风险低）**
-1. **S12 引用卡**：解析层已就绪，只需渲染层消费 `quotePostNumber` / `quoteTopicId` / `quoteIsReply` + 补方向箭头与展开态，**并从 `CookedHtmlParser.kt:290` 删掉那句谎报的注释**
-2. **S11 + N2 一起做**：11 个调用点接 `onTagClick` / `onCategoryClick`，同时补 `BadgeFilterPrefs`（默认关）——入口与开关是**一对**
-3. **S13 深链导航 + `onNewIntent`**（`MainActivity.kt`），补 `POST_NOTIFICATIONS` 运行时申请
-4. **S15 补齐其余开关**（动态头像、点分类/标签筛选；智感握姿不补）+ **S20 订正 `RealtimeTopicsPrefs` 默认值**为 `false`（属产品决策，需先确认）
-5. **S19 文件日志器** + S17 诊断能力补齐
-6. **S16 关明文 HTTP**（注意 DoH 生效后仍可能有 http 兜底，先确认再关）
+1. **S11 + N2 一起做**：11 个调用点接 `onTagClick` / `onCategoryClick`，同时补 `BadgeFilterPrefs`（默认关）——入口与开关是**一对**
+2. **S13 深链导航 + `onNewIntent`**（`MainActivity.kt`），补 `POST_NOTIFICATIONS` 运行时申请
+3. **S15 补齐其余开关**（动态头像、点分类/标签筛选；智感握姿不补）+ **S20 订正 `RealtimeTopicsPrefs` 默认值**为 `false`（属产品决策，需先确认）
+4. **S19 文件日志器** + S17 诊断能力补齐
+5. **S16 关明文 HTTP**（注意 DoH 生效后仍可能有 http 兜底，先确认再关）
 
 **第 2 步 · 用户一眼能看到的**
-7. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口（复用 D5 的 `SETTINGS_PUSH` 常量）
-8. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
+6. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口（复用 D5 的 `SETTINGS_PUSH` 常量）
+7. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
 
 **第 3 步 · 横向铺开**
-9. **系统推送全链路**（P0-1）：含 `services/push/` 移植、Relay 配置与同意流程、本地通知渠道、`onNewIntent` 接续
-10. **平板双栏**（P1-9）/ **动态头像**（N1）
+8. **系统推送全链路**（P0-1）：含 `services/push/` 移植、Relay 配置与同意流程、本地通知渠道、`onNewIntent` 接续
+9. **平板双栏**（P1-9）/ **动态头像**（N1）
 
 **第 4 步 · 发布准备**
-11. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
-12. 崩溃上报、隐私政策与商店素材（P2-26/27）
-13. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
+10. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
+11. 崩溃上报、隐私政策与商店素材（P2-26/27）
+12. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
 
 ---
 
@@ -183,10 +179,11 @@ grep -nE "uses-permission|scheme=" app/src/main/AndroidManifest.xml
 rg -l "NotificationManager|NotificationCompat|NotificationChannel" -g '*.kt'   # 0 命中 = 无本地通知
 rg -n "onNewIntent" -g '*.kt'                                                  # 0 命中 = 前台接不到通知
 
-# ── 半截链路：解析了但没消费（判据 B，S12 就是这么抓到的）──
+# ── 半截链路：解析了但没消费（判据 B，S12 引用卡就是这么抓到的）──
 rg -n "quotePostNumber|quoteTopicId|quoteIsReply" -g '*.kt'
-#   → 命中只有 RichContentTypes(定义) / CookedHtmlParser(填充) / *Test(断言)
-#   → ui/ 下 0 命中 = UI 从不消费
+#   → S12 当年：只命中 RichContentTypes(定义) / CookedHtmlParser(填充) / *Test(断言)，
+#     ui/ 下 0 命中 = UI 从不消费；现已由 PostRichContent.TopicQuoteBlock 消费
+#   → 同一手法可复用到其它「解析齐全但没人读」的字段
 
 # ── 零调用方（判据 C）──
 rg -n "TopicListItem\(" -g '*.kt'

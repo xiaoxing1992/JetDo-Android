@@ -328,6 +328,28 @@ class TopicDetailViewModel @Inject constructor(
     }
 
     /**
+     * 引用卡「展开查看被引用楼层全文」：先翻已加载楼层（仅本帖流里有），没有再
+     * `GET /posts/by_number/{topicId}/{postNumber}` 拉一次。
+     * 对齐鸿蒙 TopicDetailPage.resolveQuotedPost（:1658）。
+     *
+     * 拿不到返回空串 —— 渲染层据此隐藏展开箭头、只保留折叠预览，不弹错误（引用卡是次要内容，
+     * 一次拉取失败不该打断阅读）。这是挂起函数：由引用卡自己的 coroutineScope 调用，
+     * 楼层被 LazyColumn 回收时随作用域一并取消，不会在已卸载的 UI 上落地。
+     */
+    suspend fun resolveQuotedPost(topicId: Long, postNumber: Int): String {
+        if (topicId <= 0L || postNumber <= 0) return ""
+        if (topicId == _uiState.value.topic?.id) {
+            val index = dataSource.findIndexByPostNumber(postNumber)
+            if (index >= 0) {
+                val html = dataSource.posts[index].cookedHtml
+                if (html.isNotEmpty()) return html
+            }
+        }
+        val result = topicService.getPostByNumber(topicId, postNumber)
+        return if (result.success) result.data.orEmpty() else ""
+    }
+
+    /**
      * 以目标楼为锚重拉一窗并整体替换（鸿蒙 rewindowToPost）。
      * 失败时旧列表保持原位，只发一条提示消息。
      */

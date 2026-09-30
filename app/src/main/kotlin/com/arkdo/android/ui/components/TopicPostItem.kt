@@ -77,8 +77,9 @@ import com.arkdo.android.core.designsystem.FaIcon
 // + 长按 10 表情面板 + 更多→拷贝链接+书签（bookmark 实心蓝 / far-bookmark 灰）
 // / 回复）、被回复展开区（连接竖线 + 收起 + 跳到帖子）、「上次访问」红线。
 //
-// 待后续切片：boost 行与火箭、shared issue「俺也一样」、采纳答案面板、
-// 拷贝画勾动画（暂 Toast）、全息称号（暂普通文字）、回应人数弹层。
+// 后续切片已补齐：boost 行与火箭、shared issue「俺也一样」、采纳答案面板、
+// 全息称号（ui/components/HolographicTitle.kt）、回应人数弹层、引用卡展开全文与跳楼。
+// 仍待：拷贝链接后的画勾动画（现在只是一句 Toast）。
 // ==========================================================================
 
 /** 昵称后徽章图标统一染金色（源 BADGE_GOLD）。 */
@@ -111,6 +112,10 @@ fun TopicPostItem(
     acceptedAnswers: List<AcceptedAnswer> = emptyList(),
     onReply: (TopicPost) -> Unit = {},
     onJumpToPost: (Int) -> Unit = {},
+    // 引用卡右上角跳转箭头：同帖由页面滚动定位，跨帖走 fallbackUrl 开详情（对齐鸿蒙 onJumpToQuote）。
+    onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit = { _, _, _ -> },
+    // 引用卡展开全文：取被引用楼 cooked（页面先翻已加载楼层，再 GET /posts/by_number）。空串 = 拉不到。
+    onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" },
     onToggleReaction: (TopicPost, String, onDone: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) },
     onToggleBookmark: (TopicPost, onDone: (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     onCopyPostLink: (TopicPost) -> String? = { null },
@@ -187,6 +192,10 @@ fun TopicPostItem(
                 onOpenImages = onOpenImages,
                 onLinkClick = onOpenLink,
                 onResolveMedia = onResolveMedia,
+                // 同帖引用卡的跳转箭头按「被引用楼在本楼之前/之后」定朝向，所以要把本楼号传下去。
+                currentPostNumber = post.postNumber,
+                onJumpToQuote = onJumpToQuote,
+                onResolveQuotedPost = onResolveQuotedPost,
                 modifier = Modifier.padding(top = 12.dp)
             )
 
@@ -208,7 +217,9 @@ fun TopicPostItem(
                     onJumpToPost = onJumpToPost,
                     onOpenImages = onOpenImages,
                     onOpenLink = onOpenLink,
-                    onResolveMedia = onResolveMedia
+                    onResolveMedia = onResolveMedia,
+                    onJumpToQuote = onJumpToQuote,
+                    onResolveQuotedPost = onResolveQuotedPost
                 )
             }
 
@@ -327,6 +338,8 @@ fun TopicPostItem(
                     onOpenLink = onOpenLink,
                     onOpenImages = onOpenImages,
                     onResolveMedia = onResolveMedia,
+                    onJumpToQuote = onJumpToQuote,
+                    onResolveQuotedPost = onResolveQuotedPost,
                     onCollapse = { repliesExpanded = false },
                     onJumpToPost = onJumpToPost
                 )
@@ -792,6 +805,8 @@ private fun RepliesSection(
     onOpenLink: (String) -> Unit,
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit = { _, _, _ -> },
+    onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" },
     onCollapse: () -> Unit,
     onJumpToPost: (Int) -> Unit
 ) {
@@ -862,6 +877,9 @@ private fun RepliesSection(
                             onOpenImages = onOpenImages,
                             onLinkClick = onOpenLink,
                             onResolveMedia = onResolveMedia,
+                            currentPostNumber = reply.postNumber,
+                            onJumpToQuote = onJumpToQuote,
+                            onResolveQuotedPost = onResolveQuotedPost,
                             modifier = Modifier.padding(top = 6.dp)
                         )
                     }
