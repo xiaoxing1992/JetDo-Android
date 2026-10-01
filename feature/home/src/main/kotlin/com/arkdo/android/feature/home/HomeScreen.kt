@@ -85,6 +85,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.core.model.HomeTag
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.core.model.HomeUser
 import com.arkdo.android.core.designsystem.TopicAvatar
@@ -118,6 +119,10 @@ internal fun HomeScreen(
     accountUser: HomeUser? = null,
     // 通知未读数：顶栏铃铛角标（真源是 NotificationEventBus，由宿主下发）。
     unreadCount: Int = 0,
+    // 「点分类/标签快速筛选」：开关开着时行上的徽章可点（由 HomeRoute 判定并处理）。
+    badgesTappable: Boolean = false,
+    onBadgeTagClick: (HomeTag) -> Unit = {},
+    onBadgeCategoryClick: (HomeCategory) -> Unit = {},
     onFabScroll: (Float, Float) -> Unit = { _, _ -> },
     onIncomingInsertFinished: (Int) -> Unit = {},
     onIncomingHighlightFinished: () -> Unit = {},
@@ -316,7 +321,10 @@ internal fun HomeScreen(
                                     }
                                 } else {
                                     null
-                                }
+                                },
+                                badgesTappable = badgesTappable,
+                                onBadgeTagClick = onBadgeTagClick,
+                                onBadgeCategoryClick = onBadgeCategoryClick
                             )
                         }
                         item(key = "home-footer") {
@@ -541,7 +549,10 @@ private fun HomeTopicRow(
     insertDistancePx: Float = 0f,
     insertFadeIn: Boolean = false,
     highlightUntil: Long = 0L,
-    onInsertMeasured: ((Int) -> Unit)? = null
+    onInsertMeasured: ((Int) -> Unit)? = null,
+    badgesTappable: Boolean = false,
+    onBadgeTagClick: (HomeTag) -> Unit = {},
+    onBadgeCategoryClick: (HomeCategory) -> Unit = {}
 ) {
     val highlight = rememberIncomingHighlight(highlightUntil, colors)
     Box(
@@ -561,6 +572,9 @@ private fun HomeTopicRow(
             onUnreadClick = onUnreadClick,
             colors = colors.toTopicRowColors(),
             avatarBaseUrl = avatarBaseUrl,
+            badgesTappable = badgesTappable,
+            onCategoryClick = onBadgeCategoryClick,
+            onTagClick = onBadgeTagClick,
             background = highlight
         )
     }

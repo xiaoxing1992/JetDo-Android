@@ -8,7 +8,7 @@
 
 ## 一、结论先行
 
-**还剩 26 项 + 7 组死代码。**
+**还剩 25 项 + 7 组死代码。**
 
 ### 1.1 缺口分布
 
@@ -16,11 +16,11 @@
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
 | P1 | 2 | 功能不完整，用起来别扭 |
-| 半截 | 5 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
-| 能力缺失 | 6 | 目录级对比看不出来的缺失 |
+| 半截 | 4 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
+| 能力缺失 | 5 | 目录级对比看不出来的缺失 |
 | P2 | 10 | 工程化与发布 |
 | 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **26** | 上表各项之和，与逐行点数一致 |
+| **合计** | **25** | 上表各项之和，与逐行点数一致 |
 
 模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 40%**（6/12 文件，但仅支持单站点，`BASE_URL` 硬编码、无法切换）/ **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）/ 平板适配 99%（双栏 + 高度闸门 + 折叠感知 + `configChanges` + 宽屏转场 + 铰链对齐留白 + 展开态尺寸兜底 + 5 档 WSC 分组 + **书本姿态双页阅读**，均在真实平板/折叠 AVD 实测；残余 2 项见 P1-13）。
 
@@ -28,8 +28,7 @@
 
 纯目录对比只能得到「少了哪几个文件」。真正值钱的是**看着有、其实没接上**的那类：
 
-1. **徽章点击的缺口比清单上记的更广**——不是「某一行没传回调」，而是 **11 个调用点无一传**（§四 S11）
-2. **动态头像不是「开关没做」，是整个能力没做**（§五 N1）
+1. **动态头像不是「开关没做」，是整个能力没做**（§五 N1）
 
 ---
 
@@ -96,26 +95,24 @@
 
 ---
 
-## 四、半截 · 差一次接通（5 项）
+## 四、半截 · 差一次接通（4 项）
 
 **这类最该先修**：骨架、数据、组件往往都已就位，只差一行转发或一次订阅。
 
 | # | 现象 | 根因 | 证据 |
 |---|---|---|---|
 | S7 | 圆形头像先方后圆闪一下 | `onOpenUser` 未透传 userId，种子 `id=0`。**待实机复核**：判据是 `id == 1L` 走方形，种子恒为圆形，静态推不出该现象 | `UserProfileScreen.kt:99`、`UserProfileViewModel.kt:72` |
-| S11 | **分类 / 标签徽章不可点筛选** | `TopicMetadataBadges` **11 个调用点，无一传** `onTagClick` / `onCategoryClick`（组件本身支持这两个参数；全库唯二命中在死代码 `TopicListItem.kt` 与组件定义处） | `TopicMetadataBadges.kt:67-68`（定义）；调用点见 `TopicRow.kt:113`、`BookmarksScreen.kt:226`、`UserProfileScreen.kt:1104/1178/1238`、`SolvedPostsScreen.kt:212`、`ActivityScreen.kt:209`、`TopicDetailScreen.kt:1022/1075`、`ProfileScreen.kt:788` |
 | S14 | 过盾入口的用户开关缺失 | 快捷入口会渲染、订阅与 `reset()` 都已接通，但无 `ChallengeShortcutPrefs`；鸿蒙该开关默认**关** | `TopicDetailViewModel.kt:128` 自述；`NetworkSettingsScreen.kt:52` 自述；参考 `NetworkSettingsPage.ets:199-231` |
-| S15 | 实验性开关只有 3/6 | 有：首页新话题提醒、抽奖帖提醒、帖子内新回复提醒（默认关，对齐鸿蒙）。缺 3：动态头像、点分类/标签快速筛选、智感握姿（**后者鸿蒙专有，见 §五**） | `ExperimentalSettingsScreen.kt:79-101`；参考 `ExperimentalSettingsPage.ets:40-45`（6 项）|
+| S15 | 实验性开关 5/6 | 有：首页新话题提醒、抽奖帖提醒、帖子内新回复提醒、点分类/标签快速筛选（S11 落地时补上，默认关）。缺 1：动态头像（随 N1 一起做）。智感握姿鸿蒙专有不移植（见 §五） | `ExperimentalSettingsScreen.kt`；参考 `ExperimentalSettingsPage.ets:40-45`（6 项）|
 | S18 | 版本公告「源未定」 | 见 P1-12。功能写好但**默认不生效**，属于典型的「看着有、用起来没有」 | 同 P1-12 |
 
 ---
 
-## 五、能力缺失：目录级对比看不出来（6 项）
+## 五、能力缺失：目录级对比看不出来（5 项）
 
 | # | 缺口 | 参考实现 | Android 实况 | 证据 |
 |---|---|---|---|---|
 | N1 | **动态头像（整条能力）** | `services/avatar/AnimatedAvatarPrefs.ets`（默认**开**）：控制头像与 flair 是否播动图；关闭时改走 webview 桥取首帧 | **完全不存在**。`StorageKeys.kt:63` 有个 `PREFS_ANIMATED_AVATAR` 键，但**零引用**（死键）。注意：引用卡等处已在传 `animatedAvatar` 参数，但无开关与取帧路径 | `StorageKeys.kt:63`；参考 `avatar/AnimatedAvatarPrefs.ets` |
-| N2 | **点分类/标签快速筛选（Prefs）** | `services/home/BadgeFilterPrefs.ets`（默认**关**）| 类不存在。与 §四 S11 同族——**S11 补入口时必须一起做**，否则徽章可点却没有开关约束（参考实现刻意默认关，因为误触代价不对称） | 参考 `home/BadgeFilterPrefs.ets` |
 | N3 | **`TopicReadController`** | `services/reading/TopicReadController.ets` | Android `services/reading/` 只有 `ReadingTracker.kt` | 两侧目录实测 |
 | N4 | **`UserProfileCache` / `UserRelationService`** | `services/user/` 3 文件 | Android `services/user/` 只有 `UserProfileService.kt` | 同上 |
 | N5 | **图片失效黑名单** | `services/network/BlockedImageHosts.ets` 等 4 文件（`AvatarImageCache` / `ContentImageCache` / `BridgeImageLoader`）| 全库 0 命中 | 同上 |
@@ -181,8 +178,12 @@
 ## 九、建议实施顺序
 
 **第 1 步 · 差一次接通的（改动小、风险低）**
-1. **S11 + N2 一起做**：11 个调用点接 `onTagClick` / `onCategoryClick`，同时补 `BadgeFilterPrefs`（默认关）——入口与开关是**一对**
-2. **S15 补齐其余开关**（动态头像、点分类/标签筛选；智感握姿不补）。~~S20 订正 `RealtimeTopicsPrefs` 默认值~~ **已完成**：默认改 `false`，对齐鸿蒙（常驻长轮询并非人人需要）
+1. ~~**S11 + N2 一起做**~~ **已完成**：首页行徽章可点筛选（`TopicRow` 加 `badgesTappable`/回调，
+   `HomeRoute` 实现点击 → `setQuery` + toast，语义对齐鸿蒙 `handleTagClick`/`handleCategoryClick`）；
+   `BadgeFilterPrefs`（feature:home，默认关）+ 实验性设置页开关。**范围订正**：鸿蒙只有首页一个
+   调用点接了点击（`HomePage.ets:719`），其余页面（书签/用户主页等）两侧都不传回调是**正确**的——
+   原先「11 个调用点无一传」里只有首页那一处是真缺口
+2. **S15 补齐剩余开关**（只剩动态头像，随 N1 做；智感握姿不补）。~~S20 订正默认值~~ **已完成**
 3. ~~**P1-13 ①「展开态尺寸兜底」**~~ **已完成**：`isWideLayout` 改为纯尺寸驱动（去掉 `unfolded` 入参），
    折叠信号收敛为「左栏上限豁免 + 铰链对齐」两处用途。顺带做掉 P1-13 ②（铰链避让）③（5 档 WSC 分组）
 
