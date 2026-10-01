@@ -54,12 +54,20 @@
 > **P1-9 平板双栏已落地**（原「`WindowSizeClass` 0 命中」那条）：
 > `common/layout/WindowBreakpoints.kt` 判定 + `common/layout/WindowLayout.kt` 的 `WideLayoutHost`
 > + `ArkDoNavHost` 左右分栏（左栏常驻 `RootTabScreen`、右栏内容栈，栈底 `ContentEmptyPane` 空态）。
-> 实机四种形态验证通过：平板横屏双栏 / 点左栏换帖右栏跟随 / 返回回空态 / 平板竖屏回落单栏。
+> 验证分两层：① `wm size/density` 伪造形态，四种全过（平板横屏双栏 / 点左栏换帖右栏跟随 / 返回回空态 / 平板竖屏回落单栏）；
+> ② 另建**真实平板 AVD**（`medium_tablet`，2560×1600@320dpi = 1280×800dp）复验，补上伪造法原理上测不到的三项 ——
+> 真实物理旋转横↔竖往返（**导航栈未重建**，转回横屏后右栏仍停在原详情）、真实系统栏 insets、
+> **自由窗口缩放的宽窄判定**（窗口 640dp → 单栏，1070dp → 双栏，而屏幕恒为 1280dp：证明读的是窗口实际约束
+> 而非屏幕 Configuration，用 `LocalConfiguration.screenWidthDp` 在这里会误判成双栏）。
 >
 > **残留（不计入上表）**：折叠屏展开态那条路径（`isWideLayout(..., unfolded = true)`）**已实现且有单测覆盖**，
-> 但**没有检测源** —— Android 侧要拿 `androidx.window` 的 `FoldingFeature.isSeparating`，而当前既无
-> 折叠设备、也没有折叠形态的 AVD 可验证。按「不做无法验证的空壳」的规矩先不接；接入只需给
-> `WideLayoutHost` 传一个非默认的 `unfolded`，判定与布局无需改动。
+> 但**没有检测源** —— Android 侧要拿 `androidx.window` 的 `FoldingFeature.isSeparating`。按「不做无法验证的
+> 空壳」的规矩先不接；接入只需给 `WideLayoutHost` 传一个非默认的 `unfolded`，判定与布局无需改动。
+>
+> **订正**：此前记为「无折叠设备、也没有折叠形态的 AVD 可验证」，**该理由不成立** —— `avdmanager list device`
+> 里有 `8in Fold-out`、`6.7in Fold-in`、`7.6in Fold-in with outer display` 三个折叠档案，配合已有的
+> android-35 镜像可直接建 AVD（无需下载）。不过这些 AVD 是否真把折叠姿态经 `FoldingFeature` 上报给应用
+> **尚未实测**；至少「没有验证手段」这一条是错的。真正的缺口是 `androidx.window` 依赖与姿态检测代码。
 > 影响面：竖折叠内屏竖持（如 741×832）会走单栏。展开横持（939×664）不受影响 —— 它由「≥840 且宽 > 高」那条判为双栏。
 
 ---
