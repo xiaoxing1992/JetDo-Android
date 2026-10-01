@@ -42,6 +42,7 @@ import com.arkdo.android.ui.screens.DebugLogScreen
 import com.arkdo.android.ui.screens.ExperimentalSettingsScreen
 import com.arkdo.android.ui.screens.LoginScreen
 import com.arkdo.android.ui.screens.ProfileScreen
+import com.arkdo.android.ui.screens.PushSettingsScreen
 import com.arkdo.android.ui.screens.SettingsScreen
 import com.arkdo.android.ui.screens.TopicListStyleSettingsScreen
 import com.arkdo.android.ui.screens.RootTabScreen
@@ -595,7 +596,8 @@ fun ArkDoNavHost(
                 onOpenDiagnostics = { navController.navigate(Routes.DEBUG_LOG) },
                 onOpenExperimental = { navController.navigate(Routes.SETTINGS_EXPERIMENTAL) },
                 onOpenTopicListStyle = { navController.navigate(Routes.SETTINGS_TOPIC_LIST_STYLE) },
-                onOpenNetworkSettings = { navController.navigate(Routes.SETTINGS_NETWORK) }
+                onOpenNetworkSettings = { navController.navigate(Routes.SETTINGS_NETWORK) },
+                onOpenPushSettings = { navController.navigate(Routes.SETTINGS_PUSH) }
             )
         }
         composable(Routes.SETTINGS_EXPERIMENTAL) {
@@ -609,6 +611,11 @@ fun ArkDoNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onOpenDoh = { navController.navigate(Routes.SETTINGS_DOH) }
             )
+        }
+        // 通知子页。Routes.SETTINGS_PUSH 这个常量从建立之初就存在，但一直没注册过 composable
+        // ——「声明了没人用」的悬空路由，正好在迁移通知页时接上，不另起新名字。
+        composable(Routes.SETTINGS_PUSH) {
+            PushSettingsScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(Routes.SETTINGS_DOH) {
             DohSettingsScreen(

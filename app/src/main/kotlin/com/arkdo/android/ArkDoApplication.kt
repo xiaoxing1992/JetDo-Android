@@ -12,6 +12,7 @@ import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.logging.DebugLogStore
 import com.arkdo.android.services.logging.FileLoggerDaemon
+import com.arkdo.android.services.notification.SystemNotifier
 import com.arkdo.android.services.network.DohManager
 import com.arkdo.android.services.network.DohService
 import com.arkdo.android.services.session.LoginGate
@@ -69,6 +70,10 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         RealtimePostsPrefs.init(this)
         VersionAnnouncePrefs.init(this)
         LotteryTipPrefs.init(this)
+        // 通知渠道：API 26 起，没有渠道的通知会被系统**直接丢弃且不报错**，
+        // 所以渠道必须在第一次发通知之前就位。在这里建（而不是发通知时惰性建）
+        // 是因为渠道名与描述会出现在系统设置里，早建早让用户看到。
+        SystemNotifier.ensureChannel(this)
         // 上传短码 → 真实直链：预览解析 URL 时要查它，必须在任何预览渲染之前载入。
         com.arkdo.android.services.content.UploadShortcodeRegistry.init(this)
 
