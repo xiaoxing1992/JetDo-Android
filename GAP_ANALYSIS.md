@@ -8,21 +8,21 @@
 
 ## 一、结论先行
 
-**还剩 27 项 + 6 组死代码。**
+**还剩 26 项 + 6 组死代码。**
 
 ### 1.1 缺口分布
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
-| P1 | 2 | 功能不完整，用起来别扭 |
+| P1 | 1 | 功能不完整，用起来别扭 |
 | 半截 | 6 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 6 | 目录级对比看不出来的缺失 |
 | P2 | 10 | 工程化与发布 |
 | 死代码 | 6 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **27** | 上表各项之和，与逐行点数一致 |
+| **合计** | **26** | 上表各项之和，与逐行点数一致 |
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 30%** / **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）。
+模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 30%** / **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）/ 平板适配 90%（平板横屏双栏已落地，折叠屏展开态缺检测源）。
 
 ### 1.2 隐性缺口（最值钱的两个）
 
@@ -45,12 +45,22 @@
 
 ---
 
-## 三、P1 · 功能不完整（2 项）
+## 三、P1 · 功能不完整（1 项）
 
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
-| 9 | **平板双栏布局** | 横屏双栏 / 竖屏单栏自适应 | `WindowSizeClass` **0 命中** | 全库 |
 | 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告 | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:139`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
+
+> **P1-9 平板双栏已落地**（原「`WindowSizeClass` 0 命中」那条）：
+> `common/layout/WindowBreakpoints.kt` 判定 + `common/layout/WindowLayout.kt` 的 `WideLayoutHost`
+> + `ArkDoNavHost` 左右分栏（左栏常驻 `RootTabScreen`、右栏内容栈，栈底 `ContentEmptyPane` 空态）。
+> 实机四种形态验证通过：平板横屏双栏 / 点左栏换帖右栏跟随 / 返回回空态 / 平板竖屏回落单栏。
+>
+> **残留（不计入上表）**：折叠屏展开态那条路径（`isWideLayout(..., unfolded = true)`）**已实现且有单测覆盖**，
+> 但**没有检测源** —— Android 侧要拿 `androidx.window` 的 `FoldingFeature.isSeparating`，而当前既无
+> 折叠设备、也没有折叠形态的 AVD 可验证。按「不做无法验证的空壳」的规矩先不接；接入只需给
+> `WideLayoutHost` 传一个非默认的 `unfolded`，判定与布局无需改动。
+> 影响面：竖折叠内屏竖持（如 741×832）会走单栏。展开横持（939×664）不受影响 —— 它由「≥840 且宽 > 高」那条判为双栏。
 
 ---
 
@@ -148,7 +158,7 @@
 
 **第 3 步 · 横向铺开**
 5. **系统推送全链路**（P0-1）：只剩 `services/push/` 移植（`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）与 Relay 同意流程。**前置已全部就位**——通知渠道（`services/notification/SystemNotifier.kt`）、`POST_NOTIFICATIONS` 申请与三态处理（`services/notification/NotificationPermission.kt` + `ui/screens/PushSettingsScreen.kt`，入口在 设置 → 通知）、深链接续（`onNewIntent` + `DeepLinkEventBus`）。推送到达后直接调 `SystemNotifier` 即可，不必再动权限与渠道
-6. **平板双栏**（P1-9）/ **动态头像**（N1）
+6. **动态头像**（N1）
 
 **第 4 步 · 发布准备**
 7. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
@@ -189,7 +199,8 @@ rg -n "extractMessageBusTopicId" -g '*.kt'              # 只命中 test = 未�
 rg -n "onTagClick|onCategoryClick" -g '*.kt'            # 只命中组件定义 + 死代码
 
 # ── 能力关键词命中（0 = 缺失）──
-rg -l "WindowSizeClass" -g '*.kt'                       # 平板双栏
+rg -n "WindowBreakpoints|WideLayoutHost|ContentEmptyPane" -g '*.kt'   # 平板双栏（P1-9）：判定 + 宿主 + 右栏空态
+rg -l "WindowSizeClass" -g '*.kt'                       # 平板双栏的另一条路（本侧刻意不用它，0 命中属正常：改用 BoxWithConstraints 读实际约束，分屏才准）
 rg -l "PickMultipleVisualMedia" -g '*.kt'               # 多图上传
 rg -l "Transcod" -g '*.kt'                              # 视频转码
 rg -l "AnimatedAvatar|BadgeFilter" -g '*.kt'            # N1 / N2
