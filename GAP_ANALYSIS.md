@@ -8,21 +8,21 @@
 
 ## 一、结论先行
 
-**还剩 26 项 + 6 组死代码。**
+**还剩 27 项 + 7 组死代码。**
 
 ### 1.1 缺口分布
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
-| P1 | 1 | 功能不完整，用起来别扭 |
+| P1 | 2 | 功能不完整，用起来别扭 |
 | 半截 | 6 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 6 | 目录级对比看不出来的缺失 |
 | P2 | 10 | 工程化与发布 |
-| 死代码 | 6 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **26** | 上表各项之和，与逐行点数一致 |
+| 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
+| **合计** | **27** | 上表各项之和，与逐行点数一致 |
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 30%** / **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）/ 平板适配 90%（平板横屏双栏已落地，折叠屏展开态缺检测源）。
+模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 40%**（6/12 文件，但仅支持单站点，`BASE_URL` 硬编码、无法切换）/ **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）/ 平板适配 99%（双栏 + 高度闸门 + 折叠感知 + `configChanges` + 宽屏转场 + 铰链对齐留白 + 展开态尺寸兜底 + 5 档 WSC 分组 + **书本姿态双页阅读**，均在真实平板/折叠 AVD 实测；残余 2 项见 P1-13）。
 
 ### 1.2 隐性缺口（最值钱的两个）
 
@@ -39,7 +39,7 @@
 |---|---|---|---|
 | 1 | **系统推送 + 本地通知**（权限与渠道已就位，缺投递链路） | `services/push/` 仍不存在（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）——「服务端把通知推下来」这一整条还缺。**已就位**：通知渠道创建（`SystemNotifier`，API 26 起无渠道通知会被静默丢弃）、`POST_NOTIFICATIONS` 运行时申请与三态处理、App 活着时点通知的续接（`onNewIntent` + `DeepLinkEventBus`）| 鸿蒙 `services/push/` 12 文件；Android 侧已就位件见 §九 第 3 步 |
 | 2 | **设置 2 入口未迁移** | 「网络与连接 → DoH」「通知」已落地；**论坛 / 我的站点** 仍弹 Toast。两者都卡在 P0-3 的 `CurrentSite` 上——论坛入口要显示当前站点 host，我的站点要列出可选站点 | `SettingsScreen.kt`（`NOT_MIGRATED = "尚未迁移"`）两处 `toastNotMigrated` |
-| 3 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**；Android `services/site/` **5 文件** vs 鸿蒙 **12**，缺 `CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteUrl` / `SiteSwitchCoordinator` / `SiteSettingsService`；鸿蒙的 `ForumsPage` / `SitesPage` / `ForumOnboardingPage` 三页无对应。**首页抽屉的「我的站点」快捷条也挂在这里**——它受 `SiteCapabilities.ecosystemSites`（复用主站 OAuth 免登录进生态站点，换站后无从谈起）与设置页开关双重门控，两个前置在 Android 都不存在 | `AppConstants.kt:8`、`:21`；两侧 `services/site/` 目录实测 |
+| 3 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**（`TopicService` 内 20+ 处 `"${BASE_URL}/t/topic/$id"`、`SiteSettingsService` / `DraftService` / `WebSessionManager` 同样直接读它）；Android `services/site/` **6 文件** vs 鸿蒙 **12**，缺 **6 个**：`CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteSwitchCoordinator` / `SiteUrl`；鸿蒙的 `ForumsPage` / `SitesPage` / `ForumOnboardingPage` 三页无对应。**首页抽屉的「我的站点」快捷条也挂在这里**——它受 `SiteCapabilities.ecosystemSites`（复用主站 OAuth 免登录进生态站点，换站后无从谈起）与设置页开关双重门控，两个前置在 Android 都不存在 | `AppConstants.kt`；`rg -n "BASE_URL" -g '*.kt'` 实测；两侧 `services/site/` 目录实测（2026-10-01 复核：Android 已有 `CategoryIndex`/`FeedPrefs`/`SiteIconStore`/`SitePrefs`/`SiteService`/`SiteSettingsService`）|
 
 **依赖关系**：`多站点` 是 `设置` 里「论坛 / 我的站点」两个子页的前置。做 P0-2 的两个入口前必须先有 `CurrentSite`。
 
@@ -49,7 +49,8 @@
 
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
-| 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告 | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:139`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
+| 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告 | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:160`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
+| 13 | **大屏适配残余 2 项** | `common/utils/BreakpointManager.ets` 等 | 主线（双栏 / 高度闸门 / 折叠感知 / `configChanges` / 宽屏转场 / 铰链对齐留白 / 展开态尺寸兜底 / 5 档 WSC 分组）**已全部落地实测**，**并已加做 Tier 1 姿态里的书本姿态**；残余两项：**①桌面姿态的媒体上下分区**（Tier 1 的另一半，等视频播放页需要时再做）；②**相机预览方向**（当前无拍照/发图入口，等真加拍照时按 CameraX `PreviewView` + 窗口 metrics 实现，别用屏幕尺寸） | 书本姿态已落成**详情页「双页阅读」**（`TwoPageReading` + `TwoPageReadingPrefs`，**开关控制、默认关**，见 `docs/adaptive-devices.md` §3.2 F 行与 §5.4 实测）；桌面姿态与相机见同文 §四 |
 
 > **P1-9 平板双栏已落地**（原「`WindowSizeClass` 0 命中」那条）：
 > `common/layout/WindowBreakpoints.kt` 判定 + `common/layout/WindowLayout.kt` 的 `WideLayoutHost`
@@ -60,15 +61,38 @@
 > **自由窗口缩放的宽窄判定**（窗口 640dp → 单栏，1070dp → 双栏，而屏幕恒为 1280dp：证明读的是窗口实际约束
 > 而非屏幕 Configuration，用 `LocalConfiguration.screenWidthDp` 在这里会误判成双栏）。
 >
-> **残留（不计入上表）**：折叠屏展开态那条路径（`isWideLayout(..., unfolded = true)`）**已实现且有单测覆盖**，
-> 但**没有检测源** —— Android 侧要拿 `androidx.window` 的 `FoldingFeature.isSeparating`。按「不做无法验证的
-> 空壳」的规矩先不接；接入只需给 `WideLayoutHost` 传一个非默认的 `unfolded`，判定与布局无需改动。
+> **折叠感知已接入并实测**（原「残留：没有检测源」已消除）：
+> 加 `androidx.compose.material3.adaptive:adaptive`（由 Compose BOM 管理），新增纯函数 `common/layout/FoldPosture.kt`
+> 判定「内屏是否铺开」，`rememberUnfoldedPosture()` 用 `collectFoldingFeaturesAsState()` 取真实折叠特征，
+> 喂给 `WideLayoutHost(unfolded = …)` —— 原先恒为默认 `false` 的空转参数已接上。
 >
-> **订正**：此前记为「无折叠设备、也没有折叠形态的 AVD 可验证」，**该理由不成立** —— `avdmanager list device`
-> 里有 `8in Fold-out`、`6.7in Fold-in`、`7.6in Fold-in with outer display` 三个折叠档案，配合已有的
-> android-35 镜像可直接建 AVD（无需下载）。不过这些 AVD 是否真把折叠姿态经 `FoldingFeature` 上报给应用
-> **尚未实测**；至少「没有验证手段」这一条是错的。真正的缺口是 `androidx.window` 依赖与姿态检测代码。
-> 影响面：竖折叠内屏竖持（如 741×832）会走单栏。展开横持（939×664）不受影响 —— 它由「≥840 且宽 > 高」那条判为双栏。
+> **同时补掉一个真 bug**：`isWideLayout` 原只有「宽 ≥840 且宽 > 高」两刀，**缺高度闸门**，会把**横屏手机**
+> 判成双栏（Pixel 8 Pro 横屏 997×448dp 稳定命中，而 448dp 高并排两栏没法用）。已按官方口径加
+> `高度 ≥ 480dp`（`WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND`）闸门，实测 997×448 → 单栏、1280×800 → 双栏。
+> Manifest 另补 `configChanges`（密度那组），实测冷启后连续切三次姿态 `onCreate` **恒为 1 次**、Activity 不重建。
+>
+> **实测方法（新发现，重要）**：模拟器控制台能直接驱动铰链姿态，应用侧会收到**真实 `FoldingFeature`** ——
+> `adb emu fold` / `unfold` / `posture 4` 即可复现，**不需要真折叠设备**。
+> 靶子选 `8in Foldable` AVD：2200×2480@420dpi = **838×945dp**，差 2dp 够不到 840 阈值，
+> 尺寸路径彻底失效 —— 单栏 ↔ 双栏的每次切换都只可能来自折叠感知，**排除蒙混过关**。
+> 实测：`fold`/`posture 4` → `HALF_OPENED` + 竖直折痕 → `unfolded=true` → 双栏
+> （点左栏帖子，右栏出「帖子详情」且**左栏滚动位置不丢**）；`unfold`/`posture 3` → 特征为空 → 单栏。可稳定复现。
+>
+> **订正两处旧说法**：① 此前记「无折叠形态 AVD 可验证」**不成立** —— `8in Foldable` 档案可用（镜像现成）；
+> ② 此前说「这些 AVD 是否真上报 `FoldingFeature` 尚未实测」—— **现已实测：确实上报**（见上）。
+>
+> **已修**：模拟器在**完全展开**时**不上报 `FLAT`**（返回空列表），真机（Pixel Fold 类）会报。
+> 原先「展开态靠折叠信号」的写法在这台设备上会让 838×945dp 的内屏退化成单栏。
+> 现已把分栏判定改成**纯尺寸驱动**（`isWideLayout` 里已经没有折叠参数）：同一台 AVD、同一个展开态，
+> 日志仍是 `folding features=[]`，但实测已从单栏变**双栏**（左栏 1100px）。
+> 折叠信号收敛到两处用途 —— 左栏宽度上限豁免、**铰链对齐**。
+>
+> **铰链对齐同批落地**：`FoldPosture.verticalSplitHinge()` 取「竖直 + 分隔 + 带 `bounds`」的铰链，
+> 分栏线压到铰链左缘、并把铰链占宽留成空隙。折叠 AVD 实测左栏右缘 1148 / 右栏起点 1149 正好框住铰链
+> （对半算法会落 1100，分栏线偏 48px，右栏内容压在铰链上）。**5 档 WSC 分组**（左栏上限按档 420/480/560）
+> 也在同一批：平板 AVD 1280dp 档实测左栏 420 → **480dp**。
+>
+> 剩余只有**桌面姿态**与**相机预览方向**两项，均属「有需求再做」。**详见 P1-13**。
 
 ---
 
@@ -116,9 +140,9 @@
 | 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md:163-165` 未勾选 |
 | 28 | 无多语言、无 `values-night` | `res/` 只有 `drawable mipmap-* raw values xml` |
 | 30 | `AppRoutes.kt` 死代码 | 同 D2 |
-| 31 | **文档严重过期** | `TODO.md` 末行仍写「等待实现具体功能」；`MIGRATION.md` 把 20 个已完成页面列为「未做」|
+| 31 | **文档严重过期** | `TODO.md` 末行仍写「项目骨架搭建完成…等待实现具体功能」+「下一步：实现 WebViewNetworkBridge」（该桥早已落地）；`MIGRATION.md` 的「里程碑二+」整章（清单自述 **~80 服务 / ~35 页面 / ~50 组件**）**几乎全部已完成**，却仍标为待办；且其基线写 `dc50bd0`，与台账用的 `7680996` 不是同一个点 |
 
-> **31 单独提请注意**：`MIGRATION.md` 已失去跟踪价值，照它排期会重复劳动，建议整体重写或删除。
+> **31 单独提请注意**：`MIGRATION.md` 已失去跟踪价值 —— 它的「已完成」章节停在里程碑一（`2026-08-11`），而「里程碑二+」里列的待办绝大部分已经做完；照它排期会大量重复劳动。`TODO.md` 同理（末行的「下一步」指向早已落地的 WebView 桥）。**两份都建议整体重写或直接删除**，避免误导后续判断。**唯一权威是本文。**
 
 ---
 
@@ -132,6 +156,7 @@
 | D4 | `services/notification/NotificationApi.kt` 整个类 | 仅被 D3 与 `di/AppModule.kt:107` 未被注入的 Provider 引用 | `load` / `markRead` / `markAllRead` 无真实调用方 |
 | D6 | 死 Prefs 常量 | `StorageKeys.kt:63` `PREFS_ANIMATED_AVATAR`（零引用，**做 N1 时复用**）；同批另有 6 个：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY` | 均只在定义处出现 |
 | D7 | `core:datastore` 空模块 | 无 `src/main` | 同 P2-23 |
+| D8 | `Routes.CF_CHALLENGE` 悬空常量 | `ArkDoNavHost.kt:712` 定义，**全库零注册零引用**（已核实）| 是「以为要走路由」的遗留物：过盾页面 `ui/screens/CfChallengeScreen.kt`（313 行，**活代码**）实际由 `MainActivity.kt:189` 内联托管，从不经 NavHost。**常量删掉即可，页面不要动** |
 
 ---
 
@@ -159,19 +184,26 @@
 **第 1 步 · 差一次接通的（改动小、风险低）**
 1. **S11 + N2 一起做**：11 个调用点接 `onTagClick` / `onCategoryClick`，同时补 `BadgeFilterPrefs`（默认关）——入口与开关是**一对**
 2. **S15 补齐其余开关**（动态头像、点分类/标签筛选；智感握姿不补）+ **S20 订正 `RealtimeTopicsPrefs` 默认值**为 `false`（属产品决策，需先确认）
+3. ~~**P1-13 ①「展开态尺寸兜底」**~~ **已完成**：`isWideLayout` 改为纯尺寸驱动（去掉 `unfolded` 入参），
+   折叠信号收敛为「左栏上限豁免 + 铰链对齐」两处用途。顺带做掉 P1-13 ②（铰链避让）③（5 档 WSC 分组）
 
 **第 2 步 · 用户一眼能看到的**
-3. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口。`UploadService.mediaUploadEnabled()` 现在硬写 `true` 并留了注释「等多站点落地后改走 `CurrentSite` 判定」——**落地时顺手把它接上，判据只留那一处**
-4. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
+4. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口。`UploadService.mediaUploadEnabled()` 现在硬写 `true` 并留了注释「等多站点落地后改走 `CurrentSite` 判定」——**落地时顺手把它接上，判据只留那一处**
+5. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
 
 **第 3 步 · 横向铺开**
-5. **系统推送全链路**（P0-1）：只剩 `services/push/` 移植（`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）与 Relay 同意流程。**前置已全部就位**——通知渠道（`services/notification/SystemNotifier.kt`）、`POST_NOTIFICATIONS` 申请与三态处理（`services/notification/NotificationPermission.kt` + `ui/screens/PushSettingsScreen.kt`，入口在 设置 → 通知）、深链接续（`onNewIntent` + `DeepLinkEventBus`）。推送到达后直接调 `SystemNotifier` 即可，不必再动权限与渠道
-6. **动态头像**（N1）
+6. **系统推送全链路**（P0-1）：只剩 `services/push/` 移植（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushRefreshGate` / `PushNotificationNavigation` / `PushNotificationNavigationEventBus` / `PushTokenUpdateEventBus` / `HarmonyPushTokenProvider`（→ FCM 对应物）/ `PushNotificationPermissionService` / `PushTokenDebugLog`）与 Relay 同意流程。**前置已全部就位**——通知渠道（`services/notification/SystemNotifier.kt`）、`POST_NOTIFICATIONS` 申请与三态处理（`services/notification/NotificationPermission.kt` + `ui/screens/PushSettingsScreen.kt`，入口在 设置 → 通知）、深链接续（`onNewIntent` + `DeepLinkEventBus`）。推送到达后直接调 `SystemNotifier` 即可，不必再动权限与渠道
+7. **动态头像**（N1）
 
-**第 4 步 · 发布准备**
-7. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
-8. 崩溃上报、隐私政策与商店素材（P2-26/27）
-9. **清理死代码 D1–D7**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
+**第 4 步 · 大屏深化（P1-13 剩余 2 项：桌面姿态、相机预览方向，按需排入）**
+8. Tier 1 姿态（书本姿态双页阅读对论坛类有真实价值，需先定「做不做」+ 过 `supportedPostures` 检查）；
+   相机预览方向等到有拍照/发图需求再做。~~铰链避让 / 5 档 WSC 分组~~ **已完成**
+   另：官方 Tier 2 还要求「网格与多列」，属列表组件改动，目前未立项
+
+**第 5 步 · 发布准备**
+9. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
+10. 崩溃上报、隐私政策与商店素材（P2-26/27）
+11. **清理死代码 D1–D8**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
 
 ---
 
