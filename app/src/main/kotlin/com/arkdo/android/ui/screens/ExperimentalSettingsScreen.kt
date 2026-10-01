@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arkdo.android.feature.home.BadgeFilterPrefs
 import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.topic.LotteryTipPrefs
@@ -55,6 +56,7 @@ fun ExperimentalSettingsScreen(
     val realtimePostsEnabled by RealtimePostsPrefs.enabled.collectAsState()
     val lotteryTipEnabled by LotteryTipPrefs.enabled.collectAsState()
     val twoPageReadingEnabled by TwoPageReadingPrefs.enabled.collectAsState()
+    val badgeFilterEnabled by BadgeFilterPrefs.enabled.collectAsState()
 
     Column(
         modifier = modifier
@@ -191,6 +193,35 @@ fun ExperimentalSettingsScreen(
                     Switch(
                         checked = twoPageReadingEnabled,
                         onCheckedChange = TwoPageReadingPrefs::setEnabled,
+                        colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+            // 点分类/标签快速筛选(对齐鸿蒙 ExperimentalSettingsPage 的 BadgeFilterCell,默认关):
+            // 开着时首页帖子行上的分类/标签徽章可点,点了按它筛选列表。默认关的理由见
+            // BadgeFilterPrefs —— 徽章抢点击与「整行打开帖子」冲突,误触代价不对称。
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = arkdoColors.surfaceCard,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("点分类/标签快速筛选", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(
+                            "首页帖子行上的分类与标签可点击筛选",
+                            fontSize = 12.sp,
+                            color = arkdoColors.textFaint,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Switch(
+                        checked = badgeFilterEnabled,
+                        onCheckedChange = BadgeFilterPrefs::setEnabled,
                         colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
                     )
                 }

@@ -7,7 +7,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeQuery
+import com.arkdo.android.core.model.HomeTag
 
 data class HomeIncomingTopicEvent(
     val topicId: Long,
@@ -61,6 +63,33 @@ fun HomeRoute(
         }
     }
 
+    // 「点分类/标签快速筛选」：开关开着时首页行上的徽章可点（对齐鸿蒙 HomePage
+    // badgesTappable + handleTagClick / handleCategoryClick）。已在按它筛选时静默忽略——
+    // 列表不会有任何变化，重发请求纯属浪费，弹「已经在看了」反而像出了错。
+    val badgeFilterEnabled by BadgeFilterPrefs.enabled.collectAsState()
+    val onBadgeTagClick: (HomeTag) -> Unit = { tag ->
+        val query = viewModel.currentQuery
+        if (query.tag != tag.name) {
+            viewModel.setQuery(query.copy(tag = tag.name, tagId = tag.id, tagSlug = tag.slug))
+            // 顶栏此刻多半已随滚动收起，副行看不见，给一句 toast 交代刚发生了什么。
+            Toast.makeText(context, "已按标签「${tag.name}」筛选", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val onBadgeCategoryClick: (HomeCategory) -> Unit = { category ->
+        val query = viewModel.currentQuery
+        if (query.categoryId != category.id) {
+            // 徽章上写的是帖子自己的（叶子）分类，在看父版块时点子版块徽章就是收窄到子版块。
+            viewModel.setQuery(
+                query.copy(
+                    categoryId = category.id,
+                    categorySlug = category.slug,
+                    categoryName = category.name
+                )
+            )
+            Toast.makeText(context, "已按分类「${category.name}」筛选", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     HomeScreen(
         state = state,
         onRetry = viewModel::retry,
@@ -81,6 +110,9 @@ fun HomeRoute(
         unreadCount = unreadCount,
         colors = colors,
         avatarBaseUrl = avatarBaseUrl,
+        badgesTappable = badgeFilterEnabled,
+        onBadgeTagClick = onBadgeTagClick,
+        onBadgeCategoryClick = onBadgeCategoryClick,
         onFabScroll = viewModel::updateFabMode,
         onIncomingInsertFinished = viewModel::finishIncomingInsert,
         onIncomingHighlightFinished = viewModel::finishIncomingHighlight

@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +86,11 @@ fun TopicRow(
     colors: TopicRowColors,
     avatarBaseUrl: String,
     searchHighlights: List<String> = emptyList(),
+    // 「点分类/标签快速筛选」（对齐鸿蒙 BadgeFilterPrefs，默认关）：开关开着时由首页传入
+    // tappable 与两个回调，徽章变成可点；不传（搜索结果等）则整行点击不被截胡。
+    badgesTappable: Boolean = false,
+    onCategoryClick: ((HomeCategory) -> Unit)? = null,
+    onTagClick: ((HomeTag) -> Unit)? = null,
     background: Color = colors.pageBg,
     style: TopicListStyle = TopicListStyleStore.style.collectAsState().value
 ) {
@@ -111,7 +119,11 @@ fun TopicRow(
                 if (topicHasMetadata(topic, category, postedAt)) {
                     Spacer(Modifier.height(style.metaRowGap.dp))
                     TopicMetadataRow(
-                        category, parentCategory, topic.tags, postedAt, colors, avatarBaseUrl, style
+                        category, parentCategory, topic.tags, postedAt, colors, assetBaseUrl = avatarBaseUrl,
+                        style = style,
+                        badgesTappable = badgesTappable,
+                        onCategoryClick = onCategoryClick,
+                        onTagClick = onTagClick
                     )
                 }
             }
@@ -262,7 +274,10 @@ private fun TopicMetadataRow(
     postedAt: String,
     colors: TopicRowColors,
     assetBaseUrl: String,
-    style: TopicListStyle
+    style: TopicListStyle,
+    badgesTappable: Boolean,
+    onCategoryClick: ((HomeCategory) -> Unit)?,
+    onTagClick: ((HomeTag) -> Unit)?
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (category != null || tags.isNotEmpty()) {
@@ -273,11 +288,13 @@ private fun TopicMetadataRow(
                     .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                category?.let { TopicCategoryBadge(it, parentCategory, colors, assetBaseUrl, style) }
+                category?.let {
+                    TopicCategoryBadge(it, parentCategory, colors, assetBaseUrl, style, badgesTappable, onCategoryClick)
+                }
                 val context = LocalContext.current
                 val tagStyles = remember(context) { loadTagStyles(context) }
                 tags.forEach { tag ->
-                    TopicTagBadge(tag, tagStyles[tag.name.trim().lowercase()], colors, style)
+                    TopicTagBadge(tag, tagStyles[tag.name.trim().lowercase()], colors, style, badgesTappable, onTagClick)
                 }
             }
         } else {
@@ -300,14 +317,32 @@ private fun TopicCategoryBadge(
     parentCategory: HomeCategory?,
     colors: TopicRowColors,
     assetBaseUrl: String,
-    style: TopicListStyle
+    style: TopicListStyle,
+    tappable: Boolean,
+    onClick: ((HomeCategory) -> Unit)?
 ) {
     val context = LocalContext.current
     val iconId = topicCategoryIcon(context, category, parentCategory)
     val logo = category.uploadedLogo?.takeIf(String::isNotBlank)
         ?: parentCategory?.uploadedLogo?.takeIf(String::isNotBlank)
+    // 按下反馈与 TopicMetadataBadges 一致：整体 opacity 0.6，不是 Material ripple。
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     Row(
-        modifier = Modifier.height(18.dp).padding(end = 8.dp),
+        modifier = Modifier
+            .height(18.dp)
+            .alpha(if (tappable && pressed) 0.6f else 1f)
+            .then(
+                if (tappable && onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) { onClick(category) }
+                } else {
+                    Modifier
+                }
+            )
+            .padding(end = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         when {
@@ -343,14 +378,29 @@ private fun TopicTagBadge(
     tag: HomeTag,
     tagStyle: TagStyle?,
     colors: TopicRowColors,
-    style: TopicListStyle
+    style: TopicListStyle,
+    tappable: Boolean,
+    onClick: ((HomeTag) -> Unit)?
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     Row(
         modifier = Modifier
             .padding(end = 7.dp)
             .height(20.dp)
+            .alpha(if (tappable && pressed) 0.6f else 1f)
             .clip(RoundedCornerShape(2.dp))
             .background(colors.surfaceMuted)
+            .then(
+                if (tappable && onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) { onClick(tag) }
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
