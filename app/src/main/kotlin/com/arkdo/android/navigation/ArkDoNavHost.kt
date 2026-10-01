@@ -2,7 +2,10 @@ package com.arkdo.android.navigation
 
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -36,6 +39,9 @@ import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.composer.canUseComposer
 import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.common.constants.AppConstants
+import com.arkdo.android.common.layout.LocalWideLayout
+import com.arkdo.android.common.layout.WideLayoutHost
+import com.arkdo.android.ui.components.ContentEmptyPane
 import com.arkdo.android.ui.drafts.DraftResume
 import com.arkdo.android.ui.drafts.DraftsScreen
 import com.arkdo.android.ui.screens.DebugLogScreen
@@ -130,6 +136,37 @@ fun ArkDoNavHost(
     // 同一把 key 只 remember 一次、两端共用。若两端各自 remember，会拿到两个互不相认的
     // SharedContentState：元素照常渲染但完全不产生动画，且不报任何错（最难查的一种）。
     val searchIconState = rememberSharedContentState(SEARCH_ICON_SHARED_KEY)
+    // ── 双栏（平板横屏 / 折叠屏展开）──
+    // 左栏必须提到 NavHost **外面**：NavHost 一次只显示一个目的地，左栏若要常驻就不能是它的
+    // 目的地之一。提到 Row 里之后，所有 navController.navigate(TOPIC_DETAIL/…) 调用点一行都
+    // 不用改 —— 它们驱动的仍是同一个 controller，变化的只是「目的地渲染在哪一栏」。
+    //
+    // 关键：下面 Box(weight(1f)) 是 NavHost 的**唯一调用点**（窄屏时不画左栏，它就占满整屏）。
+    // 若把 NavHost 写进 if/else 两个分支，宽窄切换会因调用点位置变化而整体重建，
+    // 导航栈、WebView 会话、各页滚动位置会丢一次。
+    WideLayoutHost { isWide, navBarWidth ->
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (isWide) {
+            // 左栏：当前 tab 的内容常驻。顶栏放大镜在这里**不**参与共享元素转场 ——
+            // visibilityScope 属于 NavHost 内部的目的地，本层拿不到；
+            // SharedSearchTransition 三字段全空时装饰器会退化成 no-op，天然降级，不必特判。
+            Box(
+                modifier = Modifier
+                    .width(navBarWidth)
+                    .fillMaxHeight()
+            ) {
+                RootTabScreen(
+                    isWebViewReady = isWebViewReady,
+                    navController = navController,
+                    notificationTabSignal = notificationTabSignal
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .weight(1f)
+        ) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -141,6 +178,11 @@ fun ArkDoNavHost(
     ) {
         // Root Tab 容器（首页、通知、个人中心）
         composable(Routes.ROOT) {
+            if (LocalWideLayout.current) {
+                // 宽屏：左栏已由 Row 常驻渲染，本目的地此刻只代表「右栏还没选内容」这一种情形，
+                // 显示品牌空态即可。若在这里再渲染一次 RootTabScreen，屏幕上会同时出现两份左栏。
+                ContentEmptyPane()
+            } else {
             // visibilityScope 逐目的地不同（它就是本目的地这次转场的作用域），
             // 只能在目的地内部就地提供 —— 见 SharedSearchTransition 的字段注释。
             val visibilityScope = this
@@ -158,6 +200,7 @@ fun ArkDoNavHost(
                     navController = navController,
                     notificationTabSignal = notificationTabSignal
                 )
+            }
             }
         }
 
@@ -626,6 +669,9 @@ fun ArkDoNavHost(
             )
         }
         }
+    }
+        }
+    }
     }
 
         // 登录半弹窗盖在导航内容之上（bindSheet 同层语义：sheet 画在根容器顶）。
