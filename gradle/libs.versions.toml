@@ -41,6 +41,8 @@ compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "material-icons-extended" }
+# 折叠屏姿态感知：collectFoldingFeaturesAsState()。版本由 compose-bom 统一管理。
+compose-material3-adaptive = { group = "androidx.compose.material3.adaptive", name = "adaptive" }
 
 # Media3 (ExoPlayer)
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "androidx-media3" }

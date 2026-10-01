@@ -26,10 +26,25 @@
         android:hardwareAccelerated="true"
         android:enableOnBackInvokedCallback="true">
 
+        <!--
+          configChanges：折叠屏展开/折叠、投屏、自由窗口拖动都会触发 screenSize /
+          smallestScreenSize / screenLayout / orientation / density 这一组配置变更。
+          不声明的话每次形态切换都销毁重建 Activity，Compose 整棵树连同 navController 栈、
+          WebView 会话、各页滚动位置一起重来 —— 用户观感是「一展开 App 就重启了」，
+          与官方「应用连续性」的要求正好相反。
+
+          orientation 在某些折叠屏尤其关键：厂商会强制部分应用保持横屏（展开后外屏竖持、
+          内屏横持，rotation 与握持方向不一致），不接管就会被反复重建。
+          density 是为了三折叠内外屏密度不同，以及投屏场景。
+
+          uiMode / fontScale / locale 故意不加：深色模式、字体大小、语言变化的正确响应
+          本就是重建，符合系统预期。
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|density"
             android:theme="@style/Theme.ArkDO"
             android:windowSoftInputMode="adjustResize"
             android:hardwareAccelerated="true">
