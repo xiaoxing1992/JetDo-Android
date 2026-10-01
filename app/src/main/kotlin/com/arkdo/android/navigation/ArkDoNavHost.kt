@@ -3,6 +3,7 @@ package com.arkdo.android.navigation
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
@@ -17,16 +18,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.arkdo.android.core.designsystem.LocalSharedSearchTransition
 import com.arkdo.android.core.designsystem.SEARCH_ICON_SHARED_KEY
 import com.arkdo.android.core.designsystem.SharedSearchTransition
+import com.arkdo.android.navigation.noneEnterTransition
+import com.arkdo.android.navigation.noneExitTransition
 import com.arkdo.android.navigation.slideEnterTransition
 import com.arkdo.android.navigation.slideExitTransition
 import com.arkdo.android.navigation.slidePopEnterTransition
@@ -34,6 +39,7 @@ import com.arkdo.android.navigation.slidePopExitTransition
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.CurrentUserHolder
 import com.arkdo.android.services.network.ArkWebNetworkBridge
+import com.arkdo.android.services.topic.TwoPageReadingPrefs
 import com.arkdo.android.ui.composer.NewTopicResume
 import com.arkdo.android.ui.composer.NewTopicScreen
 import com.arkdo.android.ui.composer.canUseComposer
@@ -41,6 +47,7 @@ import com.arkdo.android.ui.composer.ensureComposerAccess
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.common.layout.LocalWideLayout
 import com.arkdo.android.common.layout.WideLayoutHost
+import com.arkdo.android.common.layout.rememberBookPosture
 import com.arkdo.android.ui.components.ContentEmptyPane
 import com.arkdo.android.ui.drafts.DraftResume
 import com.arkdo.android.ui.drafts.DraftsScreen
@@ -144,21 +151,48 @@ fun ArkDoNavHost(
     // 关键：下面 Box(weight(1f)) 是 NavHost 的**唯一调用点**（窄屏时不画左栏，它就占满整屏）。
     // 若把 NavHost 写进 if/else 两个分支，宽窄切换会因调用点位置变化而整体重建，
     // 导航栈、WebView 会话、各页滚动位置会丢一次。
-    WideLayoutHost { isWide, navBarWidth ->
+    // 折叠信号不再由这里传入：它决定的是「左栏多宽、铰链要不要留白」，与「分不分栏」无关
+    // —— 后者纯看窗口尺寸（见 WindowBreakpoints.isWideLayout，里面刻意不含折叠参数）。
+    // WideLayoutHost 内部自己观察折叠特征，调用点因此少一个容易传错、退化后还静默的参数。
+    //
+    // 只有一个例外 —— 「双页阅读 + 图书姿态」：那时整块屏要交给详情页自己去分左右两页，
+    // 外层再分一次栏会把详情页压进一个半屏里，双页就没地方放了。此时强制按单栏走。
+    // 开关关着、或设备没折起来时恒为 false，主布局行为与改动前完全一致。
+    //
+    // 注意「强制单栏」的生效范围：**只有详情页在前台时**。双页阅读要用整块屏的是详情页，
+    // 首页/通知/我的没有这个需求；若按全局算，开关一开整 App 都塌成单栏（实测在折叠 AVD 上
+    // 三列 tab 全部变单栏），读起来像「App 被切成单屏幕了」，与「双页阅读」这个开关名对不上。
+    // 详情页 pop 回 ROOT 时这里自动恢复双栏，不需要额外收尾。
+    val twoPageReadingEnabled by TwoPageReadingPrefs.enabled.collectAsState()
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val onTopicDetail =
+        currentEntry?.destination?.route?.startsWith(Routes.TOPIC_DETAIL) == true
+    val forceSinglePane = onTopicDetail && twoPageReadingEnabled && rememberBookPosture()
+    WideLayoutHost(forceSinglePane = forceSinglePane) { split ->
     Row(modifier = Modifier.fillMaxSize()) {
-        if (isWide) {
+        if (split.isWide) {
             // 左栏：当前 tab 的内容常驻。顶栏放大镜在这里**不**参与共享元素转场 ——
             // visibilityScope 属于 NavHost 内部的目的地，本层拿不到；
             // SharedSearchTransition 三字段全空时装饰器会退化成 no-op，天然降级，不必特判。
             Box(
                 modifier = Modifier
-                    .width(navBarWidth)
+                    .width(split.navBarWidth)
                     .fillMaxHeight()
             ) {
                 RootTabScreen(
                     isWebViewReady = isWebViewReady,
                     navController = navController,
                     notificationTabSignal = notificationTabSignal
+                )
+            }
+            // 铰链留白：左右分栏的分割线已经压到铰链左缘（见 WindowBreakpoints.splitGeometry），
+            // 铰链若真占物理宽度（Surface Duo 那类双屏），这截空隙必须真的留出来，否则右栏内容
+            // 会压在铰链上被切断。可折叠屏的折痕是 1px 级的线，这里恒为 0，等于没插。
+            if (split.hingeGapWidth > 0.dp) {
+                Spacer(
+                    modifier = Modifier
+                        .width(split.hingeGapWidth)
+                        .fillMaxHeight()
                 )
             }
         }
@@ -171,10 +205,13 @@ fun ArkDoNavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier.fillMaxSize(),
-        enterTransition = slideEnterTransition,
-        exitTransition = slideExitTransition,
-        popEnterTransition = slidePopEnterTransition,
-        popExitTransition = slidePopExitTransition
+        // 宽屏（左右双栏）下右栏不做横向位移、内容直接替换：左栏原地不动时，
+        // 「整页从右缘滑入」读起来不是层级变化而是抽搐（完整理由见 ScreenTransitions.kt）。
+        // 窄屏保持原有 push/pop 滑动。
+        enterTransition = if (split.isWide) noneEnterTransition else slideEnterTransition,
+        exitTransition = if (split.isWide) noneExitTransition else slideExitTransition,
+        popEnterTransition = if (split.isWide) noneEnterTransition else slidePopEnterTransition,
+        popExitTransition = if (split.isWide) noneExitTransition else slidePopExitTransition
     ) {
         // Root Tab 容器（首页、通知、个人中心）
         composable(Routes.ROOT) {

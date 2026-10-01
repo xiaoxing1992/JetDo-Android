@@ -35,13 +35,17 @@ import androidx.compose.ui.unit.sp
 import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.topic.LotteryTipPrefs
+import com.arkdo.android.services.topic.TwoPageReadingPrefs
 import com.arkdo.android.ui.theme.arkdoColors
 
 private val PageMargin = 12.dp
 private val CardPadding = 16.dp
 private val CardGap = 12.dp
 
-/** 实验性功能。目前只有首页新话题提醒，默认开。 */
+/**
+ * 实验性功能页。四项开关，默认值各不相同，理由都写在各自 Prefs 的注释里：
+ * 首页新话题提醒（开）· 帖子内新回复提醒（关）· 抽奖帖提醒（开）· 双页阅读（关）。
+ */
 @Composable
 fun ExperimentalSettingsScreen(
     onNavigateBack: () -> Unit,
@@ -50,6 +54,7 @@ fun ExperimentalSettingsScreen(
     val enabled by RealtimeTopicsPrefs.enabled.collectAsState()
     val realtimePostsEnabled by RealtimePostsPrefs.enabled.collectAsState()
     val lotteryTipEnabled by LotteryTipPrefs.enabled.collectAsState()
+    val twoPageReadingEnabled by TwoPageReadingPrefs.enabled.collectAsState()
 
     Column(
         modifier = modifier
@@ -157,6 +162,35 @@ fun ExperimentalSettingsScreen(
                     Switch(
                         checked = lotteryTipEnabled,
                         onCheckedChange = LotteryTipPrefs::setEnabled,
+                        colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+            // 双页阅读(实验性,默认关):只有折叠屏「书本姿态」(竖直折痕 + 半开)才进得来。
+            // 三折叠不产生 HALF_OPENED、手机与平板也没有这个形态,所以它不该默认开——
+            // 关着时详情页一行判定都不会多跑(见 TwoPageReadingPrefs 的注释)。
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = arkdoColors.surfaceCard,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("双页阅读", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(
+                            "折叠屏半折时，帖子详情排成左右两页",
+                            fontSize = 12.sp,
+                            color = arkdoColors.textFaint,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Switch(
+                        checked = twoPageReadingEnabled,
+                        onCheckedChange = TwoPageReadingPrefs::setEnabled,
                         colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
                     )
                 }
