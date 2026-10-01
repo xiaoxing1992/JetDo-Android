@@ -8,7 +8,7 @@
 
 ## 一、结论先行
 
-**还剩 27 项 + 7 组死代码。**
+**还剩 27 项 + 6 组死代码。**
 
 ### 1.1 缺口分布
 
@@ -16,13 +16,13 @@
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
 | P1 | 2 | 功能不完整，用起来别扭 |
-| 半截 | 10 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
+| 半截 | 6 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 6 | 目录级对比看不出来的缺失 |
 | P2 | 10 | 工程化与发布 |
-| 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
+| 死代码 | 6 组 | 看着有实现，其实是死的，会误导判断 |
 | **合计** | **27** | 上表各项之和，与逐行点数一致 |
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 48%** / **多站点 30%** / **系统推送 0%**。
+模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 30%** / **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）。
 
 ### 1.2 隐性缺口（最值钱的两个）
 
@@ -37,8 +37,8 @@
 
 | # | 要做什么 | 现在是什么样 | 关键证据 |
 |---|---|---|---|
-| 1 | **系统推送 + 本地通知** | `services/push/` 不存在（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）；全库 **0 处** `NotificationManager` / `NotificationCompat` / `NotificationChannel`；`POST_NOTIFICATIONS` 已声明但**无运行时申请**；App 活着时点通知也接不到（`onNewIntent` **0 命中**） | Manifest `:9`；`MainActivity.kt:210` `handleNotificationIntent` 只打日志；`:201` 仅 `onCreate` 调用 |
-| 2 | **设置 4 入口未迁移** | 「网络与连接 → DoH」已落地；**论坛 / 通知 / 我的站点** 仍弹 Toast；`SETTINGS_PUSH` 常量零引用（悬空） | `SettingsScreen.kt:88`（`NOT_MIGRATED = "尚未迁移"`）、`:163` / `:169` / `:187`（三处 `toastNotMigrated`）；`ArkDoNavHost.kt:587` |
+| 1 | **系统推送 + 本地通知**（权限与渠道已就位，缺投递链路） | `services/push/` 仍不存在（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）——「服务端把通知推下来」这一整条还缺。**已就位**：通知渠道创建（`SystemNotifier`，API 26 起无渠道通知会被静默丢弃）、`POST_NOTIFICATIONS` 运行时申请与三态处理、App 活着时点通知的续接（`onNewIntent` + `DeepLinkEventBus`）| 鸿蒙 `services/push/` 12 文件；Android 侧已就位件见 §九 第 3 步 |
+| 2 | **设置 2 入口未迁移** | 「网络与连接 → DoH」「通知」已落地；**论坛 / 我的站点** 仍弹 Toast。两者都卡在 P0-3 的 `CurrentSite` 上——论坛入口要显示当前站点 host，我的站点要列出可选站点 | `SettingsScreen.kt`（`NOT_MIGRATED = "尚未迁移"`）两处 `toastNotMigrated` |
 | 3 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**；Android `services/site/` **5 文件** vs 鸿蒙 **12**，缺 `CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteUrl` / `SiteSwitchCoordinator` / `SiteSettingsService`；鸿蒙的 `ForumsPage` / `SitesPage` / `ForumOnboardingPage` 三页无对应。**首页抽屉的「我的站点」快捷条也挂在这里**——它受 `SiteCapabilities.ecosystemSites`（复用主站 OAuth 免登录进生态站点，换站后无从谈起）与设置页开关双重门控，两个前置在 Android 都不存在 | `AppConstants.kt:8`、`:21`；两侧 `services/site/` 目录实测 |
 
 **依赖关系**：`多站点` 是 `设置 4 入口` 里「论坛 / 我的站点」两个子页的前置。做 P0-2 的两个入口前必须先有 `CurrentSite`。
@@ -112,7 +112,6 @@
 | D2 | `navigation/AppRoutes.kt` | 163 行，除自身注释外零引用（已核实）| 真实路由在 `ArkDoNavHost.kt` 的 `Routes` |
 | D3 | `services/notification/NotificationService.kt` 整个类 | 无实例化、无 Provider（已核实）| 列表实际走 `DefaultNotificationRepository` |
 | D4 | `services/notification/NotificationApi.kt` 整个类 | 仅被 D3 与 `di/AppModule.kt:107` 未被注入的 Provider 引用 | `load` / `markRead` / `markAllRead` 无真实调用方 |
-| D5 | 悬空路由常量 `SETTINGS_PUSH` | `ArkDoNavHost.kt:587`，全库零引用（已核实）| 做 P0-2 时直接复用，**不要另起名字** |
 | D6 | 死 Prefs 常量 | `StorageKeys.kt:63` `PREFS_ANIMATED_AVATAR`（零引用，**做 N1 时复用**）；同批另有 6 个：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY` | 均只在定义处出现 |
 | D7 | `core:datastore` 空模块 | 无 `src/main` | 同 P2-23 |
 
@@ -148,7 +147,7 @@
 4. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
 
 **第 3 步 · 横向铺开**
-5. **系统推送全链路**（P0-1）：含 `services/push/` 移植、Relay 配置与同意流程、本地通知渠道、`POST_NOTIFICATIONS` 运行时申请。深链接续这一环（`onNewIntent` + `DeepLinkEventBus` 解析 `arkdo://notification`）已经就位，直接复用即可
+5. **系统推送全链路**（P0-1）：只剩 `services/push/` 移植（`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushToken` …）与 Relay 同意流程。**前置已全部就位**——通知渠道（`services/notification/SystemNotifier.kt`）、`POST_NOTIFICATIONS` 申请与三态处理（`services/notification/NotificationPermission.kt` + `ui/screens/PushSettingsScreen.kt`，入口在 设置 → 通知）、深链接续（`onNewIntent` + `DeepLinkEventBus`）。推送到达后直接调 `SystemNotifier` 即可，不必再动权限与渠道
 6. **平板双栏**（P1-9）/ **动态头像**（N1）
 
 **第 4 步 · 发布准备**
@@ -166,7 +165,9 @@ rg -n "Routes\.SETTINGS_PUSH|Routes\.LOGIN|Routes\.CF_CHALLENGE" -g '*.kt'   # �
 
 # ── 声明的权限/深链 → 反查调用（判据 A）──
 grep -nE "uses-permission|scheme=" app/src/main/AndroidManifest.xml
-rg -l "NotificationManager|NotificationCompat|NotificationChannel" -g '*.kt'   # 0 命中 = 无本地通知
+rg -l "NotificationChannel|NotificationManagerCompat" -g '*.kt'                # 命中 SystemNotifier = 本地通知渠道就位
+rg -n "POST_NOTIFICATIONS" -g '*.kt'                                           # 命中 NotificationPermission = 运行时申请就位
+rg -n "SETTINGS_PUSH" -g '*.kt'                                                # 应命中 Routes 定义 + 注册处 + 设置页导航
 rg -n "onNewIntent" -g '*.kt'                                                  # 命中 MainActivity = 前台能接通知
 rg -n "usesCleartextTraffic" app/src/main/AndroidManifest.xml                  # 0 命中 = 明文已关（改走 @xml/network_security_config）
 rg -n "DeepLinkEventBus|FileLogger" -g '*.kt'                                  # 深链接续 / 日志落盘
