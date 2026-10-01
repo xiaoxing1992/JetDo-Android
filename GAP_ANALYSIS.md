@@ -41,7 +41,7 @@
 | 2 | **设置 2 入口未迁移** | 「网络与连接 → DoH」「通知」已落地；**论坛 / 我的站点** 仍弹 Toast。两者都卡在 P0-3 的 `CurrentSite` 上——论坛入口要显示当前站点 host，我的站点要列出可选站点 | `SettingsScreen.kt`（`NOT_MIGRATED = "尚未迁移"`）两处 `toastNotMigrated` |
 | 3 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**；Android `services/site/` **5 文件** vs 鸿蒙 **12**，缺 `CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteUrl` / `SiteSwitchCoordinator` / `SiteSettingsService`；鸿蒙的 `ForumsPage` / `SitesPage` / `ForumOnboardingPage` 三页无对应。**首页抽屉的「我的站点」快捷条也挂在这里**——它受 `SiteCapabilities.ecosystemSites`（复用主站 OAuth 免登录进生态站点，换站后无从谈起）与设置页开关双重门控，两个前置在 Android 都不存在 | `AppConstants.kt:8`、`:21`；两侧 `services/site/` 目录实测 |
 
-**依赖关系**：`多站点` 是 `设置 4 入口` 里「论坛 / 我的站点」两个子页的前置。做 P0-2 的两个入口前必须先有 `CurrentSite`。
+**依赖关系**：`多站点` 是 `设置` 里「论坛 / 我的站点」两个子页的前置。做 P0-2 的两个入口前必须先有 `CurrentSite`。
 
 ---
 
@@ -104,7 +104,7 @@
 
 ---
 
-## 七、死代码与死资源（7 组）
+## 七、死代码与死资源（6 组）
 
 | # | 对象 | 规模 / 证据 | 说明 |
 |---|---|---|---|
@@ -143,7 +143,7 @@
 2. **S15 补齐其余开关**（动态头像、点分类/标签筛选；智感握姿不补）+ **S20 订正 `RealtimeTopicsPrefs` 默认值**为 `false`（属产品决策，需先确认）
 
 **第 2 步 · 用户一眼能看到的**
-3. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口（复用 D5 的 `SETTINGS_PUSH` 常量）
+3. **多站点 / 论坛切换**（P0-3）：`CurrentSite` + `ForumPrefs`，让 `BASE_URL` 可变；顺带解锁 P0-2 的「论坛 / 我的站点」两个入口。`UploadService.mediaUploadEnabled()` 现在硬写 `true` 并留了注释「等多站点落地后改走 `CurrentSite` 判定」——**落地时顺手把它接上，判据只留那一处**
 4. **版本公告定源**（P1-12 / S18）：决定 Android 自己的公告帖与账号，把 `ANNOUNCE_PROMPT_ENABLED` 置 `true`——链路已全部就绪，只差这一个决定
 
 **第 3 步 · 横向铺开**
