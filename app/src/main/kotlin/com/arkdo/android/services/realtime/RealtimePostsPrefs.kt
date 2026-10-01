@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * 「帖子内新回复提醒」开关（对齐鸿蒙 RealtimePostsPrefs）。
  *
  * 默认**关**——属实验性功能，需用户在实验性功能里主动开启；与「首页新话题提醒」
- * （[RealtimeTopicsPrefs]，默认开）相互独立。
+ * （[RealtimeTopicsPrefs]，同为默认关）相互独立。
  *
  * 开启后进入帖子详情会多订一个临时频道 `/topic/<id>`（MessageBus 长轮询本就为通知常驻运行，
  * 多一个频道的开销极低），并顺带启用「正在回复」presence 下行——两者在鸿蒙侧同受这一个开关门控。
