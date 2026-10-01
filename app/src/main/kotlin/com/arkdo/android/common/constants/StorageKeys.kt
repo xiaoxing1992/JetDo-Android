@@ -58,6 +58,8 @@ object StorageKeys {
     const val PREFS_ANNOUNCE_SHOWN_CODE = "announceShownVersionCode"
     // 「抽奖帖提醒」开关,默认开。
     const val PREFS_LOTTERY_TIP = "lotteryTipEnabled"
+    // 「双页阅读」开关(实验性,默认关):折叠屏书本姿态下把详情页排成左右两页。
+    const val PREFS_TWO_PAGE_READING = "twoPageReadingEnabled"
     const val PREFS_REALTIME_POSTS = "realtimePostsEnabled"
     const val PREFS_FAB_GLASS = "fabGlassEnabled"
     const val PREFS_ANIMATED_AVATAR = "animatedAvatarEnabled"

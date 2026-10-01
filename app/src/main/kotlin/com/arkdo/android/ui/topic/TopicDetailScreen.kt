@@ -18,12 +18,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,10 +36,13 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Shield
@@ -85,6 +90,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.arkdo.android.R
+import com.arkdo.android.common.layout.LocalBookSpineCenter
+import com.arkdo.android.common.layout.TwoPageReading
+import com.arkdo.android.common.layout.rememberBookPosture
 import com.arkdo.android.data.models.PendingPost
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.AcceptedAnswer
@@ -100,6 +108,7 @@ import com.arkdo.android.services.topic.LOTTERY_RULES_TOPIC_URL
 import com.arkdo.android.services.topic.LotteryNoticeContext
 import com.arkdo.android.services.topic.shouldShowLotteryNotice
 import com.arkdo.android.services.topic.LotteryTipPrefs
+import com.arkdo.android.services.topic.TwoPageReadingPrefs
 import com.arkdo.android.services.content.LinkRoute
 import com.arkdo.android.services.content.resolveLinkRoute
 import com.arkdo.android.services.network.ArkWebNetworkBridge
@@ -171,6 +180,10 @@ fun TopicDetailScreen(
     val currentUser by CurrentUserHolder.currentUser.collectAsState()
     // 「抽奖帖提醒」开关(实验性设置;卡片是否显示还要过 LotteryTopicRule 的帖子判定)。
     val lotteryTipEnabled by LotteryTipPrefs.enabled.collectAsState()
+    // 「双页阅读」开关(实验性,默认关)。是否真摊开两页，要在**详情页自己那一层**量宽度再定
+    // （见下方 BoxWithConstraints）—— 分栏时详情页可能只占右栏，按窗口宽度判会把一栏硬塞成两页。
+    val twoPageReadingEnabled by TwoPageReadingPrefs.enabled.collectAsState()
+    val bookPosture = rememberBookPosture()
     // 待审卡删除的二次确认(不可逆:审核队列里删掉就没了,原文只在这张卡上)。
     var pendingDeleteTarget by remember { mutableStateOf<PendingPost?>(null) }
     // 链接路由（LinkRouter，对齐鸿蒙 RootTabPage.handleOpenLink 的四类分流）：
@@ -378,76 +391,86 @@ fun TopicDetailScreen(
                             }
                             // 上面两支已排除「有错」与「topic 为空」，此处 topic 必非空。
                             else -> ui.topic.let { topic ->
-                                TopicDetailContent(
-                                        // 默认滚动位置：顶栏（状态栏+56dp）之下再让出 contentTopGap。
-                                        headerTopPadding = headerHeight + contentTopGap,
-                                        listState = listState,
-                                        topic = topic,
-                                        onOpenImages = { images, start -> viewerState = images to start },
-                                        categories = ui.categories,
-                                        posts = ui.posts,
-                                        isLoadingMore = ui.isLoadingMore,
-                                        hasMore = ui.hasMore,
-                                        loadMoreMessage = ui.loadMoreMessage,
-                                        onLoadMore = { viewModel.loadMorePosts() },
-                                        targetPostNumber = targetPostNumber,
-                                        flashTargetPostId = ui.flashTargetPostId,
-                                        // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
-                                        scrollRequestPostNumber = ui.scrollRequestPostNumber,
-                                        onScrollRequestConsumed = {
-                                            viewModel.consumeScrollRequest()
-                                            // 跳楼滚动落地 → 收回气泡 loading
-                                            // （对齐鸿蒙 onJump 的 Promise resolve 收尾）。
-                                            pendingJump = null
-                                        },
-                                        hasEarlier = ui.hasEarlier,
-                                        earlierCount = ui.earlierCount,
-                                        isLoadingEarlier = ui.isLoadingEarlier,
-                                        onLoadEarlier = { viewModel.loadEarlierPosts() },
-                                        onOpenLink = onOpenUri,
-                                        onOpenUser = onOpenUser,
-                                        onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
-                                        onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
-                                        onCopyPostLink = { p -> viewModel.postLink(p) },
-                                        onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
-                                        onResolveQuotedPost = { quotedTopicId, quotedPostNumber ->
-                                            viewModel.resolveQuotedPost(quotedTopicId, quotedPostNumber)
-                                        },
-                                        // 「上次访问」红线锚楼（VM 按进入时的已读水位算一次，锚定后不再变）。
-                                        lastVisitedAnchorPostId = ui.lastVisitedAnchorPostId,
-                                        onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
-                                        onReply = viewModel::openComposerForPost,
-                                        topicCreatedById = topic.createdById ?: -1L,
-                                        sharedIssueVisible = ui.sharedIssueVisible,
-                                        sharedIssueCreated = ui.sharedIssueCreated,
-                                        sharedIssueCount = ui.sharedIssueCount,
-                                        sharedIssueCanCreate = ui.sharedIssueCanCreate,
-                                        acceptedAnswers = topic.acceptedAnswers.orEmpty(),
-                                        onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) },
-                                        onVotePoll = { p, pollName, ids -> viewModel.votePoll(p, pollName, ids) },
-                                        onRemovePollVote = { p, pollName -> viewModel.removePollVote(p, pollName) },
-                                        boostDeleteTargetId = ui.boostDeleteTargetId,
-                                        boostDeleteLoadingId = ui.boostDeleteLoadingId,
-                                        onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
-                                        onDeleteBoost = { p, b, done -> viewModel.deleteBoost(p, b, done) },
-                                        onAddBoost = viewModel::openComposerForBoost,
-                                        onEdit = { p -> viewModel.openEditorForEdit(p) },
-                                        editLoadingPostId = ui.editLoadingPostId,
-                                        postActionLoadingId = ui.postActionLoadingId,
-                                        onDeletePost = { p -> viewModel.deleteOwnPost(p) {} },
-                                        onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
-                                        onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) },
-                                        // 回应胶囊 → 弹层(状态在 VM,对齐鸿蒙 TopicDetailPage:483)。
-                                        showLotteryNotice = lotteryNoticeShowing(
-                                            topic = ui.topic,
-                                            currentUserId = currentUser?.id,
-                                            tipEnabled = lotteryTipEnabled
-                                        ),
-                                        onOpenReactions = { viewModel.openReactionSheet(it) },
-                                        pendingPosts = ui.pendingPosts,
-                                        currentUser = currentUser,
-                                        onDeletePendingPost = { pendingDeleteTarget = it }
-                                )
+                                // 双页阅读要按**详情页自己**的宽度判定：分栏时这里可能只是右栏，
+                                // 按窗口宽度判会在一栏里硬塞两页（每页不到 210dp，读不成句）。
+                                BoxWithConstraints {
+                                    val paneWidthDp = maxWidth.value
+                                    TopicDetailContent(
+                                            // 默认滚动位置：顶栏（状态栏+56dp）之下再让出 contentTopGap。
+                                            headerTopPadding = headerHeight + contentTopGap,
+                                            listState = listState,
+                                            twoPageReading = TwoPageReading.isActive(
+                                                enabled = twoPageReadingEnabled,
+                                                bookPosture = bookPosture,
+                                                paneWidthDp = paneWidthDp
+                                            ),
+                                            topic = topic,
+                                            onOpenImages = { images, start -> viewerState = images to start },
+                                            categories = ui.categories,
+                                            posts = ui.posts,
+                                            isLoadingMore = ui.isLoadingMore,
+                                            hasMore = ui.hasMore,
+                                            loadMoreMessage = ui.loadMoreMessage,
+                                            onLoadMore = { viewModel.loadMorePosts() },
+                                            targetPostNumber = targetPostNumber,
+                                            flashTargetPostId = ui.flashTargetPostId,
+                                            // 跳楼/换窗的一次性滚动请求来自 VM（jumpToPostNumber / rewindow）。
+                                            scrollRequestPostNumber = ui.scrollRequestPostNumber,
+                                            onScrollRequestConsumed = {
+                                                viewModel.consumeScrollRequest()
+                                                // 跳楼滚动落地 → 收回气泡 loading
+                                                // （对齐鸿蒙 onJump 的 Promise resolve 收尾）。
+                                                pendingJump = null
+                                            },
+                                            hasEarlier = ui.hasEarlier,
+                                            earlierCount = ui.earlierCount,
+                                            isLoadingEarlier = ui.isLoadingEarlier,
+                                            onLoadEarlier = { viewModel.loadEarlierPosts() },
+                                            onOpenLink = onOpenUri,
+                                            onOpenUser = onOpenUser,
+                                            onToggleReaction = { p, reaction, done -> viewModel.toggleReaction(p, reaction, done) },
+                                            onToggleBookmark = { p, done -> viewModel.toggleBookmark(p, done) },
+                                            onCopyPostLink = { p -> viewModel.postLink(p) },
+                                            onJumpToPost = { postNumber -> viewModel.jumpToPostNumber(postNumber) },
+                                            onResolveQuotedPost = { quotedTopicId, quotedPostNumber ->
+                                                viewModel.resolveQuotedPost(quotedTopicId, quotedPostNumber)
+                                            },
+                                            // 「上次访问」红线锚楼（VM 按进入时的已读水位算一次，锚定后不再变）。
+                                            lastVisitedAnchorPostId = ui.lastVisitedAnchorPostId,
+                                            onRepliesLoad = { p, done -> viewModel.loadReplies(p, done) },
+                                            onReply = viewModel::openComposerForPost,
+                                            topicCreatedById = topic.createdById ?: -1L,
+                                            sharedIssueVisible = ui.sharedIssueVisible,
+                                            sharedIssueCreated = ui.sharedIssueCreated,
+                                            sharedIssueCount = ui.sharedIssueCount,
+                                            sharedIssueCanCreate = ui.sharedIssueCanCreate,
+                                            acceptedAnswers = topic.acceptedAnswers.orEmpty(),
+                                            onToggleSharedIssue = { done -> viewModel.toggleSharedIssue(done) },
+                                            onVotePoll = { p, pollName, ids -> viewModel.votePoll(p, pollName, ids) },
+                                            onRemovePollVote = { p, pollName -> viewModel.removePollVote(p, pollName) },
+                                            boostDeleteTargetId = ui.boostDeleteTargetId,
+                                            boostDeleteLoadingId = ui.boostDeleteLoadingId,
+                                            onToggleBoostDelete = { id -> viewModel.toggleBoostDelete(id) },
+                                            onDeleteBoost = { p, b, done -> viewModel.deleteBoost(p, b, done) },
+                                            onAddBoost = viewModel::openComposerForBoost,
+                                            onEdit = { p -> viewModel.openEditorForEdit(p) },
+                                            editLoadingPostId = ui.editLoadingPostId,
+                                            postActionLoadingId = ui.postActionLoadingId,
+                                            onDeletePost = { p -> viewModel.deleteOwnPost(p) {} },
+                                            onRecoverPost = { p -> viewModel.recoverOwnPost(p) {} },
+                                            onVisiblePostNumbers = { viewModel.updateVisiblePostNumbers(it) },
+                                            // 回应胶囊 → 弹层(状态在 VM,对齐鸿蒙 TopicDetailPage:483)。
+                                            showLotteryNotice = lotteryNoticeShowing(
+                                                topic = ui.topic,
+                                                currentUserId = currentUser?.id,
+                                                tipEnabled = lotteryTipEnabled
+                                            ),
+                                            onOpenReactions = { viewModel.openReactionSheet(it) },
+                                            pendingPosts = ui.pendingPosts,
+                                            currentUser = currentUser,
+                                            onDeletePendingPost = { pendingDeleteTarget = it }
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -721,6 +744,8 @@ private data class ScrubberBounds(val current: Int, val highest: Int)
 private fun TopicDetailContent(
     headerTopPadding: Dp,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    /** 双页阅读：左页「摘要 + 一楼」、右页「其余楼层」。实验性，默认关（见 TwoPageReading）。 */
+    twoPageReading: Boolean = false,
     topic: com.arkdo.android.data.models.TopicDetail,
     categories: List<TopicCategory>,
     posts: List<TopicPost>,
@@ -783,6 +808,24 @@ private fun TopicDetailContent(
     currentUser: com.arkdo.android.data.models.User? = null,
     onDeletePendingPost: (PendingPost) -> Unit = {}
 ) {
+    // ---- 双页阅读的版面切分 ----
+    // 一楼（楼主正文）在双页模式下搬到左页，右页只留其余楼层。切分点在**数据层**而不是
+    // 渲染层：这样右页仍然是一个普通 LazyColumn，跳楼 / scrubber / 阅读计时全部照旧工作，
+    // 只需要把下面几处「楼层下标 ↔ 列表下标」的换算跟着改。
+    // 窗口式进入（从中间楼看起）时一楼可能还没加载，此时 leadPosts 为空、左页只有摘要。
+    val leadPosts = remember(posts, twoPageReading) {
+        if (twoPageReading) posts.filter { it.postNumber == 1 } else emptyList()
+    }
+    val flowPosts = remember(posts, twoPageReading) {
+        if (twoPageReading) posts.filter { it.postNumber != 1 } else posts
+    }
+    // 右页列表顶部要空出来的槽位数：摘要在单列模式占 1 项，双页模式搬到左页故为 0。
+    val headerSlots = if (twoPageReading) 0 else 1
+    // 楼层在右页列表里的下标偏移 = 摘要槽位 + 「加载更早」那一项（在时就占一位）。
+    val postsOffset = headerSlots + if (hasEarlier) 1 else 0
+    // 左页不是 lazy 容器（只有摘要 + 一楼两项），跳一楼时用它自己的滚动状态。
+    val leadScrollState = rememberScrollState()
+
     // 未读行跳楼：目标楼层加载出来后滚过去（头部标题占第 0 位，楼层索引 +1）。
     // 只跳一次：posts 会因已读上报(markPostsRead 重建列表)等原因变化，若 key 含 posts
     // 会导致跳楼逻辑反复触发，把用户从滚动位置拉回目标楼。
@@ -793,13 +836,26 @@ private fun TopicDetailContent(
         if (handledTarget == target) return@LaunchedEffect
         snapshotFlow { posts }
             .first { currentPosts ->
-                val index = currentPosts.indexOfFirst { it.postNumber == target }
-                if (index >= 0) {
+                // 双页模式：一楼住在左页，右页的下标换算不适用，单独处理。
+                if (twoPageReading && target == 1 && currentPosts.any { it.postNumber == 1 }) {
                     handledTarget = target
-                    listState.animateScrollToItem(index + 1)
+                    leadScrollState.animateScrollTo(0)
                     true
                 } else {
-                    false
+                    // 右页渲染的是 flowPosts，反查也用同一份，否则下标会差一个「一楼」。
+                    val currentFlow = if (twoPageReading) {
+                        currentPosts.filter { it.postNumber != 1 }
+                    } else {
+                        currentPosts
+                    }
+                    val index = currentFlow.indexOfFirst { it.postNumber == target }
+                    if (index >= 0) {
+                        handledTarget = target
+                        listState.animateScrollToItem(index + headerSlots)
+                        true
+                    } else {
+                        false
+                    }
                 }
             }
     }
@@ -808,9 +864,9 @@ private fun TopicDetailContent(
     // 一次性请求，处理完立刻消费清除。
     LaunchedEffect(scrollRequestPostNumber) {
         val target = scrollRequestPostNumber ?: return@LaunchedEffect
-        val index = posts.indexOfFirst { it.postNumber == target }
+        val index = flowPosts.indexOfFirst { it.postNumber == target }
         if (index >= 0) {
-            val listIndex = index + 1
+            val listIndex = index + headerSlots
             // 目标楼已**完整**在视口内 → 原地不动，只靠落地高亮提示。
             // 对齐鸿蒙 ScrollAlign.AUTO 的语义：不把用户已经看得见的楼层无谓拽到屏顶。
             // scrubber 拖到相邻楼时这个差别很明显——不判的话每跳一次内容都要往上顶一下。
@@ -822,6 +878,9 @@ private fun TopicDetailContent(
             if (!fullyVisible) {
                 listState.animateScrollToItem(listIndex)
             }
+        } else if (twoPageReading && target == 1) {
+            // 一楼在左页：它就在摘要正下方，把左页拉回顶部即到。
+            leadScrollState.animateScrollTo(0)
         }
         onScrollRequestConsumed()
     }
@@ -829,37 +888,92 @@ private fun TopicDetailContent(
     // 阅读计时：把当前在屏的楼层号喂给 tracker（对齐鸿蒙 onVisibleRange）。
     // 列表布局：index 0 = 标题卡；hasEarlier 时 index 1 = 更早加载器；其后才是 posts 楼层；
     // 底部 load_more 占位在 items 之后。用 layoutInfo 的可见项反查楼层号，防抖只上报变化。
-    LaunchedEffect(listState, posts, hasEarlier) {
-        val postsOffset = if (hasEarlier) 2 else 1
+    LaunchedEffect(listState, posts, hasEarlier, flowPosts, postsOffset) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
             .collect { indexes ->
                 val visible = indexes.mapNotNull { itemIndex ->
-                    val postIndex = itemIndex - postsOffset
-                    posts.getOrNull(postIndex)?.postNumber
+                    flowPosts.getOrNull(itemIndex - postsOffset)?.postNumber
                 }
-                if (visible.isNotEmpty()) {
-                    onVisiblePostNumbers(visible)
+                // 左页的楼层（双页模式下的一楼）恒在屏上，不并进来阅读计时会整段漏掉它。
+                val reported = (leadPosts.map { it.postNumber } + visible).distinct()
+                if (reported.isNotEmpty()) {
+                    onVisiblePostNumbers(reported)
                 }
             }
     }
 
-    LazyColumn(
-        state = listState,
-        // 底部 72dp：让最后一楼的操作区完全越过 52dp 悬浮回复按钮（对齐鸿蒙底部余量）。
-        contentPadding = PaddingValues(top = headerTopPadding, bottom = 72.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // 话题标题
-        item {
-            TopicHeader(topic = topic, categories = categories)
-            // 抽奖帖提醒:挂在摘要与一楼之间,跟着列表滚走。刻意塞进这个已存在的 item 而不新开
-            // 一项——已读上报/顶栏双层标题/scrubber 都硬依赖「index 0 是摘要、楼层从 index 1 起」
-            // 的下标算术,多一项就得让这些偏移量随卡片在不在而变(对齐鸿蒙 TopicDetailPage:437)。
-            if (showLotteryNotice) {
-                LotteryNoticeCard(
-                    // 官方规则帖走站内链接路由,直开原生详情页(不落 WebView)。
-                    onOpenAnnouncement = { onOpenLink(LOTTERY_RULES_TOPIC_URL) }
-                )
+    // 「渲染一个楼层」抽出来给左右两页共用。两份实现必然漂移，何况这里回调参数有四十多个 ——
+    // 「有默认值 + 已写好 + 只补了一半调用点」正是这个工程最容易出的那类静默失效。
+    val renderPost: @Composable (TopicPost) -> Unit = { post ->
+        TopicPostItem(
+            post = post,
+            topicCreatedById = topicCreatedById,
+            onOpenUser = onOpenUser,
+            acceptedAnswers = if (post.postNumber == 1) acceptedAnswers else emptyList(),
+            flashTargetPostId = flashTargetPostId,
+            onOpenLink = onOpenLink,
+            onOpenImages = onOpenImages,
+            // 帖内音频:论坛同源上传件经 host 桥的下载委托过 CF 下到沙箱再播(对齐鸿蒙
+            // TopicDetailPage.ets:476 的 onResolveMedia → bridge.downloadMedia)。
+            onResolveMedia = { url -> ArkWebNetworkBridge.downloadMedia(url) },
+            // 回应人数胶囊 → 「谁回应了」弹层(对齐鸿蒙 TopicDetailPage:483 openReactionUsers)。
+            onOpenReactions = { onOpenReactions(post) },
+            onReply = onReply,
+            onJumpToPost = onJumpToPost,
+            // 引用卡右上角跳转箭头：同帖（被引用楼就在本帖里）走 jumpToPostNumber 滚动定位，
+            // 跨帖走 href 打开另一个帖子。对齐鸿蒙 TopicDetailPage.jumpToQuote（:1646）。
+            onJumpToQuote = { quotedTopicId, quotedPostNumber, fallbackUrl ->
+                when (val target = resolveQuoteJump(quotedTopicId, quotedPostNumber, fallbackUrl, topic.id)) {
+                    is QuoteJumpTarget.Post -> onJumpToPost(target.postNumber)
+                    is QuoteJumpTarget.Link -> onOpenLink(target.url)
+                    QuoteJumpTarget.None -> Unit
+                }
+            },
+            // 引用卡展开全文：先翻已加载楼层，再按需 GET /posts/by_number。
+            onResolveQuotedPost = onResolveQuotedPost,
+            // 「上次访问」红线：只画在锚楼底边（对齐鸿蒙 :456 的 post.id === anchor && anchor > 0）。
+            showLastVisitedLine = lastVisitedAnchorPostId > 0L && post.id == lastVisitedAnchorPostId,
+            // 「俺也一样」：话题级功能，仅一楼渲染（页面只对一楼下发，对齐鸿蒙）。
+            sharedIssueVisible = post.postNumber == 1 && sharedIssueVisible,
+            sharedIssueCreated = sharedIssueCreated,
+            sharedIssueCount = sharedIssueCount,
+            sharedIssueCanCreate = sharedIssueCanCreate,
+            onToggleSharedIssue = onToggleSharedIssue,
+            onVotePoll = onVotePoll,
+            onRemovePollVote = onRemovePollVote,
+            boostDeleteTargetId = boostDeleteTargetId,
+            boostDeleteLoadingId = boostDeleteLoadingId,
+            onToggleBoostDelete = onToggleBoostDelete,
+            onDeleteBoost = onDeleteBoost,
+            onAddBoost = onAddBoost,
+            onToggleReaction = onToggleReaction,
+            onToggleBookmark = onToggleBookmark,
+            onCopyPostLink = onCopyPostLink,
+            onRepliesLoad = onRepliesLoad,
+            onEdit = { onEdit(it) },
+            editLoadingPostId = editLoadingPostId,
+            postActionLoadingId = postActionLoadingId,
+            onDeletePost = { onDeletePost(it) },
+            onRecoverPost = { onRecoverPost(it) }
+        )
+    }
+
+    // 列表主体。单列模式与双页模式的右页共用这一份 —— 两者的差别只有「摘要槽位在不在」，
+    // 而它已经收敛成 headerSlots / postsOffset 两个变量，内容本身不该分叉。
+    val listBody: LazyListScope.() -> Unit = {
+        // 摘要（+ 抽奖提醒卡）只长在单列模式的列表里；双页模式下它搬到左页。
+        if (!twoPageReading) {
+            item {
+                // 抽奖帖提醒:挂在摘要与一楼之间,跟着列表滚走。刻意塞进这个已存在的 item 而不新开
+                // 一项——已读上报/顶栏双层标题/scrubber 都硬依赖「index 0 是摘要、楼层从 index 1 起」
+                // 的下标算术,多一项就得让这些偏移量随卡片在不在而变(对齐鸿蒙 TopicDetailPage:437)。
+                TopicHeader(topic = topic, categories = categories)
+                if (showLotteryNotice) {
+                    LotteryNoticeCard(
+                        // 官方规则帖走站内链接路由,直开原生详情页(不落 WebView)。
+                        onOpenAnnouncement = { onOpenLink(LOTTERY_RULES_TOPIC_URL) }
+                    )
+                }
             }
         }
 
@@ -885,60 +999,10 @@ private fun TopicDetailContent(
 
         // 回复列表
         items(
-            items = posts,
+            items = flowPosts,
             key = { it.id }
         ) { post ->
-            TopicPostItem(
-                post = post,
-                topicCreatedById = topicCreatedById,
-                onOpenUser = onOpenUser,
-                acceptedAnswers = if (post.postNumber == 1) acceptedAnswers else emptyList(),
-                flashTargetPostId = flashTargetPostId,
-                onOpenLink = onOpenLink,
-                onOpenImages = onOpenImages,
-                // 帖内音频:论坛同源上传件经 host 桥的下载委托过 CF 下到沙箱再播(对齐鸿蒙
-                // TopicDetailPage.ets:476 的 onResolveMedia → bridge.downloadMedia)。
-                onResolveMedia = { url -> ArkWebNetworkBridge.downloadMedia(url) },
-                // 回应人数胶囊 → 「谁回应了」弹层(对齐鸿蒙 TopicDetailPage:483 openReactionUsers)。
-                onOpenReactions = { onOpenReactions(post) },
-                onReply = onReply,
-                onJumpToPost = onJumpToPost,
-                // 引用卡右上角跳转箭头：同帖（被引用楼就在本帖里）走 jumpToPostNumber 滚动定位，
-                // 跨帖走 href 打开另一个帖子。对齐鸿蒙 TopicDetailPage.jumpToQuote（:1646）。
-                onJumpToQuote = { quotedTopicId, quotedPostNumber, fallbackUrl ->
-                    when (val target = resolveQuoteJump(quotedTopicId, quotedPostNumber, fallbackUrl, topic.id)) {
-                        is QuoteJumpTarget.Post -> onJumpToPost(target.postNumber)
-                        is QuoteJumpTarget.Link -> onOpenLink(target.url)
-                        QuoteJumpTarget.None -> Unit
-                    }
-                },
-                // 引用卡展开全文：先翻已加载楼层，再按需 GET /posts/by_number。
-                onResolveQuotedPost = onResolveQuotedPost,
-                // 「上次访问」红线：只画在锚楼底边（对齐鸿蒙 :456 的 post.id === anchor && anchor > 0）。
-                showLastVisitedLine = lastVisitedAnchorPostId > 0L && post.id == lastVisitedAnchorPostId,
-                // 「俺也一样」：话题级功能，仅一楼渲染（页面只对一楼下发，对齐鸿蒙）。
-                sharedIssueVisible = post.postNumber == 1 && sharedIssueVisible,
-                sharedIssueCreated = sharedIssueCreated,
-                sharedIssueCount = sharedIssueCount,
-                sharedIssueCanCreate = sharedIssueCanCreate,
-                onToggleSharedIssue = onToggleSharedIssue,
-                onVotePoll = onVotePoll,
-                onRemovePollVote = onRemovePollVote,
-                boostDeleteTargetId = boostDeleteTargetId,
-                boostDeleteLoadingId = boostDeleteLoadingId,
-                onToggleBoostDelete = onToggleBoostDelete,
-                onDeleteBoost = onDeleteBoost,
-                onAddBoost = onAddBoost,
-                onToggleReaction = onToggleReaction,
-                onToggleBookmark = onToggleBookmark,
-                onCopyPostLink = onCopyPostLink,
-                onRepliesLoad = onRepliesLoad,
-                onEdit = { onEdit(it) },
-                editLoadingPostId = editLoadingPostId,
-                postActionLoadingId = postActionLoadingId,
-                onDeletePost = { onDeletePost(it) },
-                onRecoverPost = { onRecoverPost(it) }
-            )
+            renderPost(post)
         }
 
         // 待审核区(对齐鸿蒙 TopicDetailPage:547):铺在楼层流最底部,且只有楼层全部加载完
@@ -961,7 +1025,7 @@ private fun TopicDetailContent(
         // 同排居中，行高 54）。文案由 VM 的 loadMoreMessage 驱动：「正在加载更多」/「没有更多了」/
         // 「加载更多失败，上拉重试」。兜底 ifBlank 覆盖「刚进帖、hasMore 已被置 false 但还没跑过
         // loadMorePosts」的空档，否则会渲染一条 54 高的空行。
-        if (posts.isNotEmpty() && (isLoadingMore || !hasMore)) {
+        if (flowPosts.isNotEmpty() && (isLoadingMore || !hasMore)) {
             item(key = "load_more_footer") {
                 Row(
                     modifier = Modifier
@@ -993,6 +1057,59 @@ private fun TopicDetailContent(
                     onLoadMore()
                 }
             }
+        }
+    }
+
+    if (!twoPageReading) {
+        LazyColumn(
+            state = listState,
+            // 底部 72dp：让最后一楼的操作区完全越过 52dp 悬浮回复按钮（对齐鸿蒙底部余量）。
+            contentPadding = PaddingValues(top = headerTopPadding, bottom = 72.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            listBody()
+        }
+        return
+    }
+
+    // ---- 双页阅读：左页「摘要 + 一楼」/ 右页「其余楼层」 ----
+    // 右页沿用同一个 listState —— 跳楼、scrubber、阅读计时全挂在它上面，另起一个会让这些链路
+    // 一起废掉。左页内容固定（摘要 + 一楼），用普通 Column 自带滚动即可，不必再开一个 lazy 容器。
+    // 分栏线压在折痕上：设备报了折痕位置就用它，没报才退回对半。
+    // 实测折叠 AVD 的铰链在 1148/2200 = 52.2%，照对半分会把右页开头一条内容压在铰链上。
+    val spineCenter = LocalBookSpineCenter.current
+    Row(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .then(if (spineCenter != null) Modifier.width(spineCenter) else Modifier.weight(1f))
+                .fillMaxHeight()
+                .verticalScroll(leadScrollState)
+                .padding(top = headerTopPadding, bottom = 72.dp)
+        ) {
+            TopicHeader(topic = topic, categories = categories)
+            if (showLotteryNotice) {
+                LotteryNoticeCard(
+                    onOpenAnnouncement = { onOpenLink(LOTTERY_RULES_TOPIC_URL) }
+                )
+            }
+            // 一楼：窗口式进入时它可能还没加载，此时左页只有摘要。
+            leadPosts.forEach { post -> renderPost(post) }
+        }
+        // 书脊：与设备的折痕对齐，让「这是摊开的两页」有个视觉锚点。
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .fillMaxHeight()
+                .background(arkdoColors.border)
+        )
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(top = headerTopPadding, bottom = 72.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            listBody()
         }
     }
 }
