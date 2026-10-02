@@ -3,6 +3,9 @@
     <files-path name="logs" path="logs/" />
     <!-- 图片浏览器分享：高清图下载到 cache 后经 FileProvider 交系统分享面板。 -->
     <cache-path name="shared_images" path="shared_images/" />
+    <!-- composer「拍照」：TakePicture 让系统相机把成图写进 cache/camera/，
+         上传管线再按同一个 content:// 读回（见 ComposerCamera）。 -->
+    <cache-path name="camera" path="camera/" />
     <!-- 帖内附件：host webview 的下载委托把它下到「应用专属外部目录」的 download/ 下
          （见 ArkWebNetworkBridge.startSystemDownload 的 setDestinationInExternalFilesDir），
          随后经 FileProvider 换成 content:// 交给系统「打开方式 / 分享」面板。
