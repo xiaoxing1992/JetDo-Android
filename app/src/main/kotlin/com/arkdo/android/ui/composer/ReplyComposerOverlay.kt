@@ -170,6 +170,13 @@ internal fun ReplyComposerOverlay(
         imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
+    // 拍照：系统相机成图 → 与选图同一条上传通道。无相机设备返回 null，工具栏藏入口。
+    val capturePhoto = rememberCameraCapture { uri ->
+        onUploadPickedFiles(ComposerUploadKind.Image, listOf(uri)) { snippet ->
+            applyAction(MdAction.Insert(uploadSnippet(snippet)))
+        }
+    }
+
     // 附件：多选；音视频：单选。两者都只负责选，读字节/上传交给调用方（站点上限在那边）。
     val attachmentPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -344,7 +351,10 @@ internal fun ReplyComposerOverlay(
                 onUploadImage = { openImagePicker() },
                 onUploadAttachment = { openAttachmentPicker() },
                 onUploadMedia = { openMediaPicker() },
-                onAction = { applyAction(it) }
+                onAction = { applyAction(it) },
+                onCapturePhoto = capturePhoto?.let { capture ->
+                    { if (!isUploading) capture() }
+                }
             )
         } else {
             PreviewPane(

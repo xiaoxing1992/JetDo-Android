@@ -161,6 +161,14 @@ fun NewTopicScreen(
         )
     }
 
+    // 拍照：系统相机成图 → 与选图走同一条上传通道（压缩/串行上传/插 markdown 全复用）。
+    // 无相机设备 rememberCameraCapture 返回 null，工具栏自动藏入口。
+    val capturePhoto = rememberCameraCapture { uri ->
+        viewModel.uploadPickedFiles(ComposerUploadKind.Image, listOf(uri)) { snippet ->
+            applyMdAction(MdAction.Insert(uploadSnippet(snippet)))
+        }
+    }
+
     // 附件：多选。MIME 过滤由站点白名单的非图片扩展名推出（与鸿蒙 picker 的 fileSuffixFilters 同义）；
     // 白名单没拉到时空过滤 = 不限类型，交给服务端裁决。
     val attachmentPicker = rememberLauncherForActivityResult(
@@ -400,7 +408,10 @@ fun NewTopicScreen(
                     onUploadImage = { openImagePicker() },
                     onUploadAttachment = { openAttachmentPicker() },
                     onUploadMedia = { openMediaPicker() },
-                    onAction = { applyMdAction(it) }
+                    onAction = { applyMdAction(it) },
+                    onCapturePhoto = capturePhoto?.let { capture ->
+                        { if (!uiState.isUploading) capture() }
+                    }
                 )
             } else {
                 PreviewPane(
@@ -875,7 +886,8 @@ private fun TagPickerContent(
 /**
  * Markdown 工具栏(对齐鸿蒙 MarkdownToolbar.ets)。
  *
- * 三类上传按钮（图片 / 音视频 / 附件）由页面转成系统选择器，其余动作纯文本变换后回写编辑区。
+ * 三类上传按钮（图片 / 音视频 / 附件）由页面转成系统选择器，拍照按钮走 TakePicture
+ * （见 [rememberCameraCapture]），其余动作纯文本变换后回写编辑区。
  * 按钮顺序与鸿蒙 TOOLBAR_BUTTONS 一致。
  *
  * @param showAttachment 站点一个非图片扩展名都不允许时藏掉 —— 留着只会让用户点开选择器
@@ -890,7 +902,9 @@ fun MarkdownToolbar(
     onUploadImage: () -> Unit,
     onUploadAttachment: () -> Unit,
     onUploadMedia: () -> Unit,
-    onAction: (MdAction) -> Unit
+    onAction: (MdAction) -> Unit,
+    // 「拍照」入口。null = 设备没有相机，藏掉（鸿蒙无此功能，属 Android 反超项）。
+    onCapturePhoto: (() -> Unit)? = null
 ) {
     val colors = arkdoColors
     Row(
@@ -904,6 +918,9 @@ fun MarkdownToolbar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         ToolIcon("image", enabled = !uploading, onClick = onUploadImage)
+        onCapturePhoto?.let { capture ->
+            ToolIcon("camera", enabled = !uploading, onClick = capture)
+        }
         if (showMedia) {
             ToolIcon("video", enabled = !uploading, onClick = onUploadMedia)
         }
