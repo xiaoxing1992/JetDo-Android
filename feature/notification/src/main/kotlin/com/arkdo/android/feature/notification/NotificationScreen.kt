@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.core.designsystem.bottomBarClearance
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.NotificationAvatar
 import com.arkdo.android.core.model.NotificationItem

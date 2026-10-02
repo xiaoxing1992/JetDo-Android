@@ -270,7 +270,7 @@ private fun BadgeLarge(badge: UserBadgeItem) {
 private fun badgeDetailMeta(badge: UserBadgeItem): String {
     val parts = mutableListOf<String>()
     if ((badge.grantCount ?: 0) > 1) parts.add("获得 ${badge.grantCount} 次")
-    com.arkdo.android.core.common.RelativeTime.fromNow(badge.grantedAt)
+    com.arkdo.android.core.model.RelativeTime.fromNow(badge.grantedAt)
         .takeIf { it.isNotEmpty() }?.let { parts.add("授予于 $it") }
     return parts.joinToString(" · ")
 }

@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.data.models.SolvedPostItem
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.services.site.CategoryIndex

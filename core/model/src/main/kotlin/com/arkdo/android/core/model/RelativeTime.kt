@@ -1,4 +1,4 @@
-package com.arkdo.android.core.common
+package com.arkdo.android.core.model
 
 import java.util.Calendar
 
@@ -8,6 +8,10 @@ import java.util.Calendar
  * 输入 Discourse 返回的 UTC ISO 字符串(结尾带 Z),输出与网页 relativeAgeTiny 对齐的
  * 相对时间文案:刚刚 / N 分钟 / N 小时 / N 天,超出范围回退绝对日期。
  * 分档与取整刻意对齐 relativeAgeTiny(小时、天都用 Math.round),避免小时边界差 1。
+ *
+ * 原在 core:common(现摘除),落位 core:model:全部消费方(core:data /
+ * feature:notification / feature:search / app)本就依赖本模块,无 Android 依赖,
+ * 纯 JVM 可测。
  */
 object RelativeTime {
 

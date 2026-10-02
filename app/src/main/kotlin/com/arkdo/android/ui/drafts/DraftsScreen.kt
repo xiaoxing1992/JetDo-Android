@@ -49,7 +49,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.widget.Toast
 import com.arkdo.android.common.constants.AppConstants
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.data.models.Draft
 import com.arkdo.android.data.models.DraftAction
