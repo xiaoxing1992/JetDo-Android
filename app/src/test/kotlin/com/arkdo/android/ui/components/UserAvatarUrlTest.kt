@@ -91,4 +91,18 @@ class UserAvatarUrlTest {
             avatarCandidates(animatedOnly, "96")
         )
     }
+
+    @Test
+    fun `动态头像关闭时跳过动图候选`() {
+        // 开关关（includeAnimated=false）：动图候选不出现在链里，静态候选照常。
+        assertEquals(
+            listOf("https://linux.do/user_avatar/linux.do/neo/96/1_2.png"),
+            avatarCandidates(user, "96", includeAnimated = false)
+        )
+        // 只有动图、开关又关着：候选链为空 → 露首字母。
+        assertEquals(
+            emptyList<String>(),
+            avatarCandidates(user.copy(avatarTemplate = null), "96", includeAnimated = false)
+        )
+    }
 }

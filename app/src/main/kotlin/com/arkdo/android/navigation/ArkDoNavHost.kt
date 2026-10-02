@@ -28,8 +28,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.arkdo.android.core.designsystem.LocalSharedSearchTransition
+import com.arkdo.android.core.designsystem.LocalAnimatedAvatarEnabled
 import com.arkdo.android.core.designsystem.SEARCH_ICON_SHARED_KEY
 import com.arkdo.android.core.designsystem.SharedSearchTransition
+import com.arkdo.android.services.avatar.AnimatedAvatarPrefs
 import com.arkdo.android.navigation.noneEnterTransition
 import com.arkdo.android.navigation.noneExitTransition
 import com.arkdo.android.navigation.slideEnterTransition
@@ -133,6 +135,10 @@ fun ArkDoNavHost(
         onDispose { unsubscribe() }
     }
 
+    // 动态头像开关：根部一次提供，全 App 的头像 / flair 渲染点读 LocalAnimatedAvatarEnabled
+    // （app 的 UserAvatar 与 designsystem 的 TopicAvatar 各自消费，默认开）。
+    val animatedAvatarEnabled by AnimatedAvatarPrefs.enabled.collectAsState()
+    CompositionLocalProvider(LocalAnimatedAvatarEnabled provides animatedAvatarEnabled) {
     Box(modifier = modifier.fillMaxSize()) {
     // 共享元素转场需要有一个 SharedTransitionLayout 作为共同祖先：两端在这个布局的
     // 坐标系里各自报出 bounds，转场期间由它接管绘制（默认画在 overlay 上）。
@@ -726,6 +732,7 @@ fun ArkDoNavHost(
             )
         }
     }
+    } // CompositionLocalProvider(LocalAnimatedAvatarEnabled)
 }
 
 /**

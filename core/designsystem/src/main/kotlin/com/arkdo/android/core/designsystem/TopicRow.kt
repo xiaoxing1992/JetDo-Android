@@ -480,7 +480,11 @@ fun TopicAvatar(
 ) {
     val shape = if (user?.id == 1L) RoundedCornerShape(size * 0.1f) else CircleShape
     val initial = (user?.username ?: user?.name).orEmpty().firstOrNull()?.uppercase() ?: "?"
-    val candidates = remember(user, avatarBaseUrl) { topicAvatarCandidates(user, avatarBaseUrl) }
+    // 动态头像开关（app 根部提供，默认开）：关闭时跳过动图候选 + 请求强制首帧解码。
+    val animatedEnabled = LocalAnimatedAvatarEnabled.current
+    val candidates = remember(user, avatarBaseUrl, animatedEnabled) {
+        topicAvatarCandidates(user, avatarBaseUrl, includeAnimated = animatedEnabled)
+    }
     var candidateIndex by remember(candidates) { mutableIntStateOf(0) }
     var showInitial by remember(candidates) { mutableStateOf(candidates.isEmpty()) }
     val avatarUrl = candidates.getOrNull(candidateIndex)
@@ -508,7 +512,7 @@ fun TopicAvatar(
             }
             if (avatarUrl != null) {
                 AsyncImage(
-                    model = avatarUrl,
+                    model = rememberAvatarImageModel(avatarUrl),
                     contentDescription = null,
                     modifier = Modifier.size(size).clip(shape),
                     contentScale = ContentScale.Crop,
@@ -550,7 +554,7 @@ fun TopicAvatar(
             ) {
                 if (flairIsImage) {
                     AsyncImage(
-                        model = resolveAsset(flairUrl, avatarBaseUrl),
+                        model = rememberAvatarImageModel(resolveAsset(flairUrl, avatarBaseUrl)),
                         contentDescription = flairUser.flairName,
                         modifier = Modifier
                             .size(badgeSize)

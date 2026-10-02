@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arkdo.android.feature.home.BadgeFilterPrefs
+import com.arkdo.android.services.avatar.AnimatedAvatarPrefs
 import com.arkdo.android.services.realtime.RealtimePostsPrefs
 import com.arkdo.android.services.realtime.RealtimeTopicsPrefs
 import com.arkdo.android.services.topic.LotteryTipPrefs
@@ -44,8 +45,9 @@ private val CardPadding = 16.dp
 private val CardGap = 12.dp
 
 /**
- * 实验性功能页。四项开关，默认值各不相同，理由都写在各自 Prefs 的注释里：
- * 首页新话题提醒（开）· 帖子内新回复提醒（关）· 抽奖帖提醒（开）· 双页阅读（关）。
+ * 实验性功能页。六项开关，默认值各不相同，理由都写在各自 Prefs 的注释里：
+ * 首页新话题提醒（开）· 帖子内新回复提醒（关）· 抽奖帖提醒（开）· 双页阅读（关）·
+ * 点分类/标签快速筛选（关）· 动态头像（开）。
  */
 @Composable
 fun ExperimentalSettingsScreen(
@@ -57,6 +59,7 @@ fun ExperimentalSettingsScreen(
     val lotteryTipEnabled by LotteryTipPrefs.enabled.collectAsState()
     val twoPageReadingEnabled by TwoPageReadingPrefs.enabled.collectAsState()
     val badgeFilterEnabled by BadgeFilterPrefs.enabled.collectAsState()
+    val animatedAvatarEnabled by AnimatedAvatarPrefs.enabled.collectAsState()
 
     Column(
         modifier = modifier
@@ -222,6 +225,35 @@ fun ExperimentalSettingsScreen(
                     Switch(
                         checked = badgeFilterEnabled,
                         onCheckedChange = BadgeFilterPrefs::setEnabled,
+                        colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+            // 动态头像(对齐鸿蒙 ExperimentalSettingsPage 的 AnimatedAvatarCell,默认开):
+            // 关掉后头像与 flair 角标一律取首帧静态显示,不再播放动图 —— 列表里多个
+            // 头像同时播动图会让渲染树每帧变脏,这个开关也是排查掉帧的对照工具。
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = arkdoColors.surfaceCard,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("动态头像", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(
+                            "头像与角标播放动图；关闭后只显示首帧",
+                            fontSize = 12.sp,
+                            color = arkdoColors.textFaint,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Switch(
+                        checked = animatedAvatarEnabled,
+                        onCheckedChange = AnimatedAvatarPrefs::setEnabled,
                         colors = SwitchDefaults.colors(checkedTrackColor = arkdoColors.ldAccent)
                     )
                 }

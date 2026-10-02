@@ -9,7 +9,7 @@
 
 ## 一、结论先行
 
-**还剩 17 项 + 4 组死代码 + 2 条微清理。**
+**还剩 14 项 + 4 组死代码 + 2 条微清理。**
 
 ### 1.1 缺口分布
 
@@ -18,23 +18,22 @@
 | P0 | 3 | 用户一眼能看出没做 |
 | P1 | 1 | 功能不完整，用起来别扭 |
 | 半截 | 1 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
-| 能力缺失 | 3 | 目录级对比看不出来的缺失 |
+| 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
 | P2 | 9 | 工程化与发布 |
-| **合计** | **17** | 上表逐项相加（3+1+1+3+9）|
+| **合计** | **14** | 上表逐项相加（3+1+1+0+9）|
 | 死代码 | 4 组 | 看着有实现，其实是死的，会误导判断 |
 | 微清理 | 2 条 | 低危，不阻塞发布 |
 
 结构基线（逐文件数出）：服务子域 **25 vs 23**（真缺 `avatar`、`push` 两个子域；`site` 子域在但缺 6 文件）｜页面 **28 vs 30**（真缺 3 页、部分迁移 1 页）｜组件 **47 vs 46 + 约 10 个内联私有 composable**（组件级真缺失 0）。
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 83%**（开关 5/6，缺动态头像随 N1）/ **设置 70%**（通知/网络/DoH/推送入口已接，论坛/我的站点缺）/ **多站点 40%**（6/12 文件，`BASE_URL` 硬编码）/ **系统推送 15%**（本地通知渠道 + 权限就位，投递链路未迁）/ 平板适配 100%（P1-13 已清：桌面姿态媒体分区 + 拍照入口落地）。
+模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 100%**（6/6，动态头像开关已补）/ **设置 70%**（通知/网络/DoH/推送入口已接，论坛/我的站点缺）/ **多站点 40%**（6/12 文件，`BASE_URL` 硬编码）/ **系统推送 15%**（本地通知渠道 + 权限就位，投递链路未迁）/ 平板适配 100%（P1-13 已清：桌面姿态媒体分区 + 拍照入口落地）。
 
-### 1.2 本轮新抓到的隐性缺口（最值钱的三条）
+### 1.2 本轮新抓到的隐性缺口（最值钱的两条）
 
-纯目录对比发现不了这三条，都是「看着有、其实没接上」：
+纯目录对比发现不了这两条，都是「看着有、其实没接上」（原第三条 N6 详情已读态回写已在本轮接通）：
 
-1. **详情已读态从不回写首页列表**（§五 N6）——鸿蒙首页订阅读态事件把看过的帖子行实时标灰，Android 首页零订阅，用户回列表看到的是旧状态
-2. **notification 死链路四件套**（§七 组1）——整个类 + API + 死 Provider + 整个模型文件都在编译，但活链路早被 `core/data` 接管，纯误导性遗留
-3. **Boost 本地刷新静默成功**（§八）——服务端操作成功但本地楼层气泡不更新，UI 却提示成功
+1. **notification 死链路四件套**（§六 组1）——整个类 + API + 死 Provider + 整个模型文件都在编译，但活链路早被 `core/data` 接管，纯误导性遗留
+2. **Boost 本地刷新静默成功**（§七 M2）——服务端操作成功但本地楼层气泡不更新，UI 却提示成功
 
 ---
 
@@ -63,21 +62,9 @@
 |---|---|---|---|
 | S14 | 过盾快捷入口的用户开关缺失 | 快捷入口会渲染、订阅（`ChallengeShortcutEventBus` → `TopicDetailViewModel:161`）与 `reset()` 都已接通，但无 `ChallengeShortcutPrefs` 开关与网络设置页开关项；鸿蒙该开关默认**关** | `TopicDetailViewModel.kt:128` 自述；`NetworkSettingsScreen.kt:52` 自述；参考 `NetworkSettingsPage.ets:199-231` |
 
-> 动态头像的实验页开关（原 S15 缺项）随 §五 N1 同一张工单做，不单列。
-
 ---
 
-## 五、能力缺失：目录级对比看不出来（3 项）
-
-| # | 缺口 | 参考实现 | Android 实况 | 证据 |
-|---|---|---|---|---|
-| N1 | **动态头像（整条能力）** | `services/avatar/AnimatedAvatarPrefs.ets`（默认**开**）：控制头像与 flair 是否播动图；关闭时改走 webview 桥取首帧。鸿蒙侧被真实引用（`EntryAbility.ets:74`、`UserAvatar.ets:8`、`ExperimentalSettingsPage.ets:47/281`），非死代码 | **完全不存在**。`StorageKeys.kt:65` 有 `PREFS_ANIMATED_AVATAR` 键但零引用（死键，**做本条时复用**，勿另起名）。引用卡等处已在传 `animatedAvatar` 参数，但无开关与取帧路径。实验性设置页第 6 个开关随本条补上（S15 → 6/6） | `StorageKeys.kt:65`；参考 `avatar/AnimatedAvatarPrefs.ets` |
-| N5 | **图片失效黑名单** | `services/network/BlockedImageHosts.ets`：失效图床 host 记入黑名单不再重试。鸿蒙 4 个真实消费方：`PostRichContent.ets` / `UserAvatar.ets` / `ImageViewer.ets` / `ImageShareService.ets`（活跃，非死代码） | 全库 `BlockedImageHost\|blockedHost` **0 命中**。图片加载已改走 Coil（缓存部分属「以替代方案消化」），但「挂掉的图床不反复重试」这层语义没有 | 两侧 grep 实测（2026-10-02） |
-| N6 | **详情已读态回写首页列表** | `TopicReadStateEventBus`：详情页读完 → `HomePage.ets:362-364` 订阅 `handleTopicReadStateChanged` → 首页对应行实时标为已读 | **语义缺失**：`feature/home` 内 `readState/alreadyRead/markRead/isRead` 全部 0 命中。回列表看到的是进详情前的旧状态。**机制按项目惯例用 StateFlow 单例搬语义即可，不搬 bus**（鸿蒙 bus 的收发两端在 Android 各有一层对应物） | `HomePage.ets:362-364`；Android feature/home grep 实测 |
-
----
-
-## 六、P2 · 工程化与发布（9 项）
+## 五、P2 · 工程化与发布（9 项）
 
 | # | 问题 | 证据 |
 |---|---|---|
@@ -96,12 +83,12 @@
 
 ---
 
-## 七、死代码与死资源（4 组）
+## 六、死代码与死资源（4 组）
 
 | # | 对象 | 规模 / 证据 | 说明 |
 |---|---|---|---|
 | 组1 | **notification 死链路四件套** | ①`services/notification/NotificationService.kt` 整个类：全库仅定义 + 注释命中（`AppStateEventBus.kt:12` / `NotificationEventBus.kt:7` 是注释）②`services/notification/NotificationApi.kt`：唯一消费者是死类 ③`di/AppModule.kt:113-114` 死 Provider：定义后无任何注入点 ④`data/models/NotificationModels.kt` **整文件**：`RawNotification*` 四类型仅被死链路引用 | 活链路早由 `core/data/DefaultNotificationRepository.kt`（自带私有副本 ：67-93）+ `core/model/NotificationItem.kt` 接管。四件一起删，删 Provider 时注意保留 `AppModule` 里其他注入 |
-| 组2 | 7 个死 Prefs 常量 | `StorageKeys.kt:37,38,39,44,47,52,65`：`PREFS_ANIMATED_AVATAR` / `DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY`，均仅定义处命中 | `PREFS_ANIMATED_AVATAR` **做 N1 时复用**；其余 6 个直接删 |
+| 组2 | 6 个死 Prefs 常量 | `StorageKeys.kt:37,38,39,44,47,52`：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY`，均仅定义处命中 | `PREFS_ANIMATED_AVATAR` 已随 N1 动态头像落地启用，不再是死键 |
 | 组3 | 2 个悬空路由常量 | `Routes.CF_CHALLENGE`（`ArkDoNavHost.kt:741`）与 `Routes.LOGIN`（`:740`）均零注册零 navigate | **多余路由，删常量即可、页面不要动**：过盾页 `CfChallengeScreen`（313 行活代码）由 `MainActivity.kt:188-205` 内联托管；`LoginScreen` 由 `LoginGate` 弹层托管（`ArkDoNavHost.kt:714-720`）。照「预留位」去补页面就是造重复实现 |
 | 组4 | 解析后零消费的 2 个字段 | `RichBlock.mediaType`（`RichContentTypes.kt:108`，解析 `CookedHtmlParser.kt:732/744`）、`RichBlock.unsupportedKind`（`:100`，解析 `:500`）；ui/ 层零读取 | 先判断是否该有 UI 行为（如音视频块降级提示）——有则补消费，无则连字段带解析一起删 |
 
@@ -109,7 +96,7 @@
 
 ---
 
-## 八、微清理（2 条，低危）
+## 七、微清理（2 条，低危）
 
 | # | 问题 | 证据 |
 |---|---|---|
@@ -118,7 +105,7 @@
 
 ---
 
-## 九、已核实非缺口（防止下次审计误报）
+## 八、已核实非缺口（防止下次审计误报）
 
 以下曾经/容易被当成缺口，本轮已逐条核实**不是**：
 
@@ -126,21 +113,21 @@
 |---|---|---|
 | `TopicReadController`（原 N3） | **职责并入**，不是缺失：attach/detach/started/collectAlreadyReadPostNumbers/flushPending 全套在 ViewModel 内实现，注释逐条对齐鸿蒙 | `TopicDetailViewModel.kt:119-141,1794-1878`、`TopicDetailScreen.kt:328`；鸿蒙 `RootTabPage.ets:2008` 仅注释提及，非消费方 |
 | `UserRelationService` / `UserProfileCache`（原 N4） | **职责并入**：followUser/unfollowUser 在 UserProfileService 且被 ViewModel 消费；缓存并入 ViewModel | `UserProfileService.kt:508-515`、`UserProfileViewModel.kt:189-191` |
-| 徽章点击 11 调用点 | 鸿蒙只有首页一个调用点接了点击，其余页面两侧都不传回调是**正确**行为（已落地，见 §十一第 1 步） | `HomePage.ets:719` |
+| 徽章点击 11 调用点 | 鸿蒙只有首页一个调用点接了点击，其余页面两侧都不传回调是**正确**行为（已落地，见 §十第 1 步） | `HomePage.ets:719` |
 | DoH | 鸿蒙有完整对应物（`DohManager.ets` / `DohSpeedTester.ets` / `DohSettingsPage.ets`），Android 是**追平**不是反超也不是缺口 | 两侧 grep 实测 |
 | `PulsingHalo` | 鸿蒙侧自身死代码（全库仅定义处命中），不移植 | `PulsingHalo.ets:10` |
 | **平台专有，不适用区** | 智感握姿（`@kit.MultimodalAwarenessKit` 传感器）；鸿蒙推送通道 `HarmonyPushTokenProvider`（Android 对应物是 FCM）；`@kit.UIDesignKit`（HdsActionBar）；`LoginKeyboardBridge`。**不要记为缺口，不要试图补** | 各 `@kit.*` import |
 
 ---
 
-## 十、不用做：Android 已反超鸿蒙（保持即可，不要「对齐」回去）
+## 九、不用做：Android 已反超鸿蒙（保持即可，不要「对齐」回去）
 
 1. **图片长按菜单**（保存相册 / 分享 / 拷贝链接）——`ui/components/ImageViewer.kt:94/343/489`（鸿蒙注释自认没有）
 2. **私有 DNS 引导页** `PrivateDnsGuideScreen` + `NetworkAccessibilityChecker`——鸿蒙侧 `PrivateDns` 0 命中
 3. **书本姿态双页阅读** `TwoPageReading` + 开关——鸿蒙 `TwoPage|双页` 0 命中，Android 独有
 4. **折叠姿态感知层** `FoldPosture`（铰链几何 / 书本姿态 / 展开判定）——鸿蒙只有 `BreakpointManager.ets` 宽度断点，无姿态感知
 5. **模块化**——core×6 + feature×3 共 9 个 Gradle 模块，feature 垂直切片
-6. **单元测试 70 个测试类**（app 51 + core/data 7 + core/model 3 + designsystem 3 + home 4 + notification 1 + search 1，鸿蒙无对应 JVM 单测）
+6. **单元测试 73 个测试类 / 541 用例零失败**（app 54 + core/data 7 + core/model 3 + designsystem 3 + home 4 + notification 1 + search 1，鸿蒙无对应 JVM 单测）
 7. **通知列表分页**——`loadMore` + hasMore（`NotificationViewModel.kt:46,105-111`）
 8. **表情目录可观察刷新**——`emojiCatalogRevision: StateFlow<Int>`（`EmojiCatalogRegistry.kt:70`），表一到选择器自动刷新；鸿蒙 `aboutToAppear` 读一次、拉到晚就一直空白
 9. **视频播放走 TextureView**——`arkdo_player_view.xml` + `VideoPlayer.kt:158`，避开 SurfaceView 与 Compose 合成的黑帧交替（实测黑帧率 46% → 0%）
@@ -152,7 +139,7 @@
 
 ---
 
-## 十一、建议实施顺序
+## 十、建议实施顺序
 
 **第 0 步 · 清台面（半天内，全是删除）**
 1. 死代码组1/2/3（notification 四件套、6 个死常量、2 个悬空路由常量）+ 微清理 M1（Manifest 存储权限）——每批删完编译 + 全量单测
@@ -160,7 +147,7 @@
 3. 重写或删除 `TODO.md` / `MIGRATION.md` / 修 `README.md` 三处失真（P2-31）
 
 **第 1 步 · 差一次接通（改动小）**
-4. **N6 详情已读态回写首页**：StateFlow 单例搬语义（详情页写入、首页订阅更新对应行），不搬 bus
+4. ~~N6 详情已读态回写首页~~ **已完成**（`TopicReadStateSource` 单例：详情页 `onDetailDetach` 结算、首页订阅更新对应行，不搬 bus；feature/home 单测覆盖）
 5. **S14 过盾快捷入口开关**：`ChallengeShortcutPrefs`（默认关）+ 网络设置页开关项，入口/订阅/reset 均已就位
 
 **第 2 步 · 用户一眼能看到**
@@ -169,8 +156,8 @@
 
 **第 3 步 · 横向铺开**
 8. **系统推送全链路**（P0-1）：`services/push/` 移植（鸿蒙 12 文件）+ FCM 对应物替代 `HarmonyPushTokenProvider` + Relay 同意流程；**前置已全部就位**（渠道/权限/深链），推送到达直接调 `SystemNotifier` 即可；`PushSettingsScreen` 补推送统计与订阅管理两块
-9. **动态头像**（N1）：整条能力 + 实验页第 6 个开关，复用死键 `PREFS_ANIMATED_AVATAR`
-10. **图片失效黑名单**（N5）：Coil 事件或加载失败回调接入 host 黑名单
+9. ~~动态头像（N1）~~ **已完成**（`services/avatar/AnimatedAvatarPrefs`（默认开，复用死键 `PREFS_ANIMATED_AVATAR`）+ `LocalAnimatedAvatarEnabled`/`rememberAvatarImageModel` 首帧解码 + 实验页第 6 开关，6/6）
+10. ~~图片失效黑名单（N5）~~ **已完成**（`BlockedImageHosts` + Coil `BlockedImageHostInterceptor` 挂全局 ImageLoader：网络层失败记证据、2 张不同图判域名走不通、命中短路；鸿蒙「桥也取不到就撤销」对冲无取图桥，不搬）
 
 **第 4 步 · 大屏深化（P1-13 已全清）**
 11. ~~桌面姿态媒体上下分区~~ **已完成**（`TabletopMedia` 几何 + `VideoPlayer` 分区接线，单测覆盖；真机水平折痕待复验）；~~相机预览方向~~ **已消解**（拍照入口走系统相机 TakePicture，预览由系统自理，App 内无预览可适配）
@@ -202,15 +189,11 @@ rg -n "quotePostNumber|quoteTopicId|quoteIsReply" -g '*.kt'  # 应命中 PostRic
 
 # ── 判据 C：零调用方 ──
 rg -ln "NotificationService|NotificationApi|RawNotification" -g '*.kt'    # 组1，注意排除注释与 core/data 私有副本
-rg -n "PREFS_ANIMATED_AVATAR|DRAFTS_REFRESH_TICK_KEY|APP_IS_WIDE_STORAGE_KEY" -g '*.kt'
+rg -n "DRAFTS_REFRESH_TICK_KEY|APP_IS_WIDE_STORAGE_KEY" -g '*.kt'
 
 # ── 判据 E：有发无收 ──
 rg -rn "EventBus" -g '*.kt' --files-with-matches  # 逐条对账发送方/订阅方
 rg -n "onSiteChanged" -g '*.kt'                   # 应只命中定义处（P0-2 钩子）
-
-# ── N6 读态回写 ──
-rg -n "TopicReadStateEventBus" /Users/tongtong/ArkDO/entry/src/main/ets/views/pages/HomePage.ets   # :362 订阅
-rg -n "readState|alreadyRead|isRead" -g '*.kt' feature/home/                                        # 应 0 命中
 
 # ── 工程化 ──
 grep -n "signingConfig" app/build.gradle.kts; ls -a | grep github; ls app/src/main/res/values/
