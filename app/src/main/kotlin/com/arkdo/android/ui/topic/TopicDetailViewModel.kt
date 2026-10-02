@@ -108,6 +108,7 @@ private const val INCOMING_POST_DEBOUNCE_MS = 400L
 class TopicDetailViewModel @Inject constructor(
     private val topicService: TopicService,
     private val draftService: DraftService,
+    private val readStateSource: com.arkdo.android.core.data.session.TopicReadStateSource,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -127,6 +128,9 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 上一次喂给 tracker 的在屏楼号（仅用于日志去重，避免滚动时刷屏）。 */
     private var lastOnscreenLogged: List<Int> = emptyList()
+
+    /** 本次浏览到的最高楼号（对齐鸿蒙 TopicReadController.maxSeenPostNumber，结算已读水位用）。 */
+    private var maxSeenPostNumber = 0
 
     /**
      * 最近一次成功应用的详情快照，供 [ensureReadingTracker] 幂等拉起上报用。
@@ -267,6 +271,8 @@ class TopicDetailViewModel @Inject constructor(
         }
         currentTopicId = topicId
         currentSlug = slug
+        // 换了话题：浏览水位归位，别把上一帖的最高楼号带进这一帖的已读结算。
+        maxSeenPostNumber = 0
         // 编辑器上传入口的显隐取决于站点设置（白名单/新用户附件限额）：进帖即预热，
         // 等用户点开编辑器时已就绪，不会出现「先只有图片钮、过一秒多出两个」的跳动。
         loadUploadCapabilities()
@@ -1857,6 +1863,7 @@ class TopicDetailViewModel @Inject constructor(
         }
         readingTracker.setOnscreen(postNumbers)
         readingTracker.scrolled()
+        postNumbers.maxOrNull()?.let { if (it > maxSeenPostNumber) maxSeenPostNumber = it }
     }
 
     /**
@@ -1884,6 +1891,41 @@ class TopicDetailViewModel @Inject constructor(
         if (readingTracker.stopTiming()) {
             readingTracker.flushPending()
         }
+        publishReadStateToHomeLists()
+    }
+
+    /**
+     * 离开详情页时结算一次已读状态，回传给列表页消蓝点、改未读徽标
+     * （对齐鸿蒙 TopicReadController.detach → buildReadStatePayload → TopicReadStateEventBus）。
+     *
+     * 载荷计算对齐鸿蒙 buildReadStatePayload（TopicReadController.ets:197-214）：
+     * - 匿名或响应无已读态时不上报，避免把服务端真实状态误清；
+     * - 剩余未读 = max(0, 已知最高楼 − 已读水位)，水位取三个信号的最高者：
+     *   服务端旧水位、本次浏览到的最高楼号、服务端明确 read=true 的最高楼号；
+     * - unseen 恒 false（进过详情页就算看过）。
+     */
+    private fun publishReadStateToHomeLists() {
+        val detail = lastDetail ?: return
+        val posts = dataSource.posts
+        // hasServerReadState：详情 last_read_post_number 或任一楼带 read 字段，二占其一即可。
+        val hasServerReadState = detail.lastReadPostNumber != null || posts.any { it.read != null }
+        if (!hasServerReadState) return
+
+        var highest = detail.highestPostNumber ?: 0
+        for (post in posts) if (post.postNumber > highest) highest = post.postNumber
+        var watermark = detail.lastReadPostNumber ?: 0
+        if (maxSeenPostNumber > watermark) watermark = maxSeenPostNumber
+        for (post in posts) {
+            if (post.read == true && post.postNumber > watermark) watermark = post.postNumber
+        }
+
+        readStateSource.publish(
+            com.arkdo.android.core.data.session.TopicReadStateUpdate(
+                topicId = detail.id,
+                unseen = false,
+                unreadPosts = maxOf(0, highest - watermark)
+            )
+        )
     }
 
     /** 上报成功：把这些楼标已读（蓝点淡出）。data class 需重建触发重组。 */
