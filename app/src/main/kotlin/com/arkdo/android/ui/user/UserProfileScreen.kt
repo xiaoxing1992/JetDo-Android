@@ -106,9 +106,13 @@ fun UserProfileScreen(
     username: String,
     seedDisplayName: String? = null,
     seedAvatarTemplate: String? = null,
+    // 导航种子里的用户 id：头像形状按 id==1 判方圆（鸿蒙同判据），不透传则种子期恒圆、
+    // 资料到达后按真 id 翻转 —— 就是「头像先圆后方闪一下」的根因。对齐鸿蒙
+    // UserProfilePage.ets:91 的 onOpenUser 四参（username/displayName/avatarTemplate/userId）。
+    seedUserId: Long = 0L,
     onNavigateBack: () -> Unit,
     onOpenTopic: (topicId: Long, title: String, postNumber: Int?) -> Unit = { _, _, _ -> },
-    onOpenUser: (username: String, displayName: String?, avatarTemplate: String?) -> Unit = { _, _, _ -> },
+    onOpenUser: (username: String, displayName: String?, avatarTemplate: String?, userId: Long) -> Unit = { _, _, _, _ -> },
     onOpenBadges: (username: String, badgeCount: Int) -> Unit = { _, _ -> },
     onOpenActivity: (username: String, filter: String, title: String) -> Unit = { _, _, _ -> },
     onOpenSolved: (username: String, solvedCount: Int) -> Unit = { _, _ -> },
@@ -119,8 +123,8 @@ fun UserProfileScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(username, seedDisplayName, seedAvatarTemplate) {
-        viewModel.load(username, seedDisplayName, seedAvatarTemplate)
+    LaunchedEffect(username, seedDisplayName, seedAvatarTemplate, seedUserId) {
+        viewModel.load(username, seedDisplayName, seedAvatarTemplate, seedUserId)
     }
 
     // 简介 / 网站行的链接：和帖子正文共用一条 LinkRouter 通路（对齐鸿蒙
@@ -129,7 +133,7 @@ fun UserProfileScreen(
     val openLink: (String) -> Unit = { url ->
         when (val route = resolveLinkRoute(url)) {
             is LinkRoute.Topic -> onOpenTopic(route.topicId, "", route.targetPostNumber)
-            is LinkRoute.User -> onOpenUser(route.username, null, null)
+            is LinkRoute.User -> onOpenUser(route.username, null, null, 0L)
             is LinkRoute.Download ->
                 // 附件交 host WebView 的下载委托（带会话 Cookie），宿主未就绪退回内置 WebView，
                 // 总之不能交系统浏览器——站内地址在那里没有登录态。
@@ -896,7 +900,7 @@ private fun SectionHead(title: String, more: String? = null, onMore: (() -> Unit
 @Composable
 private fun CircleCard(
     state: UserProfileViewModel.UiState,
-    onOpenUser: (String, String?, String?) -> Unit
+    onOpenUser: (String, String?, String?, Long) -> Unit
 ) {
     val summary = state.summary ?: return
     val rows = listOf(
@@ -947,7 +951,7 @@ private fun CircleCard(
                                 .clickable {
                                     val u = item.user
                                     if (u.username.isNotEmpty()) {
-                                        onOpenUser(u.username, u.name, u.avatarTemplate)
+                                        onOpenUser(u.username, u.name, u.avatarTemplate, u.id)
                                     }
                                 },
                             contentAlignment = Alignment.BottomEnd

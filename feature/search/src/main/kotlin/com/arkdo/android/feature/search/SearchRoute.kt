@@ -25,7 +25,7 @@ fun SearchRoute(
     categories: List<HomeCategory>,
     onBack: () -> Unit,
     onOpenTopic: (topicId: Long, targetPostNumber: Int?) -> Unit,
-    onOpenUser: (username: String) -> Unit,
+    onOpenUser: (username: String, userId: Long) -> Unit,
     avatarBaseUrl: String,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
@@ -57,7 +57,8 @@ fun SearchRoute(
         },
         onOpenUser = { user ->
             viewModel.onResultOpened()
-            onOpenUser(user.username)
+            // userId 透传：他人主页的头像方圆按 id==1 判，种子缺 id 会闪一下（S7）。
+            onOpenUser(user.username, user.id)
         },
         onHistoryTermClick = viewModel::applyHistoryTerm,
         onRemoveHistory = viewModel::removeHistory,
