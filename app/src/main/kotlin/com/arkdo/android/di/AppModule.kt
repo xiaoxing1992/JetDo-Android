@@ -47,6 +47,9 @@ object AppModule {
             .components {
                 // 支持 SVG 图片（用于徽章、图标）
                 add(SvgDecoder.Factory())
+                // 图片失效黑名单：网络层反复失败的外链图床域名不再重试（对齐鸿蒙
+                // BlockedImageHosts，N5）。挂拦截器一处覆盖所有 Coil 加载点。
+                add(com.arkdo.android.services.network.BlockedImageHostInterceptor())
                 // 自带网络层：动图头像是 CDN 原图（单文件可达数 MB），Coil 默认
                 // OkHttp 的 10s 读超时在弱网下会把大文件中途判死，表现成
                 // 「动图头像永远退到静态兜底」。放宽超时并复用同一个 client。
