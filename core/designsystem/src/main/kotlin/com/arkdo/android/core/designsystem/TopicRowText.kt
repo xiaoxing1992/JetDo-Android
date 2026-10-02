@@ -15,9 +15,13 @@ fun topicHasMetadata(
 
 private const val TOPIC_AVATAR_SIZE = "96"
 
-fun topicAvatarCandidates(user: HomeUser?, baseUrl: String): List<String> = buildList {
+fun topicAvatarCandidates(user: HomeUser?, baseUrl: String, includeAnimated: Boolean = true): List<String> = buildList {
+    // 动态头像关闭时跳过动图候选：avatarTemplate 本身也可能是动图文件，静态化由
+    // rememberAvatarImageModel 的首帧解码兜住，这里只负责不主动优先动图。
+    if (includeAnimated) {
+        user?.animatedAvatar?.takeIf(String::isNotBlank)?.let { add(resolveAsset(it, baseUrl)) }
+    }
     if (user == null) return@buildList
-    user.animatedAvatar?.takeIf(String::isNotBlank)?.let { add(resolveAsset(it, baseUrl)) }
     user.avatarTemplate?.takeIf(String::isNotBlank)?.let {
         add(resolveAsset(it.replace("{size}", TOPIC_AVATAR_SIZE), baseUrl))
     }

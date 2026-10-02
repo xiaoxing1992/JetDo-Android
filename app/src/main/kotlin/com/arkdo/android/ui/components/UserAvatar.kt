@@ -35,6 +35,8 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.core.designsystem.FaIconSet
+import com.arkdo.android.core.designsystem.LocalAnimatedAvatarEnabled
+import com.arkdo.android.core.designsystem.rememberAvatarImageModel
 
 // ==========================================================================
 // 对齐鸿蒙版 views/components/UserAvatar.ets。
@@ -67,7 +69,9 @@ fun UserAvatar(
     val shape = if (user?.id == 1L) RoundedCornerShape(avatarSize * 0.1f) else CircleShape
 
     // 鸿蒙是「候选链」逐个失败下移：动图候选加载失败退静态候选，全失败才露首字母。
-    val avatarCandidates = remember(user) { avatarCandidates(user) }
+    // 动态头像关闭时跳过动图候选，且请求强制首帧解码（rememberAvatarImageModel）。
+    val animatedEnabled = LocalAnimatedAvatarEnabled.current
+    val avatarCandidates = remember(user, animatedEnabled) { avatarCandidates(user, includeAnimated = animatedEnabled) }
     var candidateIndex by remember(avatarCandidates) { mutableStateOf(0) }
     // 首字母只在没有候选或全部候选失败时露出，不是恒在底层垫着。
     var showInitial by remember(avatarCandidates) { mutableStateOf(avatarCandidates.isEmpty()) }
@@ -97,7 +101,7 @@ fun UserAvatar(
 
             if (avatarUrl != null) {
                 AsyncImage(
-                    model = avatarUrl,
+                    model = rememberAvatarImageModel(avatarUrl),
                     contentDescription = null,
                     modifier = Modifier
                         .size(avatarSize)
@@ -186,7 +190,7 @@ private fun FlairBadge(
         // 反过来判会让"不在图标集里的图标名"被当成图片地址去请求。
         if (isImageFlair(flairUrl)) {
             AsyncImage(
-                model = resolveFlairUrl(flairUrl),
+                model = rememberAvatarImageModel(resolveFlairUrl(flairUrl)),
                 contentDescription = null,
                 modifier = Modifier
                     .size(badgeSize)
@@ -229,12 +233,19 @@ internal fun flairKind(
 internal fun isImageFlair(flairUrl: String): Boolean =
     flairUrl.startsWith("http://") || flairUrl.startsWith("https://") || flairUrl.startsWith("//")
 
-/** 候选地址列表：动图在前、静态在后，空串一律跳过。抽成纯函数供 JVM 测试。 */
-internal fun avatarCandidates(user: User?, requestSize: String = AVATAR_REQUEST_SIZE): List<String> =
+/** 候选地址列表：动图在前、静态在后，空串一律跳过。抽成纯函数供 JVM 测试。
+ *  动态头像关闭时 includeAnimated=false，跳过动图候选。 */
+internal fun avatarCandidates(
+    user: User?,
+    requestSize: String = AVATAR_REQUEST_SIZE,
+    includeAnimated: Boolean = true
+): List<String> =
     buildList {
         if (user == null) return@buildList
 
-        user.animatedAvatar?.takeIf { it.isNotEmpty() }?.let { add(resolveAvatarUrl(it)) }
+        if (includeAnimated) {
+            user.animatedAvatar?.takeIf { it.isNotEmpty() }?.let { add(resolveAvatarUrl(it)) }
+        }
 
         user.avatarTemplate?.takeIf { it.isNotEmpty() }?.let {
             add(resolveAvatarUrl(it.replace("{size}", requestSize)))

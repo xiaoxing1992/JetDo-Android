@@ -40,6 +40,21 @@ class TopicRowTextTest {
     }
 
     @Test
+    fun avatar_candidates_skip_animated_when_dynamic_avatar_disabled() {
+        val user = HomeUser(
+            id = 2,
+            username = "alice",
+            animatedAvatar = "/user_avatar/alice/96/animated.webp",
+            avatarTemplate = "/user_avatar/alice/{size}/static.png"
+        )
+
+        assertEquals(
+            listOf("https://linux.do/user_avatar/alice/96/static.png"),
+            topicAvatarCandidates(user, "https://linux.do", includeAnimated = false)
+        )
+    }
+
+    @Test
     fun metadata_is_kept_when_only_tag_or_time_exists() {
         val topic = HomeTopic(
             id = 3,
