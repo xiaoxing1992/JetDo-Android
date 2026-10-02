@@ -8,7 +8,7 @@
 
 ## 一、结论先行
 
-**还剩 25 项 + 7 组死代码。**
+**还剩 23 项 + 5 组死代码。**
 
 ### 1.1 缺口分布
 
@@ -18,9 +18,9 @@
 | P1 | 2 | 功能不完整，用起来别扭 |
 | 半截 | 4 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 5 | 目录级对比看不出来的缺失 |
-| P2 | 10 | 工程化与发布 |
-| 死代码 | 7 组 | 看着有实现，其实是死的，会误导判断 |
-| **合计** | **25** | 上表各项之和，与逐行点数一致 |
+| P2 | 9 | 工程化与发布 |
+| 死代码 | 5 组 | 看着有实现，其实是死的，会误导判断 |
+| **合计** | **23** | 上表各项之和（3+2+4+5+9），与逐行点数一致；死代码组单列不计入 |
 
 模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 50%** / **设置 65%** / **多站点 40%**（6/12 文件，但仅支持单站点，`BASE_URL` 硬编码、无法切换）/ **系统推送 15%**（仅本地通知渠道 + 权限申请，投递链路未迁）/ 平板适配 99%（双栏 + 高度闸门 + 折叠感知 + `configChanges` + 宽屏转场 + 铰链对齐留白 + 展开态尺寸兜底 + 5 档 WSC 分组 + **书本姿态双页阅读**，均在真实平板/折叠 AVD 实测；残余 2 项见 P1-13）。
 
@@ -123,7 +123,7 @@
 
 ---
 
-## 六、P2 · 工程化与发布（10 项）
+## 六、P2 · 工程化与发布（9 项）
 
 | # | 问题 | 证据 |
 |---|---|---|
@@ -135,24 +135,23 @@
 | 26 | 无崩溃上报 | 无 Crashlytics / Bugly，仅本地 `DebugLogScreen` |
 | 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md:163-165` 未勾选 |
 | 28 | 无多语言、无 `values-night` | `res/` 只有 `drawable mipmap-* raw values xml` |
-| 30 | `AppRoutes.kt` 死代码 | 同 D2 |
 | 31 | **文档严重过期** | `TODO.md` 末行仍写「项目骨架搭建完成…等待实现具体功能」+「下一步：实现 WebViewNetworkBridge」（该桥早已落地）；`MIGRATION.md` 的「里程碑二+」整章（清单自述 **~80 服务 / ~35 页面 / ~50 组件**）**几乎全部已完成**，却仍标为待办；且其基线写 `dc50bd0`，与台账用的 `7680996` 不是同一个点 |
 
 > **31 单独提请注意**：`MIGRATION.md` 已失去跟踪价值 —— 它的「已完成」章节停在里程碑一（`2026-08-11`），而「里程碑二+」里列的待办绝大部分已经做完；照它排期会大量重复劳动。`TODO.md` 同理（末行的「下一步」指向早已落地的 WebView 桥）。**两份都建议整体重写或直接删除**，避免误导后续判断。**唯一权威是本文。**
 
 ---
 
-## 七、死代码与死资源（6 组）
+## 七、死代码与死资源（5 组）
 
 | # | 对象 | 规模 / 证据 | 说明 |
 |---|---|---|---|
-| D1 | `ui/components/TopicListItem.kt` | 378 行，`TopicListItem(` 仅定义处 + 文件内自调用（已核实）| 已被 `core/designsystem/TopicRow.kt` 取代；`:51` 注释仍写「Android 尚未移植设置页」（**已过期**）|
-| D2 | `navigation/AppRoutes.kt` | 163 行，除自身注释外零引用（已核实）| 真实路由在 `ArkDoNavHost.kt` 的 `Routes` |
 | D3 | `services/notification/NotificationService.kt` 整个类 | 无实例化、无 Provider（已核实）| 列表实际走 `DefaultNotificationRepository` |
 | D4 | `services/notification/NotificationApi.kt` 整个类 | 仅被 D3 与 `di/AppModule.kt:107` 未被注入的 Provider 引用 | `load` / `markRead` / `markAllRead` 无真实调用方 |
 | D6 | 死 Prefs 常量 | `StorageKeys.kt:63` `PREFS_ANIMATED_AVATAR`（零引用，**做 N1 时复用**）；同批另有 6 个：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY` | 均只在定义处出现 |
 | D7 | `core:datastore` 空模块 | 无 `src/main` | 同 P2-23 |
 | D8 | `Routes.CF_CHALLENGE` 悬空常量 | `ArkDoNavHost.kt:712` 定义，**全库零注册零引用**（已核实）| 是「以为要走路由」的遗留物：过盾页面 `ui/screens/CfChallengeScreen.kt`（313 行，**活代码**）实际由 `MainActivity.kt:189` 内联托管，从不经 NavHost。**常量删掉即可，页面不要动** |
+
+> 已清理：`ui/components/TopicListItem.kt`（原 D1）与 `navigation/AppRoutes.kt`（原 D2）已于 2026-10-02 删除（逐符号复核零代码引用后编译验证）。
 
 ---
 
@@ -203,7 +202,7 @@
 **第 5 步 · 发布准备**
 9. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
 10. 崩溃上报、隐私政策与商店素材（P2-26/27）
-11. **清理死代码 D1–D8**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
+11. **清理死代码 D3/D4/D6/D7/D8**，重写或删除 `TODO.md` / `MIGRATION.md`（P2-31）
 
 ---
 
@@ -229,8 +228,7 @@ rg -n "quotePostNumber|quoteTopicId|quoteIsReply" -g '*.kt'
 #   → 同一手法可复用到其它「解析齐全但没人读」的字段
 
 # ── 零调用方（判据 C）──
-rg -n "TopicListItem\(" -g '*.kt'
-rg -l "AppRoutes|NotificationService|NotificationApi" -g '*.kt'
+rg -l "NotificationService|NotificationApi" -g '*.kt'
 rg -n "PREFS_ANIMATED_AVATAR" -g '*.kt'
 
 # ── 有发无收 / 反向方法零调用（判据 E）──
