@@ -39,6 +39,9 @@ class UserProfileViewModel @Inject constructor(
         val username: String = "",
         val displayName: String = "",
         val avatarTemplate: String = "",
+        // 导航种子里的用户 id。头像形状判据是 id==1 走方形(鸿蒙 UserAvatar.avatarBorderRadius
+        // 同判据),种子不透传 id 的话兜底恒为 0=圆形,资料到达后真 id 是 1 就圆⇄方闪一下。
+        val seedUserId: Long = 0L,
         // 资料与摘要。
         val profile: UserProfileDetail? = null,
         val summary: UserSummary? = null,
@@ -70,7 +73,7 @@ class UserProfileViewModel @Inject constructor(
 
         val avatarUser: com.arkdo.android.data.models.User
             get() = profile?.toAvatarUser() ?: com.arkdo.android.data.models.User(
-                id = 0,
+                id = seedUserId,
                 username = username,
                 name = displayName.takeIf { it.isNotEmpty() },
                 avatarTemplate = avatarTemplate.takeIf { it.isNotEmpty() }
@@ -99,11 +102,17 @@ class UserProfileViewModel @Inject constructor(
         }
     }
 
-    fun load(username: String, displayName: String?, avatarTemplate: String?) {
+    fun load(username: String, displayName: String?, avatarTemplate: String?, userId: Long = 0L) {
         if (username.isBlank()) return
         // 同一用户重复进入(子页返回):数据已在,直接跳过不重拉(对齐鸿蒙 loadedUsername 校验)。
         if (loadedUsername == username && _uiState.value.profile != null) {
-            _uiState.update { it.copy(displayName = displayName ?: it.displayName, avatarTemplate = avatarTemplate ?: it.avatarTemplate) }
+            _uiState.update {
+                it.copy(
+                    displayName = displayName ?: it.displayName,
+                    avatarTemplate = avatarTemplate ?: it.avatarTemplate,
+                    seedUserId = userId
+                )
+            }
             return
         }
         loadCategoriesIfNeeded()
@@ -112,6 +121,7 @@ class UserProfileViewModel @Inject constructor(
                 username = username,
                 displayName = displayName ?: "",
                 avatarTemplate = avatarTemplate ?: "",
+                seedUserId = userId,
                 loading = true,
                 error = null,
                 profile = null,

@@ -9,7 +9,7 @@
 
 ## 一、结论先行
 
-**还剩 18 项 + 4 组死代码 + 2 条微清理。**
+**还剩 17 项 + 4 组死代码 + 2 条微清理。**
 
 ### 1.1 缺口分布
 
@@ -17,10 +17,10 @@
 |---|---|---|
 | P0 | 3 | 用户一眼能看出没做 |
 | P1 | 1 | 功能不完整，用起来别扭 |
-| 半截 | 2 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
+| 半截 | 1 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 3 | 目录级对比看不出来的缺失 |
 | P2 | 9 | 工程化与发布 |
-| **合计** | **18** | 上表逐项相加（3+1+2+3+9）|
+| **合计** | **17** | 上表逐项相加（3+1+1+3+9）|
 | 死代码 | 4 组 | 看着有实现，其实是死的，会误导判断 |
 | 微清理 | 2 条 | 低危，不阻塞发布 |
 
@@ -57,11 +57,10 @@
 | 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告。**链路全部就绪，只差决定 Android 自己的公告帖与账号** | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:160`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
 ---
 
-## 四、半截 · 差一次接通（2 项）
+## 四、半截 · 差一次接通（1 项）
 
 | # | 现象 | 根因 | 证据 |
 |---|---|---|---|
-| S7 | 圆形头像先方后圆闪一下 | `onOpenUser` 未透传 userId，种子 `id=0`。**待实机复核**：判据是 `id == 1L` 走方形，种子恒为圆形，静态推不出该现象 | `UserProfileScreen.kt:99`、`UserProfileViewModel.kt:72` |
 | S14 | 过盾快捷入口的用户开关缺失 | 快捷入口会渲染、订阅（`ChallengeShortcutEventBus` → `TopicDetailViewModel:161`）与 `reset()` 都已接通，但无 `ChallengeShortcutPrefs` 开关与网络设置页开关项；鸿蒙该开关默认**关** | `TopicDetailViewModel.kt:128` 自述；`NetworkSettingsScreen.kt:52` 自述；参考 `NetworkSettingsPage.ets:199-231` |
 
 > 动态头像的实验页开关（原 S15 缺项）随 §五 N1 同一张工单做，不单列。

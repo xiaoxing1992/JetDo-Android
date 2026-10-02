@@ -314,9 +314,9 @@ fun ArkDoNavHost(
                         val q = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
                     },
-                    onOpenUser = { username ->
+                    onOpenUser = { username, userId ->
                         if (username.isNotEmpty()) {
-                            navController.navigate("${Routes.USER_PROFILE}/$username")
+                            navController.navigate("${Routes.USER_PROFILE}/$username?userId=$userId")
                         }
                     }
                 )
@@ -372,6 +372,7 @@ fun ArkDoNavHost(
                 },
                 onNavigateToUser = { user ->
                     // 点作者/评论楼层/boost 头像 → 他人主页（对齐鸿蒙 openUserProfile）。
+                    // userId 必须透传：头像方圆按 id==1 判，种子缺 id 会在资料到达后闪一下。
                     val name = user.name?.takeIf { it.isNotEmpty() }
                     val avatar = user.avatarTemplate
                     val username = user.username
@@ -382,6 +383,8 @@ fun ArkDoNavHost(
                                 if (isNotEmpty()) append("&") else append("?")
                                 append("avatar=${java.net.URLEncoder.encode(it, "UTF-8")}")
                             }
+                            if (isNotEmpty()) append("&") else append("?")
+                            append("userId=${user.id}")
                         }
                         navController.navigate("${Routes.USER_PROFILE}/$username$q")
                     }
@@ -419,11 +422,12 @@ fun ArkDoNavHost(
         }
         // 他人主页:帖子里点作者/评论楼层/boost 头像进入。
         composable(
-            route = Routes.USER_PROFILE + "/{username}?displayName={displayName}&avatar={avatar}",
+            route = Routes.USER_PROFILE + "/{username}?displayName={displayName}&avatar={avatar}&userId={userId}",
             arguments = listOf(
                 navArgument("username") { type = NavType.StringType },
                 navArgument("displayName") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("avatar") { type = NavType.StringType; nullable = true; defaultValue = null }
+                navArgument("avatar") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("userId") { type = NavType.LongType; defaultValue = 0L }
             )
         ) { entry ->
             val args = entry.arguments
@@ -431,8 +435,9 @@ fun ArkDoNavHost(
                 username = args?.getString("username").orEmpty(),
                 seedDisplayName = args?.getString("displayName"),
                 seedAvatarTemplate = args?.getString("avatar"),
+                seedUserId = args?.getLong("userId") ?: 0L,
                 onNavigateBack = { navController.popBackStack() },
-                onOpenUser = { uname, dname, avatarTemplate ->
+                onOpenUser = { uname, dname, avatarTemplate, uid ->
                     // 互动圈头像可点:递归 push 同一路由(对齐鸿蒙 openUserProfile 递归跳转),
                     // 返回栈逐层回退,子页不重新拉取父页数据。
                     if (uname.isNotEmpty()) {
@@ -444,6 +449,8 @@ fun ArkDoNavHost(
                                 if (isNotEmpty()) append("&") else append("?")
                                 append("avatar=${java.net.URLEncoder.encode(it, "UTF-8")}")
                             }
+                            if (isNotEmpty()) append("&") else append("?")
+                            append("userId=$uid")
                         }
                         navController.navigate("${Routes.USER_PROFILE}/$uname$q")
                     }

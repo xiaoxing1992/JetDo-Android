@@ -21,7 +21,7 @@ fun SearchFeatureScreen(
     isWebViewReady: Boolean,
     onBack: () -> Unit,
     onOpenTopic: (topicId: Long, targetPostNumber: Int?) -> Unit,
-    onOpenUser: (username: String) -> Unit
+    onOpenUser: (username: String, userId: Long) -> Unit
 ) {
     // 分类树:结果行渲染版块徽标要按 categoryId 查名,用应用级缓存的 CategoryIndex。
     val categories = rememberCategories()
