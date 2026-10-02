@@ -209,4 +209,73 @@ class FoldPostureTest {
         )
         assertEquals(733f, hinge!!.startDp, 0.001f)
     }
+
+    // ── isTabletopPosture / horizontalSplitHinge ─────────────────────────
+
+    /** 一条水平、分隔、带位置的折痕 —— 桌面姿态上下分区要用的那种。 */
+    private fun horizontalHinge(topDp: Float, bottomDp: Float) = fold(
+        state = FoldState.HALF_OPENED,
+        orientation = FoldOrientation.HORIZONTAL,
+        isSeparating = true,
+        boundsDp = FoldBounds(leftDp = 0f, topDp = topDp, rightDp = 2200f, bottomDp = bottomDp)
+    )
+
+    @Test
+    fun `水平折痕半开即桌面姿态`() {
+        assertTrue(
+            FoldPosture.isTabletopPosture(listOf(fold(FoldState.HALF_OPENED, FoldOrientation.HORIZONTAL)))
+        )
+    }
+
+    @Test
+    fun `铺平与竖直折痕都不算桌面姿态`() {
+        // 铺平时没有折痕分隔；竖直折痕是图书姿态。与 isBookPosture 的三条判定完全对称。
+        assertFalse(FoldPosture.isTabletopPosture(listOf(fold(FoldState.FLAT, FoldOrientation.HORIZONTAL))))
+        assertFalse(FoldPosture.isTabletopPosture(listOf(fold(FoldState.HALF_OPENED, FoldOrientation.VERTICAL))))
+        assertFalse(FoldPosture.isTabletopPosture(emptyList()))
+    }
+
+    @Test
+    fun `竖直折痕不参与上下分区`() {
+        // 图书姿态的折痕切的是左右，拿它当上下分区线是概念错位 —— 必须返回 null。
+        assertNull(FoldPosture.horizontalSplitHinge(listOf(verticalHinge(437.3f, 437.7f))))
+    }
+
+    @Test
+    fun `不切分或没报位置的水平折痕不参与上下分区`() {
+        assertNull(
+            FoldPosture.horizontalSplitHinge(
+                listOf(
+                    fold(
+                        state = FoldState.HALF_OPENED,
+                        orientation = FoldOrientation.HORIZONTAL,
+                        isSeparating = false,
+                        boundsDp = FoldBounds(0f, 1240f, 2200f, 1241f)
+                    )
+                )
+            )
+        )
+        assertNull(
+            FoldPosture.horizontalSplitHinge(
+                listOf(fold(FoldState.HALF_OPENED, FoldOrientation.HORIZONTAL, isSeparating = true, boundsDp = null))
+            )
+        )
+    }
+
+    @Test
+    fun `水平分隔折痕给出它的纵向区间`() {
+        val hinge = FoldPosture.horizontalSplitHinge(listOf(horizontalHinge(471.8f, 472.2f)))
+        assertEquals(471.8f, hinge!!.startDp, 0.001f)
+        assertEquals(472.2f, hinge.endDp, 0.001f)
+        assertEquals(0.4f, hinge.widthDp, 0.001f)
+    }
+
+    @Test
+    fun `多条水平铰链取最靠顶的一条`() {
+        // 顺序故意打乱：设备上报顺序没有约定，实现里排过序。
+        val hinge = FoldPosture.horizontalSplitHinge(
+            listOf(horizontalHinge(700f, 701f), horizontalHinge(472f, 473f))
+        )
+        assertEquals(472f, hinge!!.startDp, 0.001f)
+    }
 }

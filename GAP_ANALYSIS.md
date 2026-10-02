@@ -55,7 +55,7 @@
 | # | 要做什么 | 鸿蒙版 | 现在是什么样 | 证据 |
 |---|---|---|---|---|
 | 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告。**链路全部就绪，只差决定 Android 自己的公告帖与账号** | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:160`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
-| 13 | **大屏适配残余 2 项** | `common/utils/BreakpointManager.ets`（仅宽度断点，无姿态感知）| 主线（双栏 / 高度闸门 / 折叠感知 / `configChanges` / 宽屏转场 / 铰链对齐留白 / 展开态尺寸兜底 / 5 档 WSC 分组 / 书本姿态双页阅读）**已全部落地实测**。残余：**①桌面姿态的媒体上下分区**（等视频播放页需要时再做）；②**相机预览方向**（当前无拍照/发图入口，等真加拍照时按 CameraX `PreviewView` + 窗口 metrics 实现）| `docs/adaptive-devices.md` §四 / §5.4 实测 |
+| 13 | **大屏适配残余 1 项** | `common/utils/BreakpointManager.ets`（仅宽度断点，无姿态感知）| 主线（双栏 / 高度闸门 / 折叠感知 / `configChanges` / 宽屏转场 / 铰链对齐留白 / 展开态尺寸兜底 / 5 档 WSC 分组 / 书本姿态双页阅读 / **桌面姿态媒体上下分区**）**已全部落地**。残余：**相机预览方向**——当前无拍照/发图入口，等真加拍照时按 CameraX `PreviewView` + 窗口 metrics 实现；桌面姿态几何已单测覆盖，真机水平折痕到手后复验 | `docs/adaptive-devices.md` §四 / §5.4；`TabletopMedia.kt` |
 
 ---
 
@@ -175,7 +175,7 @@
 10. **图片失效黑名单**（N5）：Coil 事件或加载失败回调接入 host 黑名单
 
 **第 4 步 · 大屏深化（P1-13 剩余，按需排入）**
-11. 桌面姿态媒体上下分区（等视频播放页）；相机预览方向（等拍照/发图需求）
+11. ~~桌面姿态媒体上下分区~~ **已完成**（`TabletopMedia` 几何 + `VideoPlayer` 分区接线，单测覆盖；真机水平折痕待复验）；相机预览方向（等拍照/发图需求，无载体不做）
 
 **第 5 步 · 发布准备**
 12. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
