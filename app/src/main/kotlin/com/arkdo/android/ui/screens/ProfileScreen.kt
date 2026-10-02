@@ -69,7 +69,7 @@ import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.arkdoColors
 import com.arkdo.android.common.constants.AppConstants
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.services.credit.LdcCreditEventBus
 import com.arkdo.android.services.credit.LdcCreditSession
 import com.arkdo.android.services.credit.LdcEntryEvent

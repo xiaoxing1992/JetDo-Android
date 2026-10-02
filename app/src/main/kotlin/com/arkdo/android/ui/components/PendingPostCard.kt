@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.data.models.PendingPost
 import com.arkdo.android.data.models.User

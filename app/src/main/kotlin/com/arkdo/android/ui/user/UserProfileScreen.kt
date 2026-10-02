@@ -80,7 +80,7 @@ import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.components.UserTitleText
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.ui.utils.formatCount
 import com.arkdo.android.ui.utils.formatJoinDate
 import com.arkdo.android.ui.utils.formatTimeRead

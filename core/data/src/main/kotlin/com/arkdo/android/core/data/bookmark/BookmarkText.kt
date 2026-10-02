@@ -1,6 +1,6 @@
 package com.arkdo.android.core.data.bookmark
 
-import com.arkdo.android.core.common.RelativeTime
+import com.arkdo.android.core.model.RelativeTime
 
 /** 书签摘要：去标签、解实体、空白压成一格。对齐鸿蒙 HtmlText.toPlainText。 */
 fun bookmarkPlainText(html: String?): String {
