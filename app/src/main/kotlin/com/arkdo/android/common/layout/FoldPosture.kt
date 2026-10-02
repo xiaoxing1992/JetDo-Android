@@ -108,6 +108,42 @@ object FoldPosture {
     }
 
     /**
+     * 当前窗口是否处于**桌面姿态**（官方叫 tabletop posture）：水平折痕 + 半开。
+     *
+     * 与 [isBookPosture] 完全对称，只是折痕方向换成 HORIZONTAL —— 屏幕被切成**上下**两块，
+     * 下半屏（铰链靠桌面那一半）正是手最方便够到的区域。官方对媒体类应用在桌面姿态下的
+     * 指导就是「内容在上半屏、控件在下半屏」，消费点见 `VideoPlayer` 的桌面分支。
+     *
+     * 不必另查 `supportedPostures`：那是旧版 Window API 路线的前置检查；本工程走
+     * material3-adaptive 的真实折叠特征 —— 设备**报出**「半开 + 水平折痕」本身就意味着
+     * 它支持并正在桌面姿态，没有可额外过滤的假阳性。
+     */
+    fun isTabletopPosture(features: List<FoldFeature>): Boolean = features.any { feature ->
+        feature.state == FoldState.HALF_OPENED && feature.orientation == FoldOrientation.HORIZONTAL
+    }
+
+    /**
+     * 当前生效的**水平分隔铰链**：拿它当上下分区的分界线。
+     *
+     * 返回值的坐标语义随方向翻转：[FoldHingeSpan.startDp] 是铰链**顶缘**、[endDp] 是**底缘**
+     * （窗口坐标系，dp）——「垂直于折痕方向的占用区间」在水平折痕下就是纵向区间。
+     * 筛选条件与 [verticalSplitHinge] 同构：必须 HORIZONTAL、必须分隔、必须上报了位置。
+     */
+    fun horizontalSplitHinge(features: List<FoldFeature>): FoldHingeSpan? {
+        // 先按 bounds 顶缘排序再取首个：设备上报的顺序没有约定，不排序就变成「看运气」。
+        var best: FoldHingeSpan? = null
+        features.forEach { feature ->
+            if (feature.orientation != FoldOrientation.HORIZONTAL) return@forEach
+            if (!feature.isSeparating) return@forEach
+            val bounds = feature.boundsDp ?: return@forEach
+            val span = FoldHingeSpan(startDp = bounds.topDp, endDp = bounds.bottomDp)
+            val current = best
+            if (current == null || span.startDp < current.startDp) best = span
+        }
+        return best
+    }
+
+    /**
      * 当前生效的**竖直分隔铰链**：拿它当左右分栏的分界线。
      *
      * 三条筛选条件，缺一不可：

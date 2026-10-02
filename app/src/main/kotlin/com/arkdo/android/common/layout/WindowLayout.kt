@@ -35,6 +35,17 @@ val LocalWideLayout = staticCompositionLocalOf { false }
 val LocalBookSpineCenter = staticCompositionLocalOf<Dp?> { null }
 
 /**
+ * 桌面姿态下**水平铰链在窗口坐标系里的纵向位置**（dp，铰链中心）。非桌面姿态、或设备没上报
+ * 位置时为 null。
+ *
+ * 与 [LocalBookSpineCenter] 同构，方向换成纵向：桌面姿态下媒体类内容该「画面在上半屏、
+ * 控件在下半屏」（官方对 tabletop 的指导），分界线就是这条铰链 —— 而**它不保证在窗口中线**，
+ * 对半算和真实位置可能差几十像素。消费点（内联视频卡）拿自己量到的窗口纵坐标与这个值求交，
+ * 算出上下分区的切点；设备没报位置时消费点整体退回原布局，不做「猜一个中线」的假适配。
+ */
+val LocalTabletopHingeCenter = staticCompositionLocalOf<Dp?> { null }
+
+/**
  * 一次分栏的完整几何描述，由 [WideLayoutHost] 算好后交给导航宿主。
  *
  * @param isWide 当前是否双栏。窄屏时另外两个字段无意义（也不会被用到）。
@@ -95,9 +106,15 @@ fun WideLayoutHost(
         } else {
             null
         }
+        // 桌面铰链中心 = 水平铰链的纵向中心，**不做 forceSinglePane 门控**：桌面姿态下窗口
+        // 只有一个内容区（上下分区不涉及左右分栏），窗口坐标对左右栏同样成立；消费点自己量
+        // 卡片在窗口里的位置来求交，坐标基准始终一致。
+        val tabletopHingeCenter = FoldPosture.horizontalSplitHinge(features)
+            ?.let { ((it.startDp + it.endDp) / 2f).dp }
         CompositionLocalProvider(
             LocalWideLayout provides isWide,
-            LocalBookSpineCenter provides bookSpineCenter
+            LocalBookSpineCenter provides bookSpineCenter,
+            LocalTabletopHingeCenter provides tabletopHingeCenter
         ) {
             content(
                 SplitLayout(
@@ -131,10 +148,11 @@ private fun rememberFoldingFeatures(): List<FoldFeature> {
         // 现场反馈「展开后没变双栏」「分栏线没压在折痕上」时，能直接从「设置 → 诊断日志」
         // 还原设备当时报了什么（模拟器完全展开时报空列表就是这个缺口暴露出来的）。
         Timber.tag(FOLD_TAG).d(
-            "folding features=%s → unfolded=%s, hinge=%s",
+            "folding features=%s → unfolded=%s, hinge=%s, tabletop=%s",
             raw,
             FoldPosture.isUnfolded(features),
-            FoldPosture.verticalSplitHinge(features)
+            FoldPosture.verticalSplitHinge(features),
+            FoldPosture.horizontalSplitHinge(features)
         )
         features
     }
@@ -150,6 +168,18 @@ private fun rememberFoldingFeatures(): List<FoldFeature> {
 fun rememberBookPosture(): Boolean {
     val features = rememberFoldingFeatures()
     return remember(features) { FoldPosture.isBookPosture(features) }
+}
+
+/**
+ * 当前窗口是否处于**桌面姿态**（水平折痕 + 半开）。非折叠设备恒 false。
+ *
+ * 与 [rememberBookPosture] 共用同一个数据源（[rememberFoldingFeatures]），不会出现
+ * 两边读到不同姿态的情况。消费点：`VideoPlayer` 的上下分区分支。
+ */
+@Composable
+fun rememberTabletopPosture(): Boolean {
+    val features = rememberFoldingFeatures()
+    return remember(features) { FoldPosture.isTabletopPosture(features) }
 }
 
 private const val FOLD_TAG = "FoldPosture"
