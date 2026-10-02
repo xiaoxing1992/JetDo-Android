@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.session.SessionVersionSource
 import com.arkdo.android.core.data.session.SidebarPrefsSource
+import com.arkdo.android.core.data.session.TopicReadStateSource
+import com.arkdo.android.core.data.session.TopicReadStateUpdate
 import com.arkdo.android.core.data.site.CategoryLoadResult
 import com.arkdo.android.core.data.site.CategoryRepository
 import com.arkdo.android.core.model.HomeCategory
@@ -67,7 +69,8 @@ class HomeViewModel @Inject constructor(
     private val repository: HomeRepository,
     private val categoryRepository: CategoryRepository,
     private val sidebarPrefsSource: SidebarPrefsSource,
-    private val sessionVersion: SessionVersionSource
+    private val sessionVersion: SessionVersionSource,
+    private val readState: TopicReadStateSource
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     internal val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -87,6 +90,9 @@ class HomeViewModel @Inject constructor(
     private var sidebarRequested = false
     private var handledSessionVersion = sessionVersion.currentVersion()
     private val unsubscribeSession = sessionVersion.subscribe(::handleSessionChanged)
+    // 详情页离开时结算的已读状态：回列表实时消蓝点、改未读徽标（对齐鸿蒙
+    // HomePage.aboutToAppear 里对 TopicReadStateEventBus 的订阅，:362-364）。
+    private val unsubscribeReadState = readState.subscribe(::handleTopicReadStateChanged)
     private var tagRequestEpoch = 0
     private var tagSearchJob: Job? = null
 
@@ -97,6 +103,31 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         unsubscribeSession()
+        unsubscribeReadState()
+    }
+
+    /**
+     * 详情页回传的已读状态落到列表行上（对齐鸿蒙 HomePage.handleTopicReadStateChanged，:1976）。
+     * 只动命中的那一行：unseen/unreadPosts 直接覆写；已读水位同步成「最高楼 − 剩余未读」，
+     * 再点未读徽标时跳转目标才是最新的第一条未读楼。列表里没有这篇（被筛选/翻页外）就忽略。
+     */
+    private fun handleTopicReadStateChanged(update: TopicReadStateUpdate) {
+        _uiState.update { state ->
+            val index = state.topics.indexOfFirst { it.id == update.topicId }
+            if (index < 0) return@update state
+            val topic = state.topics[index]
+            val syncedWatermark = topic.highestPostNumber
+                ?.takeIf { it > 0 }
+                ?.let { maxOf(0, it - update.unreadPosts) }
+                ?: topic.lastReadPostNumber
+            val patched = topic.copy(
+                unseen = update.unseen,
+                unreadPosts = update.unreadPosts,
+                lastReadPostNumber = syncedWatermark
+            )
+            if (patched == topic) return@update state
+            state.copy(topics = state.topics.toMutableList().also { it[index] = patched })
+        }
     }
 
     /**

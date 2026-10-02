@@ -2,6 +2,9 @@ package com.arkdo.android.feature.home
 
 import com.arkdo.android.core.data.home.HomeRepository
 import com.arkdo.android.core.data.session.SessionVersionSource
+import com.arkdo.android.core.data.session.DefaultTopicReadStateSource
+import com.arkdo.android.core.data.session.TopicReadStateSource
+import com.arkdo.android.core.data.session.TopicReadStateUpdate
 import com.arkdo.android.core.data.session.SidebarPrefsSource
 import com.arkdo.android.core.data.site.CategoryLoadResult
 import com.arkdo.android.core.data.site.CategoryRepository
@@ -47,8 +50,9 @@ class HomeViewModelTest {
         repository: HomeRepository = FakeHomeRepository(),
         categories: CategoryRepository = FakeCategoryRepository(),
         sidebar: SidebarPrefsSource = FakeSidebarPrefsSource(),
-        session: SessionVersionSource = FakeSessionVersionSource()
-    ): HomeViewModel = HomeViewModel(repository, categories, sidebar, session)
+        session: SessionVersionSource = FakeSessionVersionSource(),
+        readState: TopicReadStateSource = DefaultTopicReadStateSource()
+    ): HomeViewModel = HomeViewModel(repository, categories, sidebar, session, readState)
 
     @Test
     fun loadInitial_publishesTopicsAndPaginationState() = runTest {
@@ -491,6 +495,81 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, repository.calls.size)
+    }
+
+    @Test
+    fun read_state_update_clears_unseen_and_recomputes_watermark() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(
+                HomePage(
+                    listOf(
+                        topic(1).copy(
+                            unseen = true,
+                            unreadPosts = 5,
+                            lastReadPostNumber = 2,
+                            highestPostNumber = 20
+                        ),
+                        topic(2)
+                    ),
+                    page = 0,
+                    hasMore = false
+                )
+            )
+        )
+        val readState = DefaultTopicReadStateSource()
+        val viewModel = viewModel(repository = repository, readState = readState)
+        viewModel.loadInitial()
+        advanceUntilIdle()
+
+        // 详情页离开结算：蓝点消掉，未读改 3，水位同步成 最高楼20 − 剩余未读3 = 17。
+        readState.publish(TopicReadStateUpdate(topicId = 1, unseen = false, unreadPosts = 3))
+
+        val patched = viewModel.uiState.value.topics.first { it.id == 1L }
+        assertEquals(false, patched.unseen)
+        assertEquals(3, patched.unreadPosts)
+        assertEquals(17, patched.lastReadPostNumber)
+        // 无关行不动。
+        assertEquals(false, viewModel.uiState.value.topics.first { it.id == 2L }.unseen)
+    }
+
+    @Test
+    fun read_state_update_ignores_topic_not_in_list() = runTest {
+        val repository = FakeHomeRepository(
+            HomePageResult.Success(HomePage(listOf(topic(1)), page = 0, hasMore = false))
+        )
+        val readState = DefaultTopicReadStateSource()
+        val viewModel = viewModel(repository = repository, readState = readState)
+        viewModel.loadInitial()
+        advanceUntilIdle()
+
+        readState.publish(TopicReadStateUpdate(topicId = 999L, unseen = false, unreadPosts = 0))
+
+        assertEquals(listOf(1L), viewModel.uiState.value.topics.map(HomeTopic::id))
+        val row = viewModel.uiState.value.topics.single()
+        assertEquals(topic(1).unseen, row.unseen)
+    }
+
+    @Test
+    fun read_state_source_replays_current_value_to_late_subscribers() {
+        // 源语义：订阅时先吐当前值（对齐鸿蒙「先取当前已知值，再订阅后续变化」）；
+        // 退订后不再收到。
+        val source = DefaultTopicReadStateSource()
+        val receivedFirst = mutableListOf<TopicReadStateUpdate>()
+        val receivedSecond = mutableListOf<TopicReadStateUpdate>()
+
+        source.publish(TopicReadStateUpdate(topicId = 1, unseen = false, unreadPosts = 2))
+        val unsubscribeFirst = source.subscribe { receivedFirst += it }
+        source.subscribe { receivedSecond += it }
+
+        source.publish(TopicReadStateUpdate(topicId = 1, unseen = false, unreadPosts = 0))
+        unsubscribeFirst()
+        source.publish(TopicReadStateUpdate(topicId = 1, unseen = false, unreadPosts = 0))
+
+        // 首个订阅者先吃到当前值，再吃到一次发布，退订后不再收。
+        assertEquals(2, receivedFirst.size)
+        // 后来的订阅者同样先吃到当前值重放，再吃到两次发布（退订只作用于第一个订阅者）。
+        assertEquals(3, receivedSecond.size)
+        assertEquals(0, source.current()?.unreadPosts)
     }
 }
 
