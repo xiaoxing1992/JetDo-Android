@@ -1,5 +1,7 @@
 package com.arkdo.android.services.content
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -80,7 +82,7 @@ object AttachmentOpener {
             setDataAndType(uri, mimeType)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        if (launch(context, Intent.createChooser(view, "打开方式"))) return true
+        if (launch(context, Intent.createChooser(view, AppContextHolder.getString(R.string.common_open_with)))) return true
         return share(context, file, mimeType)
     }
 
@@ -92,7 +94,7 @@ object AttachmentOpener {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        return launch(context, Intent.createChooser(send, "分享文件"))
+        return launch(context, Intent.createChooser(send, AppContextHolder.getString(R.string.common_share_file)))
     }
 
     /**

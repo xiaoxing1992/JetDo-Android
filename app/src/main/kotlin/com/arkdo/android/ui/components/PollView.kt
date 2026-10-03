@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -207,7 +209,7 @@ private fun ResultsList(poll: Poll) {
                         modifier = Modifier.weight(1f)
                     )
                     Text("$percent%", fontSize = 14.sp, color = colors.textSecondary)
-                    Text(" · ${option.votes} 票", fontSize = 13.sp, color = colors.textSecondary)
+                    Text(stringResource(R.string.poll_option_votes, option.votes), fontSize = 13.sp, color = colors.textSecondary)
                 }
                 // 进度条:灰底 + 按占比宽度的填充(已投项高亮蓝)。
                 Box(
@@ -252,7 +254,7 @@ private fun InfoRow(isPublic: Boolean, voters: Int) {
             FaIcon("eye", colors.textSecondary, 15.dp)
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (isPublic) "投票为公开。" else "投票为保密。",
+                text = if (isPublic) stringResource(R.string.poll_public) else stringResource(R.string.poll_secret),
                 fontSize = 14.sp,
                 color = colors.textSecondary
             )
@@ -264,7 +266,7 @@ private fun InfoRow(isPublic: Boolean, voters: Int) {
                 .background(colors.border)
         )
         Text(
-            text = "$voters 投票人",
+            text = stringResource(R.string.poll_voters, voters),
             fontSize = 14.sp,
             color = colors.textSecondary,
             modifier = Modifier
@@ -293,14 +295,14 @@ private fun ButtonsRow(
         val resultsVisible = canSeeResults(poll)
 
         if (resultsVisible) {
-            PollButton(iconId = "chart-bar", label = "结果", flexible = false, onClick = onShowResults)
+            PollButton(iconId = "chart-bar", label = stringResource(R.string.common_results), flexible = false, onClick = onShowResults)
         }
         when {
             voted -> {
                 if (resultsVisible) Spacer(Modifier.width(10.dp))
                 PollButton(
                     iconId = "arrow-rotate-left",
-                    label = "撤消投票",
+                    label = stringResource(R.string.poll_undo_vote),
                     flexible = true,
                     onClick = onRemove
                 )
@@ -308,7 +310,7 @@ private fun ButtonsRow(
 
             isMultiple(poll) && pending.isNotEmpty() -> {
                 Spacer(Modifier.width(10.dp))
-                PollButton(iconId = "check", label = "投票", flexible = true, onClick = onCommitMultiple)
+                PollButton(iconId = "check", label = stringResource(R.string.poll_title), flexible = true, onClick = onCommitMultiple)
             }
         }
     }
@@ -333,10 +335,10 @@ private fun ResultsFooter(voters: Int, onBack: () -> Unit) {
         ) {
             FaIcon("angle-left", colors.textSecondary, 16.dp)
             Spacer(Modifier.width(6.dp))
-            Text("返回", fontSize = 14.sp, color = colors.textSecondary)
+            Text(stringResource(R.string.common_back), fontSize = 14.sp, color = colors.textSecondary)
         }
         Spacer(Modifier.weight(1f))
-        Text("$voters 投票人", fontSize = 14.sp, color = colors.textSecondary)
+        Text(stringResource(R.string.poll_voters, voters), fontSize = 14.sp, color = colors.textSecondary)
     }
 }
 

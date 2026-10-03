@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="announce_topics_suffix">new or updated topics</string>
+    <string name="common_close">Close</string>
+    <string name="common_filter">Filter</string>
+    <string name="common_load_failed_network">Failed to load, check your network and retry</string>
+    <string name="common_loading_more">Loading more</string>
+    <string name="common_no_more">No more</string>
+    <string name="common_no_topics">No topics yet</string>
+    <string name="common_pull_load_more">Pull up to load more</string>
+    <string name="common_reset">Reset</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_view">View</string>
+    <string name="common_view_results">View results</string>
+    <string name="composer_preparing">Preparing…</string>
+    <string name="debug_share_log">Share log</string>
+    <string name="detail_loading_title">Loading %1$s</string>
+    <string name="drawer_all_categories">All categories</string>
+    <string name="drawer_categories_failed">Failed to load categories</string>
+    <string name="drawer_category">Categories</string>
+    <string name="drawer_loading_categories">Loading categories…</string>
+    <string name="drawer_my_categories">My categories</string>
+    <string name="drawer_no_categories">No categories</string>
+    <string name="drawer_site_wide">Site-wide</string>
+    <string name="err_no_categories">The site returned no categories.</string>
+    <string name="home_load_failed_retry">Failed to load, tap to retry</string>
+    <string name="home_no_new_topics">No new topics yet, try again later</string>
+    <string name="home_notifications">Notifications</string>
+    <string name="profile_center">Profile center</string>
+    <string name="search_any_category">Any category</string>
+    <string name="search_any_tag">Any tag</string>
+    <string name="search_filtered_category">Filtered by category "%1$s"</string>
+    <string name="search_filtered_tag">Filtered by tag "%1$s"</string>
+    <string name="search_hot_tags">Hot tags</string>
+    <string name="search_my_tags">My tags</string>
+    <string name="search_no_tags">No matching tags</string>
+    <string name="search_no_tags_available">No tags available</string>
+    <string name="search_tag">Tag</string>
+    <string name="search_tags">Search tags</string>
+    <string name="search_title">Search</string>
+    <string name="user_login_to_view">Sign in to view this</string>
+</resources>

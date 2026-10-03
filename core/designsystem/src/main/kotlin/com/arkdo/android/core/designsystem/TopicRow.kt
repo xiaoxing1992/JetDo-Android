@@ -1,5 +1,7 @@
 package com.arkdo.android.core.designsystem
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.designsystem.R
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -583,6 +585,7 @@ fun parseTopicHexColor(value: String): Color? = runCatching {
     )
 }.getOrNull()
 
+@Composable
 private fun relativeTime(iso: String?): String {
     if (iso.isNullOrBlank()) return ""
     val match = Regex("^(\\d{4})-(\\d{2})-(\\d{2})[T ](\\d{2}):(\\d{2}):(\\d{2})").find(iso)
@@ -602,20 +605,20 @@ private fun relativeTime(iso: String?): String {
         .toLong()
         .coerceAtLeast(0)
     return when {
-        minutes < 1 -> "刚刚"
-        minutes <= 44 -> "$minutes 分钟"
-        minutes <= 89 -> "1 小时"
-        minutes <= 1_409 -> "${round(minutes / 60.0).toLong()} 小时"
-        minutes <= 2_519 -> "1 天"
-        minutes <= 20_160 -> "${round(minutes / 1_440.0).toLong()} 天"
+        minutes < 1 -> stringResource(R.string.relative_just_now)
+        minutes <= 44 -> stringResource(R.string.relative_minutes, minutes)
+        minutes <= 89 -> stringResource(R.string.relative_one_hour)
+        minutes <= 1_409 -> stringResource(R.string.relative_hours, round(minutes / 60.0).toLong())
+        minutes <= 2_519 -> stringResource(R.string.relative_one_day)
+        minutes <= 20_160 -> stringResource(R.string.relative_days, round(minutes / 1_440.0).toLong())
         else -> {
             val year = match.groupValues[1].toInt()
             val month = match.groupValues[2].toInt()
             val day = match.groupValues[3].toInt()
             if (year == Calendar.getInstance().get(Calendar.YEAR)) {
-                "${month}月${day}日"
+                stringResource(R.string.relative_month_day, month, day)
             } else {
-                "${year}年${month}月${day}日"
+                stringResource(R.string.relative_full_date, year, month, day)
             }
         }
     }

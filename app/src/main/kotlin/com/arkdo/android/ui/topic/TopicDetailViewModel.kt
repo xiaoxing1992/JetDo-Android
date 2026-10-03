@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.topic
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
@@ -86,7 +88,8 @@ private const val POSTS_PAGE_SIZE = 20
 private const val TARGET_FLASH_MS = 3000L
 
 /** 作者软删除后站点回的中文占位（响应没带 cooked 时本地兜底）。 */
-private const val DELETED_BY_AUTHOR_HTML = "<p>(帖子已被作者删除)</p>"
+private val DELETED_BY_AUTHOR_HTML: String
+    get() = AppContextHolder.getString(R.string.detail_post_deleted_html)
 
 /** 回帖/编辑草稿的自动保存防抖，对齐鸿蒙 TopicDetailPage 的 REPLY_DRAFT_SAVE_DEBOUNCE_MS（2 秒）。 */
 private const val REPLY_DRAFT_SAVE_DEBOUNCE_MS = 2000L
@@ -314,7 +317,7 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = result.error?.message ?: "加载失败"
+                        error = result.error?.message ?: appContext.getString(R.string.common_load_failed)
                     )
                 }
             }
@@ -390,7 +393,7 @@ class TopicDetailViewModel @Inject constructor(
                     _uiState.value.flashTargetPostId?.let(::armTargetFlash)
                 }
             } else {
-                _uiState.update { it.copy(actionMessage = "楼层定位失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.detail_jump_failed)) }
             }
         }
     }
@@ -405,12 +408,12 @@ class TopicDetailViewModel @Inject constructor(
         val stream = topic.postStream?.stream ?: emptyList()
         val nextIds = PostStreamPager.collectNextIds(stream, dataSource.posts, POSTS_PAGE_SIZE)
         if (nextIds.isEmpty()) {
-            _uiState.update { it.copy(hasMore = false, loadMoreMessage = "没有更多了") }
+            _uiState.update { it.copy(hasMore = false, loadMoreMessage = appContext.getString(R.string.common_no_more)) }
             return
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingMore = true, loadMoreMessage = "正在加载更多") }
+            _uiState.update { it.copy(isLoadingMore = true, loadMoreMessage = appContext.getString(R.string.common_loading_more)) }
             val result = topicService.loadMorePosts(topic.id, nextIds)
 
             if (result.success && result.data != null) {
@@ -422,14 +425,14 @@ class TopicDetailViewModel @Inject constructor(
                         hasMore = PostStreamPager.countLater(stream, dataSource.posts) > 0,
                         loadMoreMessage = if (
                             PostStreamPager.countLater(stream, dataSource.posts) > 0
-                        ) "上拉加载更多" else "没有更多了"
+                        ) appContext.getString(R.string.common_pull_load_more) else appContext.getString(R.string.common_no_more)
                     )
                 }
             } else {
                 _uiState.update {
                     it.copy(
                         isLoadingMore = false,
-                        loadMoreMessage = "加载更多失败，上拉重试"
+                        loadMoreMessage = appContext.getString(R.string.common_load_more_failed)
                     )
                 }
             }
@@ -566,7 +569,7 @@ class TopicDetailViewModel @Inject constructor(
             _uiState.update {
                 it.reactionSheet?.let { s ->
                     if (!result.success || result.data == null) {
-                        val message = result.error?.message ?: "加载表情回应失败，请稍后重试。"
+                        val message = result.error?.message ?: appContext.getString(R.string.detail_reactions_load_failed)
                         it.copy(
                             reactionSheet = if (reset) {
                                 s.copy(initialLoading = false, initialError = message)
@@ -629,7 +632,7 @@ class TopicDetailViewModel @Inject constructor(
             } else {
                 // 回滚。
                 replacePollLocally(post.id, pollName) { PollMutation.restore(it, snapshot) }
-                _uiState.update { it.copy(actionMessage = "投票失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.poll_vote_failed)) }
             }
         }
     }
@@ -649,7 +652,7 @@ class TopicDetailViewModel @Inject constructor(
                 replacePollLocally(post.id, pollName) { PollMutation.applyServerResult(it, server) }
             } else {
                 replacePollLocally(post.id, pollName) { PollMutation.restore(it, snapshot) }
-                _uiState.update { it.copy(actionMessage = "撤销投票失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.poll_undo_failed)) }
             }
         }
     }
@@ -793,7 +796,7 @@ class TopicDetailViewModel @Inject constructor(
                 it.copy(
                     editingPostId = editPostId,
                     editingOriginalRaw = original,
-                    composerPlaceholder = "编辑这条回复",
+                    composerPlaceholder = appContext.getString(R.string.detail_edit_reply),
                     composerVisible = true,
                     pendingReplyText = draft.reply
                 )
@@ -804,7 +807,7 @@ class TopicDetailViewModel @Inject constructor(
         val lotteryOnResume = showsLotteryNotice()
         _uiState.update {
             it.copy(
-                composerPlaceholder = if (lotteryOnResume) LOTTERY_REPLY_PLACEHOLDER else "回复当前话题",
+                composerPlaceholder = if (lotteryOnResume) LOTTERY_REPLY_PLACEHOLDER else appContext.getString(R.string.detail_reply_to_topic),
                 composerHint = if (lotteryOnResume) LOTTERY_REPLY_HINT else "",
                 composerReplyToPostNumber = null,
                 composerVisible = true,
@@ -842,7 +845,7 @@ class TopicDetailViewModel @Inject constructor(
         val lottery = showsLotteryNotice()
         _uiState.update {
             it.copy(
-                composerPlaceholder = if (lottery) LOTTERY_REPLY_PLACEHOLDER else "回复当前话题",
+                composerPlaceholder = if (lottery) LOTTERY_REPLY_PLACEHOLDER else appContext.getString(R.string.detail_reply_to_topic),
                 composerHint = if (lottery) LOTTERY_REPLY_HINT else "",
                 composerReplyToPostNumber = null,
                 composerVisible = true
@@ -858,10 +861,10 @@ class TopicDetailViewModel @Inject constructor(
         resetComposerModes()
         val authorName = post.name?.takeIf { it.isNotBlank() }
             ?: post.username?.takeIf { it.isNotBlank() }
-            ?: "该用户"
+            ?: appContext.getString(R.string.user_this_user)
         _uiState.update {
             it.copy(
-                composerPlaceholder = "回复$authorName",
+                composerPlaceholder = appContext.getString(R.string.detail_reply_to_user, authorName),
                 composerReplyToPostNumber = post.postNumber,
                 composerVisible = true
             )
@@ -894,7 +897,7 @@ class TopicDetailViewModel @Inject constructor(
         resetComposerModes()
         _uiState.update {
             it.copy(
-                composerPlaceholder = "发一个 boost...",
+                composerPlaceholder = appContext.getString(R.string.detail_boost_hint),
                 boostTargetPostId = post.id,
                 composerVisible = true
             )
@@ -919,7 +922,7 @@ class TopicDetailViewModel @Inject constructor(
             val result = topicService.getPostRaw(post.id)
             _uiState.update { it.copy(editLoadingPostId = 0L) }
             if (!result.success || result.data == null) {
-                _uiState.update { it.copy(actionMessage = "读取原文失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.detail_read_raw_failed)) }
                 return@launch
             }
             resetComposerModes()
@@ -927,7 +930,7 @@ class TopicDetailViewModel @Inject constructor(
                 it.copy(
                     editingPostId = post.id,
                     editingOriginalRaw = result.data,
-                    composerPlaceholder = "编辑这条回复",
+                    composerPlaceholder = appContext.getString(R.string.detail_edit_reply),
                     composerVisible = true,
                     pendingReplyText = result.data
                 )
@@ -959,15 +962,15 @@ class TopicDetailViewModel @Inject constructor(
                         pendingReplyText = "",
                         editingPostId = 0L,
                         editingOriginalRaw = "",
-                        actionMessage = "已保存"
+                        actionMessage = appContext.getString(R.string.common_saved)
                     )
                 }
                 done(true)
             } else if (result.statusCode == 409) {
-                _uiState.update { it.copy(actionMessage = "这条回复已被改动，请重新打开编辑") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.detail_reply_changed)) }
                 done(false)
             } else {
-                _uiState.update { it.copy(actionMessage = "保存失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.common_save_failed2)) }
                 done(false)
             }
         }
@@ -1009,7 +1012,7 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
                 done(true)
             } else {
-                _uiState.update { it.copy(actionMessage = "删除失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.common_delete_failed2)) }
                 done(false)
             }
         }
@@ -1035,7 +1038,7 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
                 done(true)
             } else {
-                _uiState.update { it.copy(actionMessage = "恢复失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.common_restore_failed)) }
                 done(false)
             }
         }
@@ -1080,12 +1083,12 @@ class TopicDetailViewModel @Inject constructor(
                         boostTargetPostId = 0L,
                         pendingReplyText = "",
                         posts = dataSource.snapshotPosts,
-                        actionMessage = "Boost 已发送"
+                        actionMessage = appContext.getString(R.string.detail_boost_sent)
                     )
                 }
                 done(true)
             } else {
-                _uiState.update { it.copy(isSubmittingReply = false, actionMessage = "Boost 发送失败，请稍后重试") }
+                _uiState.update { it.copy(isSubmittingReply = false, actionMessage = appContext.getString(R.string.detail_boost_send_failed)) }
                 done(false)
             }
         }
@@ -1403,11 +1406,11 @@ class TopicDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         pendingPosts = it.pendingPosts.filterNot { p -> p.id == pending.id },
-                        actionMessage = "已删除"
+                        actionMessage = appContext.getString(R.string.common_deleted)
                     )
                 }
             } else {
-                _uiState.update { it.copy(actionMessage = "删除失败，请稍后重试") }
+                _uiState.update { it.copy(actionMessage = appContext.getString(R.string.common_delete_failed2)) }
             }
         }
     }
@@ -1436,7 +1439,7 @@ class TopicDetailViewModel @Inject constructor(
                             composerVisible = false,
                             pendingReplyText = "",
                             composerReplyToPostNumber = null,
-                            actionMessage = "评论已提交，等待审核",
+                            actionMessage = appContext.getString(R.string.detail_comment_pending),
                             // 服务端把待审快照(id/raw/created_at)随响应回带,乐观追加到底部待审区,
                             // 不等下次刷新 topic.json(对齐鸿蒙 TopicDetailPage:1394)。
                             pendingPosts = outcome.pendingPost?.let { p -> it.pendingPosts + p }
@@ -1454,17 +1457,17 @@ class TopicDetailViewModel @Inject constructor(
                             pendingReplyText = "",
                             composerReplyToPostNumber = null,
                             posts = dataSource.snapshotPosts,
-                            actionMessage = "评论已发表"
+                            actionMessage = appContext.getString(R.string.detail_comment_posted)
                         )
                     }
                 } else {
-                    _uiState.update { it.copy(isSubmittingReply = false, actionMessage = "发表失败，请稍后重试。") }
+                    _uiState.update { it.copy(isSubmittingReply = false, actionMessage = appContext.getString(R.string.composer_publish_failed)) }
                     done(false)
                     return@launch
                 }
                 done(true)
             } else {
-                val reason = result.error?.message ?: "发表失败，请稍后重试。"
+                val reason = result.error?.message ?: appContext.getString(R.string.composer_publish_failed)
                 _uiState.update { it.copy(isSubmittingReply = false, actionMessage = reason) }
                 done(false)
             }
@@ -1521,12 +1524,12 @@ class TopicDetailViewModel @Inject constructor(
                     it.copy(
                         boostDeleteTargetId = 0L,
                         boostDeleteLoadingId = 0L,
-                        actionMessage = "Boost 已删除"
+                        actionMessage = appContext.getString(R.string.detail_boost_deleted)
                     )
                 }
                 done(true)
             } else {
-                _uiState.update { it.copy(boostDeleteLoadingId = 0L, actionMessage = "Boost 删除失败，请稍后重试") }
+                _uiState.update { it.copy(boostDeleteLoadingId = 0L, actionMessage = appContext.getString(R.string.detail_boost_delete_failed)) }
                 done(false)
             }
         }
@@ -1663,7 +1666,7 @@ class TopicDetailViewModel @Inject constructor(
             state.copy(
                 posts = dataSource.snapshotPosts,
                 hasMore = laterCount > 0,
-                loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了",
+                loadMoreMessage = if (laterCount > 0) appContext.getString(R.string.common_pull_load_more) else appContext.getString(R.string.common_no_more),
                 // 在底部时新楼已在眼前，提示条不该再计数。
                 incomingNewPostCount = if (atEnd) 0 else state.incomingNewPostCount + added
             )
@@ -1729,7 +1732,7 @@ class TopicDetailViewModel @Inject constructor(
                 sharedIssueCount = detail.sharedIssueCount ?: 0,
                 sharedIssueCanCreate = detail.canCreateSharedIssue == true,
                 pendingPosts = detail.pendingPosts.orEmpty(),
-                loadMoreMessage = if (laterCount > 0) "上拉加载更多" else "没有更多了"
+                loadMoreMessage = if (laterCount > 0) appContext.getString(R.string.common_pull_load_more) else appContext.getString(R.string.common_no_more)
             )
         }
         // 诊断：确认服务端到底有没有下发「俺也一样」四要素与已读水位。
@@ -2004,7 +2007,7 @@ data class TopicDetailUiState(
     val composerVisible: Boolean = false,
     /** 是否展开成全屏编辑器（紧凑条与全屏编辑器共用同一份 pendingReplyText，切换不丢字）。 */
     val composerExpanded: Boolean = false,
-    val composerPlaceholder: String = "回复当前话题",
+    val composerPlaceholder: String = AppContextHolder.getString(R.string.detail_reply_to_topic),
     /** 回复浮层顶上的一行提醒(抽奖帖规则摘要,非抽奖为空;对齐鸿蒙 composerHint)。 */
     val composerHint: String = "",
     val composerReplyToPostNumber: Int? = null,

@@ -1,5 +1,7 @@
 package com.arkdo.android.feature.search
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.feature.search.R
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -108,7 +110,7 @@ internal fun SearchFilterPanel(
                     .height(48.dp)
             ) {
                 Text(
-                    text = "高级筛选",
+                    text = stringResource(R.string.common_advanced_filter),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
                     color = tokens.textPrimary,
@@ -141,7 +143,7 @@ internal fun SearchFilterPanel(
                         12.dp
                     )
                     Text(
-                        text = "重置",
+                        text = stringResource(R.string.common_reset),
                         fontSize = 13.sp,
                         color = if (hasAny) tokens.ldAccent else tokens.textFaint,
                         modifier = Modifier.padding(start = 5.dp)
@@ -162,7 +164,7 @@ internal fun SearchFilterPanel(
         ) {
             // ===== 分类:折叠树(摘要行 + 所有分类 + 顶层/子层,选中即收起) =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("分类", tokens)
+                SectionTitle(stringResource(R.string.search_category), tokens)
 
                 val chevronAngle by animateFloatAsState(
                     targetValue = if (categoryExpanded) 180f else 0f,
@@ -180,7 +182,7 @@ internal fun SearchFilterPanel(
                         .padding(horizontal = 12.dp)
                 ) {
                     Text(
-                        text = if (draft.categoryId >= 0) draft.categoryName else "所有分类",
+                        text = if (draft.categoryId >= 0) draft.categoryName else stringResource(R.string.search_all_categories),
                         fontSize = 15.sp,
                         color = if (draft.categoryId >= 0) tokens.textPrimary else tokens.textFaint,
                         maxLines = 1,
@@ -199,7 +201,7 @@ internal fun SearchFilterPanel(
                             .animateContentSize(tween(220, easing = FastOutSlowInEasing))
                     ) {
                         CategoryTreeRow(
-                            label = "所有分类",
+                            label = stringResource(R.string.search_all_categories),
                             selected = draft.categoryId < 0,
                             tokens = tokens,
                             contentPaddingStart = 12.dp,
@@ -267,13 +269,13 @@ internal fun SearchFilterPanel(
             // ===== 标签:联想搜索 + 已选 chip + 任一/全部 =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionTitle("标签", tokens, Modifier.weight(1f))
+                    SectionTitle(stringResource(R.string.search_tag), tokens, Modifier.weight(1f))
                     if (draft.tags.size > 1) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            MiniToggle("含任一", !draft.tagsMatchAll, tokens) {
+                            MiniToggle(stringResource(R.string.search_match_any), !draft.tagsMatchAll, tokens) {
                                 draft = draft.copy(tagsMatchAll = false)
                             }
-                            MiniToggle("全都含", draft.tagsMatchAll, tokens) {
+                            MiniToggle(stringResource(R.string.search_match_all), draft.tagsMatchAll, tokens) {
                                 draft = draft.copy(tagsMatchAll = true)
                             }
                         }
@@ -320,7 +322,7 @@ internal fun SearchFilterPanel(
                         decorationBox = { innerField ->
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (tagQuery.isEmpty()) {
-                                    Text("搜索标签", fontSize = 14.sp, color = tokens.textFaint, maxLines = 1)
+                                    Text(stringResource(R.string.search_tags), fontSize = 14.sp, color = tokens.textFaint, maxLines = 1)
                                 }
                                 innerField()
                             }
@@ -337,7 +339,7 @@ internal fun SearchFilterPanel(
 
                 if (tagSuggestions.isEmpty() && !isTagLoading) {
                     Text(
-                        text = if (tagQuery.trim().isNotEmpty()) "没有匹配的标签" else "暂无可选标签",
+                        text = if (tagQuery.trim().isNotEmpty()) stringResource(R.string.search_no_tags) else stringResource(R.string.search_no_tags_available),
                         fontSize = 13.sp,
                         color = tokens.textFaint,
                         textAlign = TextAlign.Center,
@@ -383,7 +385,7 @@ internal fun SearchFilterPanel(
 
             // ===== 发帖人:@ 是一个整 token,掐掉空白与前导 @ =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("发帖人", tokens)
+                SectionTitle(stringResource(R.string.detail_topic_author), tokens)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -409,7 +411,7 @@ internal fun SearchFilterPanel(
                         decorationBox = { innerField ->
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (draft.username.isEmpty()) {
-                                    Text("用户名", fontSize = 15.sp, color = tokens.textFaint, maxLines = 1)
+                                    Text(stringResource(R.string.login_username), fontSize = 15.sp, color = tokens.textFaint, maxLines = 1)
                                 }
                                 innerField()
                             }
@@ -420,7 +422,7 @@ internal fun SearchFilterPanel(
 
             // ===== 话题状态:单选,再点一次取消 =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("话题状态", tokens)
+                SectionTitle(stringResource(R.string.detail_topic_status), tokens)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -441,16 +443,16 @@ internal fun SearchFilterPanel(
 
             // ===== 发布时间:晚于/早于 + 日期选择 + 快捷区间(折算成绝对日期拼 after:) =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("发布时间", tokens)
+                SectionTitle(stringResource(R.string.sort_publish_time), tokens)
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    MiniToggle("晚于", draft.timeWhen == SearchFiltersOptions.TIME_AFTER, tokens) {
+                    MiniToggle(stringResource(R.string.search_after), draft.timeWhen == SearchFiltersOptions.TIME_AFTER, tokens) {
                         draft = draft.copy(timeWhen = SearchFiltersOptions.TIME_AFTER)
                     }
-                    MiniToggle("早于", draft.timeWhen == SearchFiltersOptions.TIME_BEFORE, tokens) {
+                    MiniToggle(stringResource(R.string.search_before), draft.timeWhen == SearchFiltersOptions.TIME_BEFORE, tokens) {
                         draft = draft.copy(timeWhen = SearchFiltersOptions.TIME_BEFORE)
                     }
 
@@ -467,7 +469,7 @@ internal fun SearchFilterPanel(
                     ) {
                         FaIcon("calendar-days", tokens.textFaint, 13.dp)
                         Text(
-                            text = draft.timeDate.ifEmpty { "选择日期" },
+                            text = draft.timeDate.ifEmpty { stringResource(R.string.search_pick_date) },
                             fontSize = 14.sp,
                             color = if (draft.timeDate.isNotEmpty()) tokens.textPrimary else tokens.textFaint,
                             maxLines = 1
@@ -513,7 +515,7 @@ internal fun SearchFilterPanel(
 
             // ===== 帖子数 / 浏览量:只收数字(服务端正则 \d+) =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("帖子数", tokens)
+                SectionTitle(stringResource(R.string.user_post_count), tokens)
                 RangeRow(
                     min = draft.minPosts,
                     max = draft.maxPosts,
@@ -521,7 +523,7 @@ internal fun SearchFilterPanel(
                     onMinChange = { draft = draft.copy(minPosts = it) },
                     onMaxChange = { draft = draft.copy(maxPosts = it) }
                 )
-                SectionTitle("浏览量", tokens)
+                SectionTitle(stringResource(R.string.user_view_count), tokens)
                 RangeRow(
                     min = draft.minViews,
                     max = draft.maxViews,
@@ -533,7 +535,7 @@ internal fun SearchFilterPanel(
 
             // ===== 搜索范围 / 与我相关(in: 与 with:) =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("搜索范围", tokens)
+                SectionTitle(stringResource(R.string.search_scope), tokens)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -549,7 +551,7 @@ internal fun SearchFilterPanel(
                     }
                 }
 
-                SectionTitle("与我相关", tokens)
+                SectionTitle(stringResource(R.string.drawer_about_me), tokens)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -566,7 +568,7 @@ internal fun SearchFilterPanel(
                 }
 
                 Text(
-                    text = "「与我相关」需要登录后才有结果。",
+                    text = stringResource(R.string.drawer_about_me_login),
                     fontSize = 12.sp,
                     color = tokens.textFaint
                 )
@@ -574,7 +576,7 @@ internal fun SearchFilterPanel(
 
             // ===== 排序:空值 = 相关性(不拼 order token) =====
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("排序", tokens)
+                SectionTitle(stringResource(R.string.common_sort), tokens)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -608,7 +610,7 @@ internal fun SearchFilterPanel(
                     .background(tokens.surfaceMuted)
                     .clickable(onClick = onDismiss)
             ) {
-                Text(text = "取消", fontSize = 15.sp, color = tokens.textSecondary)
+                Text(text = stringResource(R.string.common_cancel), fontSize = 15.sp, color = tokens.textSecondary)
             }
             Box(
                 contentAlignment = Alignment.Center,
@@ -621,7 +623,7 @@ internal fun SearchFilterPanel(
             ) {
                 val count = draft.activeCount()
                 Text(
-                    text = if (count > 0) "应用 ($count)" else "应用",
+                    text = if (count > 0) stringResource(R.string.filter_apply_count, count) else stringResource(R.string.settings_application),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White
@@ -662,10 +664,10 @@ internal fun SearchFilterPanel(
                         draft = draft.copy(timeDate = SearchFiltersOptions.formatSearchDate(cal))
                     }
                     showDatePicker = false
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.common_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+                TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.common_cancel)) }
             }
         ) {
             DatePicker(state = pickerState)
@@ -902,9 +904,9 @@ private fun RangeRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        NumberField(value = min, placeholder = "最小值", tokens = tokens, onValue = onMinChange, modifier = Modifier.weight(1f))
+        NumberField(value = min, placeholder = stringResource(R.string.range_min), tokens = tokens, onValue = onMinChange, modifier = Modifier.weight(1f))
         Text(text = "—", fontSize = 13.sp, color = tokens.textFaint)
-        NumberField(value = max, placeholder = "最大值", tokens = tokens, onValue = onMaxChange, modifier = Modifier.weight(1f))
+        NumberField(value = max, placeholder = stringResource(R.string.range_max), tokens = tokens, onValue = onMaxChange, modifier = Modifier.weight(1f))
     }
 }
 

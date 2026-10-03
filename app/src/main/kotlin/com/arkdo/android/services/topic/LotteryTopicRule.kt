@@ -1,5 +1,8 @@
 package com.arkdo.android.services.topic
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.TopicTag
 
 // 抽奖帖提醒的判定与文案。抽成纯函数模块(不碰 UI、不碰存储)是为了能单测:
@@ -17,16 +20,16 @@ const val LOTTERY_RULES_TOPIC_URL: String = "https://linux.do/t/topic/$LOTTERY_R
 // 「高级推广」标签(slug 1514-tag)。高级推广帖里的抽奖不受该规则约束,命中即不提示——
 // 排除判定优先于命中判定,两个标签同时挂着时高级推广赢。
 private const val PROMOTION_TAG_ID: Long = 1514L
-private const val PROMOTION_TAG_NAME: String = "高级推广"
+private val PROMOTION_TAG_NAME: String get() = AppContextHolder.getString(R.string.badge_promoter)
 
 // 抽奖标签按「包含」匹配而非全等,顺带覆盖「抽奖活动」这类变体。
-private const val LOTTERY_TAG_KEYWORD: String = "抽奖"
+private val LOTTERY_TAG_KEYWORD: String get() = AppContextHolder.getString(R.string.lottery_title)
 
 // 回复框占位文字:顶层回复(参与抽奖的那条)才替换,定向回复某楼仍显示「回复<昵称>」。
-const val LOTTERY_REPLY_PLACEHOLDER: String = "说说你为什么需要这个奖品…"
+val LOTTERY_REPLY_PLACEHOLDER: String get() = AppContextHolder.getString(R.string.lottery_hint)
 
 // 回复浮层顶上的一行提醒。只提示不拦截——拦截会误伤正常回复,而这行字抬眼就能看见。
-const val LOTTERY_REPLY_HINT: String = "抽奖帖：凑字数、复读、与奖品无关的回复被举报会被永久禁言"
+val LOTTERY_REPLY_HINT: String get() = AppContextHolder.getString(R.string.lottery_rule2)
 
 /** 抽奖提醒的展示前提(开关由调用方另判,这里只管帖子本身)。 */
 data class LotteryNoticeContext(

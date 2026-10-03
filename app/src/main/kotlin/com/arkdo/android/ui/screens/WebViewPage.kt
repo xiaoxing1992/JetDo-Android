@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.content.ClipData
 import android.content.Context
 import android.os.Build
@@ -151,7 +153,7 @@ private fun BrowserLoadingPane(progress: Int) {
             )
         }
         Text(
-            text = "正在加载",
+            text = stringResource(R.string.common_loading),
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 18.dp)
@@ -215,7 +217,7 @@ fun WebViewPage(
             android.widget.Toast.makeText(context, okMessage, android.widget.Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Timber.i("$LOG_TAG copy link failed ${e.message}")
-            android.widget.Toast.makeText(context, "复制失败", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, context.getString(R.string.debug_copy_failed), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -237,7 +239,7 @@ fun WebViewPage(
     fun openInBrowser() {
         val link = currentUrl()
         if (!isBrowsable(link)) {
-            android.widget.Toast.makeText(context, "当前页面地址无法用浏览器打开", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, context.getString(R.string.common_cannot_open_in_browser), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         try {
@@ -245,7 +247,7 @@ fun WebViewPage(
             context.startActivity(intent)
         } catch (e: Exception) {
             Timber.i("$LOG_TAG open in browser failed ${e.message}")
-            copyToClipboard(link, "未找到可用浏览器,链接已复制")
+            copyToClipboard(link, context.getString(R.string.media_no_browser))
         }
     }
 
@@ -283,7 +285,7 @@ fun WebViewPage(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -304,19 +306,19 @@ fun WebViewPage(
             }
             Box {
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more))
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(
-                        text = { Text("刷新") },
+                        text = { Text(stringResource(R.string.common_refresh)) },
                         onClick = { showMenu = false; reload() }
                     )
                     DropdownMenuItem(
-                        text = { Text("复制链接") },
-                        onClick = { showMenu = false; copyToClipboard(currentUrl(), "链接已复制") }
+                        text = { Text(stringResource(R.string.common_copy_link)) },
+                        onClick = { showMenu = false; copyToClipboard(currentUrl(), context.getString(R.string.common_link_copied_toast)) }
                     )
                     DropdownMenuItem(
-                        text = { Text("用浏览器打开") },
+                        text = { Text(stringResource(R.string.common_open_in_browser)) },
                         onClick = { showMenu = false; openInBrowser() }
                     )
                 }
@@ -437,7 +439,7 @@ fun WebViewPage(
                         .background(arkdoColors.topicDetailPageBg),
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text("无法打开此页面", fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                    Text(stringResource(R.string.challenge_page_unavailable), fontSize = 17.sp, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface)
                     Text(
                         text = hostOf(currentUrl()),
@@ -448,7 +450,7 @@ fun WebViewPage(
                         modifier = Modifier.padding(top = 4.dp)
                     )
                     Text(
-                        text = "若站点被封锁或需要代理,可以试试用系统浏览器打开。",
+                        text = stringResource(R.string.media_browser_fallback_hint),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -466,7 +468,7 @@ fun WebViewPage(
                                 .clickable(onClick = { reload() })
                                 .padding(horizontal = 28.dp, vertical = 10.dp)
                         ) {
-                            Text("重试", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                            Text(stringResource(R.string.common_retry), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
                         }
                         // 用浏览器打开
                         Box(
@@ -476,7 +478,7 @@ fun WebViewPage(
                                 .clickable(onClick = { openInBrowser() })
                                 .padding(horizontal = 20.dp, vertical = 10.dp)
                         ) {
-                            Text("用浏览器打开", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(stringResource(R.string.common_open_in_browser), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                     if (errorDetail.isNotEmpty()) {

@@ -1,5 +1,8 @@
 package com.arkdo.android.services.network
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.common.constants.AppConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,13 +54,13 @@ object DohSpeedTester {
     /** 多次采样取成功样本的最小值；第一次（含 TLS 握手）不计入。 */
     suspend fun test(url: String): DohTestResult = withContext(Dispatchers.IO) {
         if (!url.startsWith("https://")) {
-            return@withContext DohTestResult(false, -1, "地址无效")
+            return@withContext DohTestResult(false, -1, AppContextHolder.getString(R.string.doh_invalid_address))
         }
         val query = buildQueryParam(probeDomain())
         val requestUrl = if (url.contains("?")) "$url&dns=$query" else "$url?dns=$query"
 
         val latencies = mutableListOf<Int>()
-        var lastMessage = "请求失败"
+        var lastMessage = AppContextHolder.getString(R.string.common_request_failed)
         repeat(SAMPLE_COUNT) { index ->
             val sample = probeOnce(requestUrl)
             if (sample.ok) {
@@ -71,7 +74,7 @@ object DohSpeedTester {
         if (latencies.isEmpty()) {
             return@withContext DohTestResult(false, -1, lastMessage)
         }
-        DohTestResult(ok = true, latencyMs = latencies.minOrNull() ?: -1, message = "解析正常")
+        DohTestResult(ok = true, latencyMs = latencies.minOrNull() ?: -1, message = AppContextHolder.getString(R.string.doh_ok))
     }
 
     /** 单次探测：发 wireformat GET，校验 200 + 应答确有解析结果。 */
@@ -90,14 +93,14 @@ object DohSpeedTester {
                 }
                 val bytes = response.body.bytes()
                 if (answerCount(bytes) <= 0) {
-                    return DohTestResult(false, -1, "无解析结果")
+                    return DohTestResult(false, -1, AppContextHolder.getString(R.string.doh_no_result))
                 }
-                DohTestResult(true, elapsed, "解析正常")
+                DohTestResult(true, elapsed, AppContextHolder.getString(R.string.doh_ok))
             }
         } catch (e: Exception) {
             Timber.i(e, "%s probe failed", TAG)
             // 超时 / DNS 失败 / TLS 失败统一归为「超时/不可达」，对用户是同一件事。
-            DohTestResult(false, -1, "超时/不可达")
+            DohTestResult(false, -1, AppContextHolder.getString(R.string.doh_unreachable))
         }
     }
 

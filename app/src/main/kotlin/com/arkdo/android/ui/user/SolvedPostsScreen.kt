@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.user
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,7 +71,7 @@ fun SolvedPostsScreen(
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val success = if (isArkdoInDarkTheme()) Color(0xFF4CAF50) else Color(0xFF009900)
-    val title = if (solvedCount > 0) "解决方案 · $solvedCount" else "解决方案"
+    val title = if (solvedCount > 0) stringResource(R.string.drawer_solutions_count, solvedCount) else stringResource(R.string.detail_solution)
 
     LaunchedEffect(username) {
         viewModel.loadInitial(username)
@@ -89,7 +91,7 @@ fun SolvedPostsScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = arkdoColors.textPrimary)
         }
@@ -99,16 +101,16 @@ fun SolvedPostsScreen(
         when {
             state.items.isEmpty() && state.initialLoading -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("加载中…", fontSize = 14.sp, color = arkdoColors.textSecondary)
+                    Text(stringResource(R.string.common_loading_ellipsis), fontSize = 14.sp, color = arkdoColors.textSecondary)
                 }
             }
             state.items.isEmpty() && state.error != null -> {
-                val err = state.error ?: "加载失败，请重试"
+                val err = state.error ?: stringResource(R.string.home_load_failed_retry)
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(err, color = arkdoColors.textSecondary)
                         Text(
-                            "重试",
+                            stringResource(R.string.common_retry),
                             color = arkdoColors.ldAccent,
                             modifier = Modifier
                                 .padding(top = 12.dp)
@@ -119,7 +121,7 @@ fun SolvedPostsScreen(
             }
             state.items.isEmpty() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("还没有被采纳的答案", color = arkdoColors.textTertiary)
+                    Text(stringResource(R.string.user_no_solutions), color = arkdoColors.textTertiary)
                 }
             }
             else -> {
@@ -157,7 +159,7 @@ fun SolvedPostsScreen(
                                         color = arkdoColors.ldAccent,
                                         strokeWidth = 2.dp
                                     )
-                                    !state.hasMore -> Text("没有更多了", fontSize = 13.sp, color = arkdoColors.textFaint)
+                                    !state.hasMore -> Text(stringResource(R.string.common_no_more), fontSize = 13.sp, color = arkdoColors.textFaint)
                                     else -> {}
                                 }
                             }

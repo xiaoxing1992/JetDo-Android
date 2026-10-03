@@ -2,6 +2,8 @@
 
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.net.Uri
@@ -463,14 +465,14 @@ fun ImageViewer(
                     exporting = true
                     val bitmap = currentBitmap()
                     if (bitmap == null) {
-                        Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.common_share_failed), Toast.LENGTH_SHORT).show()
                         exporting = false
                         return@launch
                     }
                     shareImage(bitmap) { uri ->
                         exporting = false
                         if (uri == null) {
-                            Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.common_share_failed), Toast.LENGTH_SHORT).show()
                             return@shareImage
                         }
                         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -478,7 +480,7 @@ fun ImageViewer(
                             putExtra(android.content.Intent.EXTRA_STREAM, uri)
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        context.startActivity(android.content.Intent.createChooser(intent, "分享图片"))
+                        context.startActivity(android.content.Intent.createChooser(intent, context.getString(R.string.common_share_image)))
                     }
                 }
             }) {
@@ -502,12 +504,12 @@ fun ImageViewer(
                     .navigationBarsPadding()
             ) {
                 Spacer(modifier = Modifier.height(8.dp))
-                ViewerMenuAction(iconId = "download", label = "保存图片", enabled = !exporting) {
+                ViewerMenuAction(iconId = "download", label = stringResource(R.string.common_save_image), enabled = !exporting) {
                     scope.launch {
                         exporting = true
                         val bitmap = currentBitmap()
                         if (bitmap == null) {
-                            Toast.makeText(context, "保存失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.common_save_failed), Toast.LENGTH_SHORT).show()
                             exporting = false
                             return@launch
                         }
@@ -515,18 +517,18 @@ fun ImageViewer(
                             exporting = false
                             Toast.makeText(
                                 context,
-                                if (ok) "已保存到相册" else "保存失败,请稍后重试",
+                                if (ok) context.getString(R.string.common_saved_to_gallery) else context.getString(R.string.common_save_failed),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
                 }
-                ViewerMenuAction(iconId = "share-nodes", label = "分享图片", enabled = !exporting) {
+                ViewerMenuAction(iconId = "share-nodes", label = stringResource(R.string.common_share_image), enabled = !exporting) {
                     scope.launch {
                         exporting = true
                         val bitmap = currentBitmap()
                         if (bitmap == null) {
-                            Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.common_share_failed), Toast.LENGTH_SHORT).show()
                             exporting = false
                             return@launch
                         }
@@ -534,7 +536,7 @@ fun ImageViewer(
                             exporting = false
                             showMenu = false
                             if (uri == null) {
-                                Toast.makeText(context, "分享失败,请稍后重试", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.common_share_failed), Toast.LENGTH_SHORT).show()
                                 return@shareImage
                             }
                             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -542,17 +544,17 @@ fun ImageViewer(
                                 putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            context.startActivity(android.content.Intent.createChooser(intent, "分享图片"))
+                            context.startActivity(android.content.Intent.createChooser(intent, context.getString(R.string.common_share_image)))
                         }
                     }
                 }
-                ViewerMenuAction(iconId = "link", label = "拷贝链接", enabled = true) {
+                ViewerMenuAction(iconId = "link", label = stringResource(R.string.common_copy_link_alt), enabled = true) {
                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                         as android.content.ClipboardManager
                     clipboard.setPrimaryClip(
                         android.content.ClipData.newPlainText("arkdo-image", resolveUrl(currentIndex))
                     )
-                    Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.common_link_copied_toast), Toast.LENGTH_SHORT).show()
                     showMenu = false
                 }
                 Spacer(modifier = Modifier.height(12.dp))

@@ -1,5 +1,8 @@
 package com.arkdo.android.services.topic
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.*
 import com.arkdo.android.services.network.ChallengeState
@@ -245,7 +248,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 帖子列表响应为空。"
+                AppContextHolder.getString(R.string.err_topic_list_empty)
             )
         }
 
@@ -260,7 +263,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 return NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "Linux.do 帖子列表响应缺少 topic_list.topics。"
+                    AppContextHolder.getString(R.string.err_topic_list_missing)
                 )
             }
 
@@ -285,7 +288,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 帖子列表响应不是有效 JSON: ${e.message}"
+                AppContextHolder.getString(R.string.err_topic_list_json_msg, e.message)
             )
         }
     }
@@ -318,7 +321,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 帖子详情响应为空。"
+                AppContextHolder.getString(R.string.err_topic_detail_empty)
             )
         }
 
@@ -329,7 +332,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 return NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "Linux.do 帖子详情响应缺少必要字段。"
+                    AppContextHolder.getString(R.string.err_topic_detail_missing)
                 )
             }
 
@@ -345,7 +348,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 帖子详情响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_topic_detail_json)
             )
         }
     }
@@ -361,7 +364,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
         val data = response.data ?: return NetworkResults.unexpectedResponse(
             response.statusCode,
             response.challengeState,
-            "Linux.do 被回复列表响应为空。"
+            AppContextHolder.getString(R.string.err_replied_to_empty)
         )
         return try {
             val payload = json.decodeFromString<List<DiscoursePost>>(data)
@@ -376,7 +379,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 被回复列表响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_replied_to_json)
             )
         }
     }
@@ -407,7 +410,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 加载更多楼层响应为空。"
+                AppContextHolder.getString(R.string.err_posts_more_empty)
             )
         }
 
@@ -424,7 +427,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 加载更多楼层响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_posts_more_json)
             )
         }
     }
@@ -449,7 +452,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 添加书签响应为空。"
+                AppContextHolder.getString(R.string.err_bookmark_add_empty)
             )
         }
 
@@ -459,7 +462,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 return NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "Linux.do 添加书签响应缺少 id。"
+                    AppContextHolder.getString(R.string.err_bookmark_add_missing_id)
                 )
             }
             NetworkResult(
@@ -472,7 +475,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 添加书签响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_bookmark_add_json)
             )
         }
     }
@@ -562,7 +565,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
         val data = response.data ?: return NetworkResults.unexpectedResponse(
             response.statusCode,
             response.challengeState,
-            "站点表情用户列表响应为空。"
+            AppContextHolder.getString(R.string.err_reaction_users_empty)
         )
         return try {
             // 服务端返回的是扁平结构 {id, username, ..., reaction}(对齐鸿蒙 DiscourseReactionUser),
@@ -583,7 +586,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点表情用户列表响应格式异常。"
+                AppContextHolder.getString(R.string.err_reaction_users_malformed)
             )
         }
     }
@@ -644,7 +647,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse<SharedIssueResult>(
                 response.statusCode,
                 response.challengeState,
-                "站点\"俺也一样\"响应为空。"
+                AppContextHolder.getString(R.string.err_same_here_empty)
             )
         return try {
             // SharedIssueResult 的 @SerialName 已对齐响应字段（user_created_shared_issue / count），
@@ -660,7 +663,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点\"俺也一样\"响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_same_here_json)
             )
         }
     }
@@ -722,7 +725,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点投票响应为空。"
+                AppContextHolder.getString(R.string.err_poll_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscoursePollVoteResponse>(data)
@@ -730,7 +733,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 ?: return NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "站点投票响应缺少 poll。"
+                    AppContextHolder.getString(R.string.err_poll_missing)
                 )
             NetworkResult(
                 success = true,
@@ -747,7 +750,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点投票响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_poll_json)
             )
         }
     }
@@ -792,7 +795,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
      */
     suspend fun getPostByNumber(topicId: Long, postNumber: Int): NetworkResult<String> {
         if (topicId <= 0L || postNumber <= 0) {
-            return NetworkResults.unexpectedResponse(0, ChallengeState.NONE, "楼层定位参数无效。")
+            return NetworkResults.unexpectedResponse(0, ChallengeState.NONE, AppContextHolder.getString(R.string.detail_jump_invalid_params))
         }
         val response = bridge.getJson("/posts/by_number/$topicId/$postNumber")
         if (!response.success) {
@@ -802,7 +805,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点楼层详情响应为空。"
+                AppContextHolder.getString(R.string.err_post_detail_empty)
             )
         return try {
             val post = json.decodeFromString<DiscoursePost>(data)
@@ -811,7 +814,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "站点楼层详情响应缺少 cooked。"
+                    AppContextHolder.getString(R.string.err_post_detail_missing_cooked)
                 )
             } else {
                 NetworkResult(
@@ -826,7 +829,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点楼层详情响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_post_detail_json)
             )
         }
     }
@@ -846,7 +849,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点读取楼层原文响应为空。"
+                AppContextHolder.getString(R.string.err_post_raw_empty)
             )
         return try {
             val post = json.decodeFromString<DiscoursePost>(data)
@@ -855,7 +858,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "站点读取楼层原文响应缺少 raw。"
+                    AppContextHolder.getString(R.string.err_post_read_raw_missing)
                 )
             } else {
                 NetworkResult(
@@ -870,7 +873,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点读取楼层原文响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_post_raw_json)
             )
         }
     }
@@ -909,7 +912,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点保存编辑响应为空。"
+                AppContextHolder.getString(R.string.err_post_edit_empty)
             )
         return try {
             val wrapper = json.decodeFromString<DiscoursePostUpdateResponse>(data)
@@ -919,7 +922,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "站点保存编辑响应缺少楼层数据。"
+                    AppContextHolder.getString(R.string.err_post_edit_missing)
                 )
             } else {
                 NetworkResult(
@@ -934,7 +937,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点保存编辑响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_post_edit_json)
             )
         }
     }
@@ -981,7 +984,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点恢复楼层响应缺少楼层数据。"
+                AppContextHolder.getString(R.string.err_post_recover_missing)
             )
         return NetworkResult(
             success = true,
@@ -1023,7 +1026,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse<PostBoost>(
                 response.statusCode,
                 response.challengeState,
-                "站点发送 boost 响应为空。"
+                AppContextHolder.getString(R.string.err_boost_empty)
             )
         return try {
             val created = json.decodeFromString<DiscourseBoost>(data)
@@ -1039,14 +1042,14 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "站点发送 boost 响应缺少 boost 数据。"
+                    AppContextHolder.getString(R.string.err_boost_missing)
                 )
             }
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点发送 boost 响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_boost_json)
             )
         }
     }
@@ -1108,14 +1111,14 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse<CreateReplyOutcome>(
                 response.statusCode,
                 response.challengeState,
-                "站点发表评论响应为空。"
+                AppContextHolder.getString(R.string.err_reply_empty)
             )
 
         val outcome = parseCreateReplyResponse(data, json, ::mapPosts)
             ?: return NetworkResults.unexpectedResponse<CreateReplyOutcome>(
                 response.statusCode,
                 response.challengeState,
-                "站点发表评论响应缺少楼层数据。"
+                AppContextHolder.getString(R.string.err_reply_missing)
             )
         return NetworkResult(
             success = true,
@@ -1163,14 +1166,14 @@ class TopicService(private val bridge: JsonNetworkClient) {
             ?: return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点发帖响应为空。"
+                AppContextHolder.getString(R.string.err_new_topic_empty)
             )
         return runCatching {
             val outcome = parseCreateTopicOutcome(data, json)
                 ?: return@runCatching NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "站点发帖响应缺少主题数据。"
+                    AppContextHolder.getString(R.string.err_new_topic_missing)
                 )
             NetworkResult(
                 success = true,
@@ -1182,7 +1185,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "站点发帖响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_new_topic_json)
             )
         }
     }

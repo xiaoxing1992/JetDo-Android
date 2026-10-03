@@ -34,6 +34,14 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
+
+    @Before
+    fun installStrings() {
+        com.arkdo.android.core.data.AppContextHolder.resolver = { resId, _ ->
+            if (resId == R.string.home_no_new_topics) "暂未获取到新话题，请稍后重试" else "x"
+        }
+    }
+
     private val dispatcher = StandardTestDispatcher()
 
     @Before

@@ -1,5 +1,8 @@
 package com.arkdo.android.data.models
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -60,7 +63,7 @@ data class Draft(
 
     /** 列表展示用：title 为空时回退占位文案。 */
     val displayTitle: String
-        get() = title.ifEmpty { "(无标题草稿)" }
+        get() = title.ifEmpty { AppContextHolder.getString(R.string.drafts_untitled) }
 
     /** 续写用分类 id：data.categoryId 优先，回退顶层 category_id。 */
     val categoryId: Long?

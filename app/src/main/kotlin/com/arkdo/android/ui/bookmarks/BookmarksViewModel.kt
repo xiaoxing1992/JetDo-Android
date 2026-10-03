@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.bookmarks
 
+import com.arkdo.android.R
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,7 +34,8 @@ data class BookmarksUiState(
 
 @HiltViewModel
 class BookmarksViewModel @Inject constructor(
-    private val repository: DefaultBookmarkRepository
+    private val repository: DefaultBookmarkRepository,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(BookmarksUiState())
     val uiState: StateFlow<BookmarksUiState> = _uiState.asStateFlow()
@@ -102,7 +105,7 @@ class BookmarksViewModel @Inject constructor(
         if (!LoginGate.ensureLoggedIn(context)) return
         viewModelScope.launch {
             if (!repository.togglePin(item.id)) {
-                _uiState.update { it.copy(toast = "操作失败，请稍后再试") }
+                _uiState.update { it.copy(toast = appContext.getString(R.string.common_action_failed)) }
                 return@launch
             }
             val pinned = !item.pinned
@@ -111,7 +114,7 @@ class BookmarksViewModel @Inject constructor(
                     items = sortPinnedFirst(state.items.map { current ->
                         if (current.id == item.id) current.copy(pinned = pinned) else current
                     }),
-                    toast = if (pinned) "已置顶" else "已取消置顶"
+                    toast = if (pinned) appContext.getString(R.string.common_pinned) else appContext.getString(R.string.common_unpinned)
                 )
             }
         }
@@ -121,11 +124,11 @@ class BookmarksViewModel @Inject constructor(
         if (!LoginGate.ensureLoggedIn(context)) return
         viewModelScope.launch {
             if (!repository.delete(item.id)) {
-                _uiState.update { it.copy(toast = "删除失败，请稍后再试") }
+                _uiState.update { it.copy(toast = appContext.getString(R.string.common_delete_failed)) }
                 return@launch
             }
             _uiState.update { state ->
-                state.copy(items = state.items.filterNot { it.id == item.id }, toast = "已删除")
+                state.copy(items = state.items.filterNot { it.id == item.id }, toast = appContext.getString(R.string.common_deleted))
             }
         }
     }

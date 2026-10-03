@@ -1,5 +1,8 @@
 package com.arkdo.android.services.content
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.TopicCategory
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -454,7 +457,7 @@ object CookedHtmlParser {
         val contentBlocks = parseNodes(contentNodes)
         return RichBlock(
             type = RichBlockType.DISCLOSURE,
-            title = title.ifEmpty { "详情" },
+            title = title.ifEmpty { AppContextHolder.getString(R.string.common_details) },
             blocks = contentBlocks.ifEmpty {
                 val inlines = parseInlinesNodes(contentNodes)
                 if (hasVisibleInlines(inlines)) {
@@ -497,7 +500,7 @@ object CookedHtmlParser {
         val text = htmlToPlainText(el.html())
         return RichBlock(
             type = RichBlockType.UNSUPPORTED,
-            text = text.ifEmpty { "${kind}待实现" }
+            text = text.ifEmpty { AppContextHolder.getString(R.string.composer_kind_unsupported, kind) }
         )
     }
 
@@ -507,12 +510,12 @@ object CookedHtmlParser {
         val classes = el.className()
         return when {
             classes.contains("poll") || el.hasAttr("data-poll-name") ||
-                combined.contains("data-poll-name") -> "投票"
-            el.tagName().lowercase() == "table" || combined.contains("<table") -> "表格"
-            el.tagName().lowercase() == "iframe" || combined.contains("<iframe") -> "视频/嵌入内容"
-            classes.contains("onebox") -> "链接预览"
+                combined.contains("data-poll-name") -> AppContextHolder.getString(R.string.poll_title)
+            el.tagName().lowercase() == "table" || combined.contains("<table") -> AppContextHolder.getString(R.string.composer_table)
+            el.tagName().lowercase() == "iframe" || combined.contains("<iframe") -> AppContextHolder.getString(R.string.media_video_embed)
+            classes.contains("onebox") -> AppContextHolder.getString(R.string.media_link_preview)
             classes.contains("math") || combined.contains("math-container") ||
-                combined.contains("<math") -> "数学公式"
+                combined.contains("<math") -> AppContextHolder.getString(R.string.composer_math)
             else -> null
         }
     }

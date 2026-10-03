@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.user
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -157,12 +160,12 @@ fun UserProfileScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
             Text(
                 text = state.profile?.displayName?.takeIf { it.isNotEmpty() }
                     ?: state.displayName.takeIf { it.isNotEmpty() }
-                    ?: "个人资料",
+                    ?: stringResource(R.string.profile_edit_profile),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = arkdoColors.textPrimary,
@@ -177,11 +180,11 @@ fun UserProfileScreen(
                 var menuOpen by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more))
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text("在网页中打开") },
+                            text = { Text(stringResource(R.string.common_open_in_web)) },
                             onClick = {
                                 menuOpen = false
                                 onOpenWeb(
@@ -259,7 +262,7 @@ private fun EndorseSheetContent(
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp)
         ) {
             Text(
-                text = "$displayName 的优点是什么?",
+                text = stringResource(R.string.user_endorse_question, displayName),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
@@ -278,12 +281,12 @@ private fun EndorseSheetContent(
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), color = colors.ldAccent, strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("加载可认可的类别", fontSize = 14.sp, color = colors.textSecondary)
+                        Text(stringResource(R.string.user_loading_endorsable), fontSize = 14.sp, color = colors.textSecondary)
                     }
                 }
                 state.endorsableCategories.isEmpty() -> {
                     Text(
-                        text = "暂无可认可的类别",
+                        text = stringResource(R.string.user_no_endorsable),
                         fontSize = 14.sp,
                         color = colors.textFaint,
                         modifier = Modifier
@@ -338,13 +341,13 @@ private fun EndorseSheetContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "认可",
+                                text = stringResource(R.string.user_endorse),
                                 fontSize = 15.sp,
                                 color = Color.White
                             )
                         }
                         Text(
-                            text = "今天还剩 ${state.remainingEndorsements} 个认可",
+                            text = stringResource(R.string.user_endorsements_left, state.remainingEndorsements),
                             fontSize = 13.sp,
                             color = colors.textFaint,
                             modifier = Modifier.padding(start = 14.dp)
@@ -359,9 +362,9 @@ private fun EndorseSheetContent(
 /** 对齐鸿蒙 openSegmentAll():热门话题只看话题(4),热门回复只看回复(5),最近看全量(4,5)。 */
 private fun SegmentAllFilterAndTitle(segment: Int, nameLabel: String): Pair<String, String> =
     when (segment) {
-        SEGMENT_TOP_TOPICS -> "4" to "$nameLabel 的话题"
-        SEGMENT_TOP_REPLIES -> "5" to "$nameLabel 的回复"
-        else -> "4,5" to "$nameLabel 的动态"
+        SEGMENT_TOP_TOPICS -> "4" to AppContextHolder.getString(R.string.user_topics_of, nameLabel)
+        SEGMENT_TOP_REPLIES -> "5" to AppContextHolder.getString(R.string.user_replies_of, nameLabel)
+        else -> "4,5" to AppContextHolder.getString(R.string.user_activity_of, nameLabel)
     }
 
 @Composable
@@ -463,7 +466,7 @@ private fun IdentityCard(
                     .clickable {
                         onOpenWeb(
                             "https://linux.do/new-message?username=${state.username}",
-                            "私信 ${state.displayUsername}"
+                            AppContextHolder.getString(R.string.user_pm_user, state.displayUsername)
                         )
                     }
                     .padding(horizontal = 14.dp),
@@ -472,7 +475,7 @@ private fun IdentityCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FaIcon("envelope", Color.White, 13.dp)
                     Text(
-                        text = "私信",
+                        text = stringResource(R.string.user_pm),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -556,7 +559,7 @@ private fun IdentityCard(
                         leadingIcon = if (state.endorsedCount > 0) "circle-check" else null,
                         accent = state.endorsedCount > 0,
                         loading = false,
-                        text = if (state.endorsedCount > 0) "已认可 · ${state.endorsedCount}" else "认可",
+                        text = if (state.endorsedCount > 0) stringResource(R.string.user_endorsed_count, state.endorsedCount) else stringResource(R.string.user_endorse),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -572,7 +575,7 @@ private fun IdentityCard(
                         leadingIcon = if (state.isFollowing) "user-check" else "user-plus",
                         accent = state.isFollowing,
                         loading = state.followPending,
-                        text = if (state.isFollowing) "已关注" else "关注",
+                        text = if (state.isFollowing) stringResource(R.string.user_following) else stringResource(R.string.user_follow),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -594,15 +597,15 @@ private fun IdentityCard(
         if (stats != null) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 14.dp)) {
-                    StatCell(formatCount(stats.daysVisited), "访问天数")
-                    StatCell(formatTimeRead(stats.timeReadSeconds), "阅读时长")
-                    StatCell(formatCount(stats.likesReceived), "收到的赞")
-                    StatCell(formatCount(stats.likesGiven), "送出的赞")
+                    StatCell(formatCount(stats.daysVisited), stringResource(R.string.user_days_visited))
+                    StatCell(formatTimeRead(stats.timeReadSeconds), stringResource(R.string.user_time_read))
+                    StatCell(formatCount(stats.likesReceived), stringResource(R.string.user_likes_received))
+                    StatCell(formatCount(stats.likesGiven), stringResource(R.string.user_likes_given2))
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = CardPadding)) {
-                    StatCell(formatCount(stats.topicCount), "创建话题")
-                    StatCell(formatCount(stats.postCount), "回复")
-                    StatCell(formatCount(stats.topicsEntered), "浏览话题")
+                    StatCell(formatCount(stats.topicCount), stringResource(R.string.composer_new_topic))
+                    StatCell(formatCount(stats.postCount), stringResource(R.string.common_reply))
+                    StatCell(formatCount(stats.topicsEntered), stringResource(R.string.action_browse_topics))
                     // 对齐鸿蒙 SolvedCell:唯一可点的统计格,数值绿色 + 右侧绿色 chevron。
                     // solvedCount>0 才走绿色箭头入口;0/未知则普通灰格。
                     if ((stats.solvedCount ?: 0) > 0) {
@@ -612,7 +615,7 @@ private fun IdentityCard(
                     } else {
                         StatCell(
                             if (stats.solvedCount != null) formatCount(stats.solvedCount) else "—",
-                            "解决方案"
+                            stringResource(R.string.detail_solution)
                         )
                     }
                 }
@@ -628,10 +631,10 @@ private fun IdentityCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.ldAccent, strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("正在加载论坛数据", fontSize = 13.sp, color = colors.textSecondary)
+                        Text(stringResource(R.string.drawer_loading_forum), fontSize = 13.sp, color = colors.textSecondary)
                     }
                 } else {
-                    Text("正在加载", fontSize = 13.sp, color = colors.textTertiary)
+                    Text(stringResource(R.string.common_loading), fontSize = 13.sp, color = colors.textTertiary)
                 }
             }
         }
@@ -641,19 +644,19 @@ private fun IdentityCard(
     if (showUnfollowDialog) {
         AlertDialog(
             onDismissRequest = { showUnfollowDialog = false },
-            title = { Text("取消关注", color = colors.textPrimary) },
-            text = { Text("确定不再关注 $displayName 吗？", color = colors.textSecondary) },
+            title = { Text(stringResource(R.string.user_unfollow), color = colors.textPrimary) },
+            text = { Text(stringResource(R.string.user_unfollow_confirm, displayName), color = colors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     showUnfollowDialog = false
                     viewModel.toggleFollow()
                 }) {
-                    Text("取消关注", color = colors.ldDanger)
+                    Text(stringResource(R.string.user_unfollow), color = colors.ldDanger)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUnfollowDialog = false }) {
-                    Text("再想想", color = colors.textSecondary)
+                    Text(stringResource(R.string.common_reconsider), color = colors.textSecondary)
                 }
             }
         )
@@ -688,7 +691,7 @@ private fun androidx.compose.foundation.layout.RowScope.SolvedCell(
             )
         }
         Text(
-            text = "解决方案",
+            text = stringResource(R.string.detail_solution),
             fontSize = 11.sp,
             color = arkdoColors.textFaint,
             modifier = Modifier.padding(top = 2.dp)
@@ -765,10 +768,10 @@ private fun androidx.compose.foundation.layout.RowScope.StatCell(value: String, 
 private fun buildMetaLine(profile: com.arkdo.android.data.models.UserProfileDetail?): String {
     if (profile == null) return ""
     val parts = mutableListOf<String>()
-    formatJoinDate(profile.createdAt).takeIf { it.isNotEmpty() }?.let { parts.add("加入于 $it") }
-    RelativeTime.fromNow(profile.lastPostedAt).takeIf { it.isNotEmpty() }?.let { parts.add("最近发帖 $it") }
+    formatJoinDate(profile.createdAt).takeIf { it.isNotEmpty() }?.let { parts.add(stringResource(R.string.user_joined_on, it)) }
+    RelativeTime.fromNow(profile.lastPostedAt).takeIf { it.isNotEmpty() }?.let { parts.add(stringResource(R.string.composer_recent_posts, it)) }
     if ((profile.profileViewCount ?: 0) > 0) {
-        parts.add("浏览量 ${formatCount(profile.profileViewCount ?: 0)}")
+        parts.add(stringResource(R.string.user_profile_views, formatCount(profile.profileViewCount ?: 0)))
     }
     return parts.joinToString(" · ")
 }
@@ -784,8 +787,8 @@ private fun BadgesCard(state: UserProfileViewModel.UiState, onAllBadges: () -> U
               .background(arkdoColors.surfaceCard)
     ) {
         SectionHead(
-            title = if ((state.profile?.badgeCount ?: 0) > 0) "徽章 · ${state.profile?.badgeCount}" else "徽章",
-            more = "全部 ›",
+            title = if ((state.profile?.badgeCount ?: 0) > 0) stringResource(R.string.drawer_badges_state_count, state.profile?.badgeCount ?: 0) else stringResource(R.string.user_badges),
+            more = stringResource(R.string.common_all_more),
             onMore = onAllBadges
         )
         if (badges.isNotEmpty()) {
@@ -808,7 +811,7 @@ private fun BadgesCard(state: UserProfileViewModel.UiState, onAllBadges: () -> U
             Spacer(modifier = Modifier.height(16.dp))
         } else {
             Text(
-                text = "暂无徽章",
+                text = stringResource(R.string.user_no_badges),
                 fontSize = 13.sp,
                 color = arkdoColors.textTertiary,
                 modifier = Modifier
@@ -904,9 +907,9 @@ private fun CircleCard(
 ) {
     val summary = state.summary ?: return
     val rows = listOf(
-        "常回复" to summary.mostRepliedToUsers,
-        "赞过" to summary.mostLikedUsers,
-        "被赞自" to summary.mostLikedByUsers
+        stringResource(R.string.user_most_replied) to summary.mostRepliedToUsers,
+        stringResource(R.string.user_most_liked) to summary.mostLikedUsers,
+        stringResource(R.string.user_most_liked_by) to summary.mostLikedByUsers
     ).filter { it.second.isNotEmpty() }
     if (rows.isEmpty()) return
 
@@ -918,7 +921,7 @@ private fun CircleCard(
               .background(arkdoColors.surfaceCard)
     ) {
         Text(
-            text = "互动圈",
+            text = stringResource(R.string.user_interactions),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = arkdoColors.textPrimary,
@@ -1017,15 +1020,15 @@ private fun ContentCard(
                 .fillMaxWidth()
                 .padding(start = CardPadding, end = CardPadding, top = 14.dp)
         ) {
-            SegmentTab("热门话题", SEGMENT_TOP_TOPICS, state.selectedSegment) { onSelectSegment(SEGMENT_TOP_TOPICS) }
-            SegmentTab("热门回复", SEGMENT_TOP_REPLIES, state.selectedSegment) { onSelectSegment(SEGMENT_TOP_REPLIES) }
-            SegmentTab("最近", SEGMENT_RECENT, state.selectedSegment) { onSelectSegment(SEGMENT_RECENT) }
+            SegmentTab(stringResource(R.string.search_hot_topics), SEGMENT_TOP_TOPICS, state.selectedSegment) { onSelectSegment(SEGMENT_TOP_TOPICS) }
+            SegmentTab(stringResource(R.string.poll_hot_replies), SEGMENT_TOP_REPLIES, state.selectedSegment) { onSelectSegment(SEGMENT_TOP_REPLIES) }
+            SegmentTab(stringResource(R.string.filter_recent), SEGMENT_RECENT, state.selectedSegment) { onSelectSegment(SEGMENT_RECENT) }
             Spacer(modifier = Modifier.weight(1f))
             // 「全部 ›」对齐鸿蒙 openSegmentAll():不切分段,按当前分段选动态过滤器——
             // 热门话题=只看话题(4),热门回复=只看回复(5),最近=全量(4,5)。
             // 鸿蒙 onClick 的 Column 无 click 阻断,不会误触身后 tab,这里不用 onSelectSegment。
             Text(
-                text = "全部 ›",
+                text = stringResource(R.string.common_all_more),
                 fontSize = 13.sp,
                 color = arkdoColors.ldAccent,
                 modifier = Modifier
@@ -1048,9 +1051,9 @@ private fun ContentCard(
                         TopTopicRow(item, state, onOpenTopic)
                     }
                 } else if (state.summary != null) {
-                    EmptyHint("还没有发过话题")
+                    EmptyHint(stringResource(R.string.user_no_topics))
                 } else {
-                    EmptyHint("正在加载")
+                    EmptyHint(stringResource(R.string.common_loading))
                 }
             }
             SEGMENT_TOP_REPLIES -> {
@@ -1061,9 +1064,9 @@ private fun ContentCard(
                         TopReplyRow(item, state, onOpenTopic)
                     }
                 } else if (state.summary != null) {
-                    EmptyHint("还没有回复过")
+                    EmptyHint(stringResource(R.string.user_no_replies))
                 } else {
-                    EmptyHint("正在加载")
+                    EmptyHint(stringResource(R.string.common_loading))
                 }
             }
             else -> {
@@ -1073,7 +1076,7 @@ private fun ContentCard(
                         ActivityRow(item, state, onOpenTopic)
                     }
                 } else {
-                    EmptyHint("最近没有动态")
+                    EmptyHint(stringResource(R.string.user_no_activity))
                 }
             }
         }

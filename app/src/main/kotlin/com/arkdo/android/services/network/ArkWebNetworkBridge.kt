@@ -1,5 +1,7 @@
 package com.arkdo.android.services.network
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -142,7 +144,7 @@ class WebviewJsonExecutor(
             kotlinx.coroutines.delay(timeoutMs)
             pendingRequests.remove(requestId)?.let {
                 if (!it.deferred.isCompleted) {
-                    it.deferred.completeExceptionally(IllegalStateException("ArkWeb 请求超时。"))
+                    it.deferred.completeExceptionally(IllegalStateException(AppContextHolder.getString(R.string.err_request_timeout)))
                 }
             }
         }
@@ -155,7 +157,7 @@ class WebviewJsonExecutor(
             }
         }.isFailure
         if (shouldRun) {
-            rejectRequest(requestId, "ArkWeb 脚本执行失败。")
+            rejectRequest(requestId, AppContextHolder.getString(R.string.err_script_failed))
             timeoutJob.cancel()
         }
 
@@ -172,7 +174,7 @@ class WebviewJsonExecutor(
         runCatching {
             webView.evaluateJavascript(patched, null)
         }.onFailure {
-            rejectRequest(requestId, "ArkWeb 脚本执行失败。")
+            rejectRequest(requestId, AppContextHolder.getString(R.string.err_script_failed))
         }
     }
 
@@ -638,7 +640,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     suspend fun downloadMedia(url: String): String {
         mediaCache[url]?.let { return it }
         mediaInflight[url]?.let { return it.await() }
-        val web = webView ?: throw IllegalStateException("宿主尚未就绪")
+        val web = webView ?: throw IllegalStateException(AppContextHolder.getString(R.string.bridge_host_not_ready))
 
         val result = CompletableDeferred<String>()
         mediaInflight[url] = result
@@ -646,7 +648,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         downloadIntents.add(DownloadIntent(true, url, awaited = true))
         runCatching { loadForDownload(web, url) }.onFailure {
             downloadIntents.removeLastOrNull()
-            settleFileFailure(url, IllegalStateException("媒体下载启动失败"))
+            settleFileFailure(url, IllegalStateException(AppContextHolder.getString(R.string.common_media_download_start_failed)))
         }
         try {
             return withTimeout(MEDIA_DOWNLOAD_TIMEOUT_MS) { result.await() }
@@ -666,14 +668,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
      */
     suspend fun downloadAttachment(url: String): String {
         fileWaiters[url]?.let { return it.await() }
-        val web = webView ?: throw IllegalStateException("宿主尚未就绪")
+        val web = webView ?: throw IllegalStateException(AppContextHolder.getString(R.string.bridge_host_not_ready))
 
         val result = CompletableDeferred<String>()
         fileWaiters[url] = result
         downloadIntents.add(DownloadIntent(false, url, awaited = true))
         runCatching { loadForDownload(web, url) }.onFailure {
             downloadIntents.removeLastOrNull()
-            settleFileFailure(url, IllegalStateException("附件下载启动失败"))
+            settleFileFailure(url, IllegalStateException(AppContextHolder.getString(R.string.common_attachment_download_start_failed)))
         }
         try {
             return withTimeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS) { result.await() }
@@ -755,7 +757,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                             settleFileSuccess(job.url, resolved)
                         } else {
                             Timber.i("[ArkDO][Network] download failed url=%s", job.url)
-                            settleFileFailure(job.url, IllegalStateException("下载失败"))
+                            settleFileFailure(job.url, IllegalStateException(AppContextHolder.getString(R.string.common_download_failed)))
                         }
                     }
                 }.onFailure {
@@ -882,7 +884,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                         true,
                         fileName,
                         localFile.absolutePath,
-                        "已开始下载：$fileName"
+                        AppContextHolder.getString(R.string.common_download_started_file, fileName)
                     )
                 )
             }
@@ -890,7 +892,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             if (requestUrl != null && (isMedia || awaited)) {
                 settleFileFailure(requestUrl, e)
             } else {
-                DownloadEventBus.notify(DownloadResult(false, fileName, "", "下载失败"))
+                DownloadEventBus.notify(DownloadResult(false, fileName, "", AppContextHolder.getString(R.string.common_download_failed)))
             }
         }
     }
@@ -1219,7 +1221,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                     challengeState = ChallengeState.REQUIRED,
                     error = NetworkError(
                         NetworkErrorCode.CHALLENGE_REQUIRED,
-                        "需要完成可见 Cloudflare 验证后重试。",
+                        AppContextHolder.getString(R.string.err_challenge_needed),
                         requiresChallenge = true
                     )
                 )
@@ -1251,7 +1253,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 challengeState = challengeState,
                 error = NetworkError(
                     NetworkErrorCode.CHALLENGE_REQUIRED,
-                    "需要完成可见 Cloudflare 验证后重试。",
+                    AppContextHolder.getString(R.string.err_challenge_needed),
                     requiresChallenge = true
                 )
             )
@@ -1264,7 +1266,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 challengeState = ChallengeState.NONE,
                 error = NetworkError(
                     NetworkErrorCode.UNEXPECTED_RESPONSE,
-                    "Linux.do 返回 HTTP $statusCode。",
+                    AppContextHolder.getString(R.string.err_http_status, statusCode),
                     requiresChallenge = false
                 )
             )
@@ -1328,14 +1330,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         success = false,
         statusCode = 0,
         challengeState = ChallengeState.NONE,
-        error = NetworkError(NetworkErrorCode.NETWORK_FAILURE, "ArkWeb 宿主尚未就绪。", false)
+        error = NetworkError(NetworkErrorCode.NETWORK_FAILURE, AppContextHolder.getString(R.string.err_host_not_ready), false)
     )
 
     private fun networkFailed(): NetworkResult<String> = NetworkResult(
         success = false,
         statusCode = 0,
         challengeState = ChallengeState.NONE,
-        error = NetworkError(NetworkErrorCode.NETWORK_FAILURE, "ArkWeb 请求失败。", false)
+        error = NetworkError(NetworkErrorCode.NETWORK_FAILURE, AppContextHolder.getString(R.string.err_request_failed), false)
     )
 
     private fun jsonString(value: String): String {

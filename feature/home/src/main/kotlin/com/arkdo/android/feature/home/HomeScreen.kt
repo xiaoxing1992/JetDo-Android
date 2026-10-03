@@ -1,5 +1,7 @@
 package com.arkdo.android.feature.home
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.feature.home.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -409,7 +411,7 @@ private fun HomeTitleBar(
                 }
             }
         }
-        HomeBarButton(onClick = onSearchClick, contentDescription = "搜索", endMargin = 4.dp) {
+        HomeBarButton(onClick = onSearchClick, contentDescription = stringResource(R.string.search_title), endMargin = 4.dp) {
             // 挂共享元素的是图标自身、不是外面 40dp 的圆底：目的端（搜索条）那侧
             // 没有圆底可对应，挂按钮会让整个圆一起飞过去。见 SharedSearchTransition。
             FaIcon(
@@ -445,7 +447,7 @@ private fun HomeTitleBar(
                     delay(3200)
                 }
             }
-            HomeBarButton(onClick = onNotificationsClick, contentDescription = "通知", endMargin = 4.dp) {
+            HomeBarButton(onClick = onNotificationsClick, contentDescription = stringResource(R.string.home_notifications), endMargin = 4.dp) {
                 // 角标要相对铃铛定位，得自己持有一个 BoxScope（HomeBarButton 的 content 是普通 @Composable）。
                 Box(contentAlignment = Alignment.Center) {
                     FaIcon("bell", colors.amber, 24.dp, Modifier.rotate(bellAngle.value))
@@ -472,22 +474,22 @@ private fun HomeTitleBar(
                 }
             }
         }
-        HomeBarButton(onClick = onProfileClick, contentDescription = "个人中心", endMargin = 0.dp) {
+        HomeBarButton(onClick = onProfileClick, contentDescription = stringResource(R.string.profile_center), endMargin = 0.dp) {
             when {
                 isCheckingSession -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                 isLoggedIn && accountUser != null -> TopicAvatar(accountUser, 34.dp, colors.toTopicRowColors(), avatarBaseUrl)
                 else -> Icon(
                     imageVector = Icons.Default.Person,
-                    contentDescription = "个人中心",
+                    contentDescription = stringResource(R.string.profile_center),
                     tint = colors.brand,
                     modifier = Modifier.size(28.dp)
                 )
             }
         }
-        HomeBarButton(onClick = onDebugClick, contentDescription = "分享日志", endMargin = 0.dp) {
+        HomeBarButton(onClick = onDebugClick, contentDescription = stringResource(R.string.debug_share_log), endMargin = 0.dp) {
             Icon(
                 imageVector = Icons.Filled.BugReport,
-                contentDescription = "分享日志",
+                contentDescription = stringResource(R.string.debug_share_log),
                 tint = colors.textTertiary,
                 modifier = Modifier.size(20.dp)
             )
@@ -634,10 +636,10 @@ private fun IncomingTopicsPrompt(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "查看", color = colors.ldAccent, style = PromptTextStyle)
+                Text(text = stringResource(R.string.common_view), color = colors.ldAccent, style = PromptTextStyle)
                 IncomingCountDigits(count, colors.ldAccent)
                 Text(
-                    text = "个新的或更新的话题",
+                    text = stringResource(R.string.announce_topics_suffix),
                     color = colors.ldAccent,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -760,9 +762,9 @@ private fun HomeListFooter(isLoading: Boolean, hasMore: Boolean, colors: HomeVis
         }
         Text(
             text = when {
-                isLoading -> "正在加载更多"
-                hasMore -> "上拉加载更多"
-                else -> "没有更多了"
+                isLoading -> stringResource(R.string.common_loading_more)
+                hasMore -> stringResource(R.string.common_pull_load_more)
+                else -> stringResource(R.string.common_no_more)
             },
             color = colors.textSecondary,
             fontSize = 13.sp
@@ -783,7 +785,7 @@ private fun EmptyState(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             when {
                 !isWebViewReady -> Text(
-                    text = "准备环境中...",
+                    text = stringResource(R.string.composer_preparing),
                     fontSize = 15.sp,
                     color = colors.textSecondary,
                     textAlign = TextAlign.Center
@@ -796,7 +798,7 @@ private fun EmptyState(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "正在加载$title",
+                        text = stringResource(R.string.detail_loading_title, title),
                         fontSize = 15.sp,
                         color = colors.textSecondary,
                         textAlign = TextAlign.Center
@@ -804,7 +806,7 @@ private fun EmptyState(
                 }
                 error != null -> {
                     Text(
-                        "加载失败，请检查网络后重试",
+                        stringResource(R.string.common_load_failed_network),
                         fontSize = 15.sp,
                         color = colors.textSecondary,
                         textAlign = TextAlign.Center
@@ -819,11 +821,11 @@ private fun EmptyState(
                             .padding(horizontal = 18.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("重试", fontSize = 15.sp, color = colors.ldAccent)
+                        Text(stringResource(R.string.common_retry), fontSize = 15.sp, color = colors.ldAccent)
                     }
                 }
                 else -> Text(
-                    text = "暂无帖子数据",
+                    text = stringResource(R.string.common_no_topics),
                     fontSize = 15.sp,
                     color = colors.textSecondary,
                     textAlign = TextAlign.Center

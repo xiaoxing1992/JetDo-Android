@@ -1,5 +1,7 @@
 package com.arkdo.android.feature.search
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.feature.search.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -364,7 +366,7 @@ private fun SearchBar(
 
             // 「取消」:关闭搜索页(对齐鸿蒙 onClose;系统返回同样能退)。
             Text(
-                text = "取消",
+                text = stringResource(R.string.common_cancel),
                 fontSize = 15.sp,
                 color = tokens.ldAccent,
                 modifier = Modifier
@@ -433,7 +435,7 @@ private fun TopicResults(
                         )
                     }
                     Text(
-                        text = if (state.hasMore) "上拉加载更多" else "没有更多了",
+                        text = if (state.hasMore) stringResource(R.string.common_pull_load_more) else stringResource(R.string.common_no_more),
                         fontSize = 13.sp,
                         color = tokens.textSecondary
                     )
@@ -501,7 +503,7 @@ private fun HistoryAndHints(
     if (history.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text = "输入关键词搜索帖子",
+                text = stringResource(R.string.search_hint),
                 fontSize = 15.sp,
                 color = tokens.textFaint
             )
@@ -526,13 +528,13 @@ private fun HistoryAndHints(
                     .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)
             ) {
                 Text(
-                    text = "搜索历史",
+                    text = stringResource(R.string.search_history),
                     fontSize = 13.sp,
                     color = tokens.textSecondary,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "清空",
+                    text = stringResource(R.string.common_clear),
                     fontSize = 13.sp,
                     color = tokens.textFaint,
                     modifier = Modifier.clickable(onClick = onClearAll)
@@ -594,7 +596,7 @@ private fun LoadingState(tokens: SearchVisualTokens) {
 private fun EmptyState(searchType: SearchType, tokens: SearchVisualTokens) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = if (searchType == SearchType.USERS) "未找到相关用户" else "未找到相关帖子",
+            text = if (searchType == SearchType.USERS) stringResource(R.string.search_no_users) else stringResource(R.string.search_no_topics),
             fontSize = 15.sp,
             color = tokens.textSecondary,
             textAlign = TextAlign.Center

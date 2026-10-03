@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.credit
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -121,12 +124,12 @@ fun LdcCreditScreen(
                         LdcCreditSession.setCachedInfo(parsed)
                         LdcCreditEventBus.notifyCreditChanged()
                     } else {
-                        errorMessage = "LDC 账户信息解析失败。"
+                        errorMessage = AppContextHolder.getString(R.string.err_ldc_parse)
                         phase = LdcPhase.ERROR
                     }
                 }
                 else -> {
-                    errorMessage = user.message.ifEmpty { "连接 credit.linux.do 失败，请检查网络后重试" }
+                    errorMessage = user.message.ifEmpty { AppContextHolder.getString(R.string.credit_connect_failed) }
                     phase = LdcPhase.ERROR
                 }
             }
@@ -155,7 +158,7 @@ fun LdcCreditScreen(
                     },
                     onLoadFailed = {
                         if (phase != LdcPhase.LOGGING_IN && phase != LdcPhase.READY) {
-                            errorMessage = "连接 credit.linux.do 失败，请检查网络后重试"
+                            errorMessage = AppContextHolder.getString(R.string.credit_connect_failed)
                             phase = LdcPhase.ERROR
                         }
                     },
@@ -199,9 +202,9 @@ fun LdcCreditScreen(
                             CreditFooter()
                         }
                         phase == LdcPhase.ANON -> CreditMessage(
-                            "未登录 LINUX DO Credit",
-                            "使用 LINUX DO 账号登录后，即可查看余额与获取记录",
-                            action = "去登录",
+                            stringResource(R.string.credit_not_logged_in),
+                            stringResource(R.string.credit_login_to_view_full),
+                            action = stringResource(R.string.login_go),
                             onAction = {
                                 phase = LdcPhase.LOGGING_IN
                                 hostActive = true
@@ -210,9 +213,9 @@ fun LdcCreditScreen(
                             }
                         )
                         phase == LdcPhase.ERROR -> CreditMessage(
-                            "暂时无法获取",
-                            errorMessage.ifEmpty { "可能是网络问题或需要完成人机验证" },
-                            action = "重试",
+                            stringResource(R.string.doh_unknown_state),
+                            errorMessage.ifEmpty { stringResource(R.string.challenge_maybe_captcha) },
+                            action = stringResource(R.string.common_retry),
                             onAction = {
                                 errorMessage = ""
                                 phase = LdcPhase.LOADING
@@ -258,7 +261,7 @@ private fun CreditTopBar(onBack: () -> Unit) {
             .padding(horizontal = 4.dp)
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
         }
         Text("LINUX DO Credit", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = arkdoColors.textPrimary)
     }
@@ -275,9 +278,9 @@ private fun LoginTopBar(onCancel: () -> Unit) {
             .background(arkdoColors.pageBg)
             .padding(horizontal = 16.dp)
     ) {
-        Text("登录 LINUX DO Credit", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = arkdoColors.textPrimary, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.credit_login), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = arkdoColors.textPrimary, modifier = Modifier.weight(1f))
         TextButton(onClick = onCancel) {
-            Text("取消", fontSize = 15.sp, color = arkdoColors.ldAccent)
+            Text(stringResource(R.string.common_cancel), fontSize = 15.sp, color = arkdoColors.ldAccent)
         }
     }
 }
@@ -293,19 +296,19 @@ private fun BalanceCard(info: LdcUserInfo) {
             .background(colors.surfaceCard)
             .padding(CardPadding)
     ) {
-        Text("可用余额", fontSize = 13.sp, color = colors.textSecondary)
+        Text(stringResource(R.string.credit_available), fontSize = 13.sp, color = colors.textSecondary)
         Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
             Text(formatLdcAmount(info.availableBalance), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
             Text("LDC", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.textFaint, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
         }
         HorizontalDivider(color = colors.border, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 14.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            MetricCell("社区余额", formatLdcAmount(info.communityBalance), Modifier.weight(1f))
-            MetricCell("待结算", formatLdcAmount(info.pendingBalance), Modifier.weight(1f))
+            MetricCell(stringResource(R.string.credit_balance_title), formatLdcAmount(info.communityBalance), Modifier.weight(1f))
+            MetricCell(stringResource(R.string.credit_pending), formatLdcAmount(info.pendingBalance), Modifier.weight(1f))
         }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
-            MetricCell("剩余额度", formatLdcAmount(info.remainQuota), Modifier.weight(1f))
-            MetricCell("每日限额", formatLdcAmount(info.dailyLimit), Modifier.weight(1f))
+            MetricCell(stringResource(R.string.credit_remaining), formatLdcAmount(info.remainQuota), Modifier.weight(1f))
+            MetricCell(stringResource(R.string.credit_daily_limit), formatLdcAmount(info.dailyLimit), Modifier.weight(1f))
         }
     }
 }
@@ -334,12 +337,12 @@ private fun DailyCard(stats: List<LdcDailyStat>) {
                 .fillMaxWidth()
                 .padding(start = CardPadding, end = CardPadding, top = 14.dp, bottom = 6.dp)
         ) {
-            Text("最近 $RECENT_DAYS 天", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, modifier = Modifier.weight(1f))
-            Text("共 +${formatLdcAmount(totalIncome(stats))}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = LdcIncome)
+            Text(stringResource(R.string.filter_recent_days, RECENT_DAYS), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.credit_total_income, formatLdcAmount(totalIncome(stats))), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = LdcIncome)
         }
         if (stats.isEmpty()) {
             Text(
-                "最近没有获取记录",
+                stringResource(R.string.credit_no_records),
                 fontSize = 13.sp,
                 color = colors.textFaint,
                 modifier = Modifier
@@ -406,7 +409,7 @@ private fun CreditFooter() {
             .fillMaxWidth()
             .padding(top = 18.dp, bottom = 10.dp)
     ) {
-        Text("数据来自 ", fontSize = 12.sp, color = arkdoColors.textFaint)
+        Text(stringResource(R.string.about_data_from), fontSize = 12.sp, color = arkdoColors.textFaint)
         Text("credit.linux.do", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = arkdoColors.textSecondary)
     }
 }
@@ -419,7 +422,7 @@ private fun CreditLoading() {
         modifier = Modifier.fillMaxWidth().height(280.dp)
     ) {
         CircularProgressIndicator(modifier = Modifier.size(32.dp), color = arkdoColors.ldAccent, strokeWidth = 3.dp)
-        Text("正在获取 Credit 数据", fontSize = 14.sp, color = arkdoColors.textSecondary, modifier = Modifier.padding(top = 14.dp))
+        Text(stringResource(R.string.credit_loading), fontSize = 14.sp, color = arkdoColors.textSecondary, modifier = Modifier.padding(top = 14.dp))
     }
 }
 

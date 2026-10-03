@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- App 界面语言：中文（简体）。UI 文案目前全部硬编码中文，无多语言翻译资源；
-     此处先声明实际支持的语言，供系统「应用语言」设置页展示，
-     后续做 strings.xml 抽取翻译时在此追加条目即可。 -->
+<!-- 应用支持语言：中文（简体，默认）+ 英语（values-en）。 -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="zh-CN" />
+    <locale android:name="en-US" />
 </locale-config>

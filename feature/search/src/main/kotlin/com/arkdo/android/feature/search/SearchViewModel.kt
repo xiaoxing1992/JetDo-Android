@@ -1,5 +1,7 @@
 package com.arkdo.android.feature.search
 
+import com.arkdo.android.feature.search.R
+import com.arkdo.android.core.data.AppContextHolder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.core.data.search.SearchAuthGate
@@ -33,12 +35,6 @@ internal const val MIN_TERM_LEN = 1
 
 /** Discourse 整页搜索分页硬上限。 */
 internal const val MAX_SEARCH_PAGE = 10
-
-/** WebView 宿主未就绪时的提示(对齐鸿蒙 runSearch 的 isArkWebReady 前置门)。 */
-internal const val HOST_NOT_READY_MESSAGE = "正在准备请求环境，请稍后重试"
-
-/** 未登录时搜索被服务端拦截的提示（linux.do 搜索要求登录，前置门先拦下）。 */
-internal const val LOGIN_REQUIRED_MESSAGE = "登录后才能搜索"
 
 /** 标签联想防抖(对齐鸿蒙 TAG_DEBOUNCE_MS,与搜索框同一量级)。 */
 internal const val TAG_DEBOUNCE_MS = 300L
@@ -97,6 +93,15 @@ class SearchViewModel @Inject constructor(
     private val historyStore: SearchHistoryStore,
     private val authGate: SearchAuthGate
 ) : ViewModel() {
+
+    /** WebView 宿主未就绪时的提示（运行期取值，产出与比对同源）。 */
+    private val hostNotReadyMessage: String
+        get() = AppContextHolder.getString(R.string.composer_env_not_ready)
+
+    /** 未登录时搜索被服务端拦截的提示。 */
+    private val loginRequiredMessage: String
+        get() = AppContextHolder.getString(R.string.search_login_required)
+
 
     private val _uiState = MutableStateFlow(SearchUiState())
     internal val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
@@ -223,7 +228,7 @@ class SearchViewModel @Inject constructor(
     fun setHostReady(ready: Boolean) {
         val wasReady = _uiState.value.isHostReady
         _uiState.update { it.copy(isHostReady = ready) }
-        if (ready && !wasReady && _uiState.value.error == HOST_NOT_READY_MESSAGE) {
+        if (ready && !wasReady && _uiState.value.error == hostNotReadyMessage) {
             submit()
         }
     }
@@ -305,7 +310,7 @@ class SearchViewModel @Inject constructor(
                     isSearching = false,
                     isLoadingMore = false,
                     hasSearched = true,
-                    error = LOGIN_REQUIRED_MESSAGE
+                    error = loginRequiredMessage
                 )
             }
             return
@@ -318,7 +323,7 @@ class SearchViewModel @Inject constructor(
                     isSearching = false,
                     isLoadingMore = false,
                     hasSearched = true,
-                    error = HOST_NOT_READY_MESSAGE
+                    error = hostNotReadyMessage
                 )
             }
             return
@@ -355,7 +360,7 @@ class SearchViewModel @Inject constructor(
                         users = emptyList(),
                         requiresChallenge = result.requiresChallenge,
                         // 与帖子搜索同理:过盾统一文案,其余透传具体原因。
-                        error = if (result.requiresChallenge) "搜索遇到访问验证，请稍后重试" else result.error
+                        error = if (result.requiresChallenge) AppContextHolder.getString(R.string.search_challenge) else result.error
                     )
                 }
             }
@@ -430,7 +435,7 @@ class SearchViewModel @Inject constructor(
                             requiresChallenge = result.requiresChallenge,
                             // 过盾给统一文案;其余原样透传仓储层带回来的具体原因
                             // (HTTP 状态码 / 宿主未就绪 / 超时),不再吞成一句通用文案。
-                            error = if (result.requiresChallenge) "搜索遇到访问验证，请稍后重试" else result.message
+                            error = if (result.requiresChallenge) AppContextHolder.getString(R.string.search_challenge) else result.message
                         )
                     } else {
                         // 翻页失败保留已有结果,只把加载态收掉。

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_advanced_filter">Advanced filters</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_no_more">No more</string>
+    <string name="common_ok">OK</string>
+    <string name="common_pull_load_more">Pull up to load more</string>
+    <string name="common_reset">Reset</string>
+    <string name="common_sort">Sort</string>
+    <string name="composer_env_not_ready">Preparing the request environment, try again later</string>
+    <string name="detail_topic_author">Author</string>
+    <string name="detail_topic_status">Topic status</string>
+    <string name="drawer_about_me">About me</string>
+    <string name="drawer_about_me_login">"About me" needs sign-in to show results.</string>
+    <string name="filter_apply_count">Apply (%1$s)</string>
+    <string name="login_username">Username</string>
+    <string name="range_max">Max</string>
+    <string name="range_min">Min</string>
+    <string name="search_after">After</string>
+    <string name="search_all_categories">All categories</string>
+    <string name="search_before">Before</string>
+    <string name="search_category">Category</string>
+    <string name="search_challenge">Search hit a verification page, try again later</string>
+    <string name="search_hint">Search topics by keyword</string>
+    <string name="search_history">Search history</string>
+    <string name="search_login_required">Sign in to search</string>
+    <string name="search_match_all">All of</string>
+    <string name="search_match_any">Any of</string>
+    <string name="search_no_tags">No matching tags</string>
+    <string name="search_no_tags_available">No tags available</string>
+    <string name="search_no_topics">No matching topics</string>
+    <string name="search_no_users">No matching users</string>
+    <string name="search_pick_date">Pick a date</string>
+    <string name="search_scope">Scope</string>
+    <string name="search_tag">Tag</string>
+    <string name="search_tags">Search tags</string>
+    <string name="settings_application">Application</string>
+    <string name="sort_publish_time">Publish time</string>
+    <string name="user_post_count">Posts</string>
+    <string name="user_view_count">Views</string>
+</resources>

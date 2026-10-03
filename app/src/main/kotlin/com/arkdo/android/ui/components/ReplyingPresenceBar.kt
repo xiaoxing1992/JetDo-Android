@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
@@ -77,7 +79,7 @@ fun ReplyingPresenceBar(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier.padding(start = 8.dp, end = 6.dp)
         ) {
-            Text("正在回复", fontSize = 13.sp, color = colors.textSecondary)
+            Text(stringResource(R.string.detail_replying), fontSize = 13.sp, color = colors.textSecondary)
             // 三点略微离底 2dp，落在文字基线附近而非贴到 descender 底。
             TypingDots(
                 color = colors.textSecondary,

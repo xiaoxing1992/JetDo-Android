@@ -19,7 +19,7 @@
 | P1 | 1 | 功能不完整，用起来别扭 |
 | 半截 | 0 | 差一次接通的已清（S14 已落地）|
 | 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
-| P2 | 5 | 工程化与发布 |
+| P2 | 4 | 工程化与发布 |
 | **合计** | **7** | 上表逐项相加（1+1+0+0+5）|
 | 死代码 | 0 | 4 组已全部清理（逐符号复核后删除）|
 | 微清理 | 0 | M1/M2/M3 已全部清理 |
@@ -55,7 +55,7 @@
 
 ---
 
-## 五、P2 · 工程化与发布（5 项）
+## 五、P2 · 工程化与发布（4 项）
 
 | # | 问题 | 证据 |
 |---|---|---|
@@ -63,9 +63,10 @@
 | 21 | 无 androidTest | `**/src/androidTest/**` 0 文件（仅 build.gradle.kts:173-176 声明了依赖）|
 | 26 | 无崩溃上报 | Crashlytics / Bugly / Sentry 全库 0 命中，仅本地 `DebugLogScreen` |
 | 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md` 发布准备清单未勾选 |
-| 28 | 多语言 strings 抽取与翻译未做 | 资源级部分已就位：`values-night/`（深色 windowBackground + 系统栏图标开关）与 `localeConfig`（zh-CN，`AndroidManifest` + `res/xml/locales_config.xml`）已落地；剩余是 UI 文案从硬编码抽取进 strings.xml 并翻译 |
 
 > **已做对、不是缺口**：R8 已开（`isMinifyEnabled = true` + `isShrinkResources`，`app/build.gradle.kts:45-46`）；明文 HTTP 已关（`networkSecurityConfig`，默认禁 + 仅 localhost 白名单）；CI 已建（`.github/workflows/ci.yml`，push/PR 跑 assembleDebug + 全模块单测）；`core:datastore` 空模块与 `core:common` 空壳已摘除（`RelativeTime` 落位 core:model，8 模块收成 6+feature3）。
+>
+> ~~28 多语言 strings 抽取与翻译~~ **已完成（2026-10-03）**：679 条 UI 文案抽取进资源（app 607 / feature:home 39 / feature:search 39 / core:designsystem 8），values-en 全量英文对照 + `locales_config` 加 en-US。替换分三路：组合期 `stringResource`、服务层 object 单例走 `AppContextHolder`（core:data，Application.onCreate 初始化）、VM 消息同 holder；36 处插值模板转位置格式参数。刻意不本地化的边界（勿再报）：注释 113 处、Timber/Log 日志 31 处、逻辑位字面量 5 处（`CategoryIndex`/`HomeDrawer` 的 `未分类` 比较、`HolographicTitle` 标题匹配集合、`DebugLogStore.RESTORE_SEPARATOR` 持久化格式标记、`DebugLogScreen` 的 `contains("未捕获异常")`）、异常消息（DohService UnknownHostException）、core:data/core:model 内部错误文案（纯 JVM 语义层）。e2e 已验：en-US 冷启动首页/设置页全英文（含相对时间、公告条、底栏），zh-CN 切回无损；全库 541 单测 0 失败。
 
 ---
 
@@ -143,7 +144,7 @@
 
 **第 5 步 · 发布准备**
 12. 签名配置 + androidTest 骨架（P2-20/21）；CI 已建（P2-22 完成）
-13. 崩溃上报、隐私政策与商店素材（P2-26/27）；多语言 strings 抽取与翻译（P2-28 剩余）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
+13. 崩溃上报、隐私政策与商店素材（P2-26/27）；~~多语言 strings 抽取与翻译（P2-28）~~ **已完成**（679 条抽取 + values-en 全量翻译 + AppContextHolder 三路替换，e2e 双语验证）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
 
 ---
 

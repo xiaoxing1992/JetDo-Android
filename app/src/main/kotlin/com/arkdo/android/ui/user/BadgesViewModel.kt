@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.user
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.arkdo.android.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.UserBadgeGroup
@@ -16,7 +19,8 @@ import javax.inject.Inject
 /** 全部徽章页 VM(对齐鸿蒙 BadgesPage:分组 + 单枚详情)。 */
 @HiltViewModel
 class BadgesViewModel @Inject constructor(
-    private val userProfileService: UserProfileService
+    private val userProfileService: UserProfileService,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     data class UiState(
@@ -41,7 +45,7 @@ class BadgesViewModel @Inject constructor(
                 if (result.success && result.data != null) {
                     it.copy(loading = false, groups = result.data)
                 } else {
-                    it.copy(loading = false, error = result.error?.message ?: "加载失败,请重试")
+                    it.copy(loading = false, error = result.error?.message ?: appContext.getString(R.string.common_load_failed_retry2))
                 }
             }
         }

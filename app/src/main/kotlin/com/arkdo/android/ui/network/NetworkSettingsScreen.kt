@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.network
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -72,7 +74,7 @@ fun NetworkSettingsScreen(
     // DoH 摘要要在从 DoH 配置页 pop 回来时重算：本页 entry 会重新走到 RESUMED，
     // 而组合本身是复用的（NavHost 保留回退栈上的组合），所以不能指望 remember 重跑。
     var dohSummary by remember {
-        mutableStateOf(if (DohManager.isEnabled(context)) DohManager.getActiveServer(context).name else "已关闭")
+        mutableStateOf(if (DohManager.isEnabled(context)) DohManager.getActiveServer(context).name else context.getString(R.string.detail_closed))
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -81,7 +83,7 @@ fun NetworkSettingsScreen(
                 dohSummary = if (DohManager.isEnabled(context)) {
                     DohManager.getActiveServer(context).name
                 } else {
-                    "已关闭"
+                    context.getString(R.string.detail_closed)
                 }
             }
         }
@@ -105,12 +107,12 @@ fun NetworkSettingsScreen(
             IconButton(onClick = onNavigateBack) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
+                    contentDescription = stringResource(R.string.common_back),
                     tint = arkdoColors.textPrimary
                 )
             }
             Text(
-                text = "网络与连接",
+                text = stringResource(R.string.settings_network),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = arkdoColors.textPrimary
@@ -145,7 +147,7 @@ fun NetworkSettingsScreen(
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = "DoH 配置",
+                        text = stringResource(R.string.doh_config),
                         fontSize = 15.sp,
                         color = arkdoColors.textPrimary,
                         modifier = Modifier
@@ -174,8 +176,8 @@ fun NetworkSettingsScreen(
             }
 
             Text(
-                text = "DoH 用加密的 HTTPS 通道解析域名，绕过被污染的本地 DNS。" +
-                    "只对应用内浏览内核生效，不影响系统其它应用的网络。",
+                text = stringResource(R.string.doh_desc) +
+                    stringResource(R.string.pdns_scope_note3),
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
                 color = arkdoColors.textFaint,
@@ -212,12 +214,12 @@ fun NetworkSettingsScreen(
                             .padding(start = 14.dp)
                     ) {
                         Text(
-                            text = "帖子页显示过盾入口",
+                            text = stringResource(R.string.settings_challenge_shortcut),
                             fontSize = 15.sp,
                             color = arkdoColors.textPrimary
                         )
                         Text(
-                            text = "阅读被 CF 拦截时，帖子右上角出现快捷验证",
+                            text = stringResource(R.string.detail_challenge_shortcut_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)

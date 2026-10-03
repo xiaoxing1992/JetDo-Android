@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.topic
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -144,7 +147,7 @@ internal fun TopicScrubber(
                     }
                 }
                 .semantics {
-                    contentDescription = "楼层跳转"
+                    contentDescription = AppContextHolder.getString(R.string.detail_floor_jump)
                     progressBarRangeInfo = ProgressBarRangeInfo(
                         current = shown.toFloat(),
                         range = 1f..max.toFloat(),
@@ -220,7 +223,7 @@ internal fun TopicScrubber(
                     Spacer(modifier = Modifier.width(6.dp))
                 }
                 Text(
-                    text = if (jumping) "跳转到 ${jumpTarget} 楼" else "$shown 楼",
+                    text = if (jumping) stringResource(R.string.detail_jump_to_floor, jumpTarget) else stringResource(R.string.detail_floor_shown, shown),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = ArkdoFixedColors.OnDarkFg,

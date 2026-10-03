@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -119,7 +121,7 @@ fun DebugLogScreen(
         // 用户脱机跑一天的现场在文件里，内存缓冲只留得住最近一小段。
         val file = FileLoggerDaemon.exportToFile(context)
         if (file == null) {
-            scope.launch { snackbar.showSnackbar("导出失败，暂时拿不到日志文件") }
+            scope.launch { snackbar.showSnackbar(context.getString(R.string.debug_export_failed)) }
             return
         }
         val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -133,7 +135,7 @@ fun DebugLogScreen(
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(
-            android.content.Intent.createChooser(intent, "分享日志文件")
+            android.content.Intent.createChooser(intent, context.getString(R.string.debug_share_log_file))
         )
     }
 
@@ -141,7 +143,7 @@ fun DebugLogScreen(
         val text = DebugLogStore.dumpText()
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("arkdo-debug-log", text))
-        scope.launch { snackbar.showSnackbar("已复制 ${logs.size} 行日志") }
+        scope.launch { snackbar.showSnackbar(context.getString(R.string.debug_copied_lines, logs.size)) }
     }
 
     // 清空是「内存缓冲 + 沙箱文件（当前 + 2 份归档）」一起删，一次误点就是一天现场，
@@ -149,11 +151,11 @@ fun DebugLogScreen(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("清空全部日志？") },
+            title = { Text(stringResource(R.string.debug_clear_confirm)) },
             text = {
                 Text(
-                    "会删掉内存里的日志和沙箱里的日志文件（含 2 份归档），删完找不回来。" +
-                        "想把现场留一份，先点分享导出。"
+                    stringResource(R.string.debug_clear_warning) +
+                        stringResource(R.string.debug_export_first)
                 )
             },
             confirmButton = {
@@ -163,10 +165,10 @@ fun DebugLogScreen(
                     logs = emptyList()
                     fileLogBytes = 0L
                     confirmClear = false
-                }) { Text("清空") }
+                }) { Text(stringResource(R.string.common_clear)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -174,26 +176,26 @@ fun DebugLogScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("调试日志") },
+                title = { Text(stringResource(R.string.debug_debug_log)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     // 人机验证渲染自测:在同一套 WebView 配置下打开 hCaptcha 官方演示页。
                     // 这里能画出复选框 → 内核没问题,是站点弹层/布局的事;这里也空白 → 内核层问题。
-                    IconButton(onClick = { onOpenUrl("https://accounts.hcaptcha.com/demo", "hCaptcha 自测") }) {
-                        Icon(Icons.Default.BugReport, contentDescription = "hCaptcha 渲染自测")
+                    IconButton(onClick = { onOpenUrl("https://accounts.hcaptcha.com/demo", context.getString(R.string.challenge_hcaptcha_selftest)) }) {
+                        Icon(Icons.Default.BugReport, contentDescription = stringResource(R.string.challenge_hcaptcha_render_test))
                     }
                     IconButton(onClick = { copyAll() }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "复制全部日志")
+                        Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.debug_copy_all))
                     }
                     IconButton(onClick = { shareLogFile() }) {
-                        Icon(Icons.Default.Share, contentDescription = "分享日志文件")
+                        Icon(Icons.Default.Share, contentDescription = stringResource(R.string.debug_share_log_file))
                     }
                     IconButton(onClick = { confirmClear = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "清空日志")
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.debug_clear_log))
                     }
                 }
             )
@@ -224,7 +226,7 @@ fun DebugLogScreen(
             if (logs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     Text(
-                        text = "暂无日志。闪退后的堆栈会在下次启动时出现在这里。",
+                        text = stringResource(R.string.debug_no_logs),
                         fontSize = 13.sp
                     )
                 }
@@ -241,7 +243,7 @@ fun DebugLogScreen(
                         // 构建标识：一眼确认设备上跑的是哪次 APK（排查"改了没生效"类问题）。
                         item(key = "build") {
                             Text(
-                                text = "构建 ${BuildConfig.VERSION_NAME} (v${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_TIME}",
+                                text = stringResource(R.string.about_build, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.BUILD_TIME),
                                 fontSize = 10.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.tertiary,
@@ -299,9 +301,9 @@ private fun FileLogControlRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("日志落盘", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.debug_log_to_disk), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    text = "占用 ${formatLogSize(sizeBytes)} · 单文件 1MB 轮转，留 3 份",
+                    text = stringResource(R.string.debug_log_usage, formatLogSize(sizeBytes)),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -310,9 +312,9 @@ private fun FileLogControlRow(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("详细日志", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.debug_verbose_log), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    text = "含 D 级调试输出：量大、会加快轮转",
+                    text = stringResource(R.string.debug_verbose_hint),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

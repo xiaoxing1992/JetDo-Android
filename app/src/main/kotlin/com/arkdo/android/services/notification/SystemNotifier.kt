@@ -1,6 +1,7 @@
 package com.arkdo.android.services.notification
 
 import android.annotation.SuppressLint
+import com.arkdo.android.core.data.AppContextHolder
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -42,10 +43,10 @@ object SystemNotifier {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "通知",
+            AppContextHolder.getString(R.string.home_notifications),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "论坛回复、私信与提及提醒"
+            description = AppContextHolder.getString(R.string.home_push_summary)
         }
         manager.createNotificationChannel(channel)
         Timber.i("$LOG_TAG channel created id=%s", CHANNEL_ID)
@@ -67,11 +68,11 @@ object SystemNotifier {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("测试通知")
-            .setContentText("看到这条说明系统通知已生效，论坛有新回复时会以同样方式提醒你。")
+            .setContentTitle(AppContextHolder.getString(R.string.notif_test))
+            .setContentText(AppContextHolder.getString(R.string.notif_test_body))
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("看到这条说明系统通知已生效，论坛有新回复时会以同样方式提醒你。")
+                    .bigText(AppContextHolder.getString(R.string.notif_test_body))
             )
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)

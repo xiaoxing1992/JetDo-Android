@@ -1,5 +1,7 @@
 package com.arkdo.android.services.site
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import android.content.Context
 import android.util.Log
 import com.arkdo.android.data.models.FeedDef
@@ -25,18 +27,18 @@ class FeedPrefs private constructor() {
         // 「最新」恒在抽屉首位，常开、不可关不可拖，不入库
         private val LATEST_FEED = FeedDef(
             key = FeedKey.LATEST.value,
-            label = "最新",
+            label = AppContextHolder.getString(R.string.tab_latest),
             requiresLogin = false
         )
 
         // 可在设置页勾选启用/排序的内置入口（顺序即设置页未启用区的默认排列）
         private val OPTIONAL_FEEDS = listOf(
-            FeedDef(key = FeedKey.CREATED.value, label = "最新发布", requiresLogin = false),
+            FeedDef(key = FeedKey.CREATED.value, label = AppContextHolder.getString(R.string.tab_new), requiresLogin = false),
             // 「热门」原先挂在 top 上是名实不符(top 是历史高分榜)，现已归位：hot=热门、top=排行榜
-            FeedDef(key = FeedKey.HOT.value, label = "热门", requiresLogin = false),
-            FeedDef(key = FeedKey.TOP.value, label = "排行榜", requiresLogin = false),
-            FeedDef(key = FeedKey.UNREAD.value, label = "未读", requiresLogin = true),
-            FeedDef(key = FeedKey.NEW.value, label = "未读新帖", requiresLogin = true)
+            FeedDef(key = FeedKey.HOT.value, label = AppContextHolder.getString(R.string.tab_hot), requiresLogin = false),
+            FeedDef(key = FeedKey.TOP.value, label = AppContextHolder.getString(R.string.user_leaderboard), requiresLogin = false),
+            FeedDef(key = FeedKey.UNREAD.value, label = AppContextHolder.getString(R.string.tab_unread), requiresLogin = true),
+            FeedDef(key = FeedKey.NEW.value, label = AppContextHolder.getString(R.string.tab_unread_new), requiresLogin = true)
         )
 
         /**

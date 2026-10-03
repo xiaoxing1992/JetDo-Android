@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -45,7 +47,8 @@ import kotlin.math.floor
  * 尺寸必须实测（`onGloballyPositioned`）：偏移量是按文字尺寸算的，拿不到尺寸就先按纯品红显示，
  * 避免第一帧闪一下透明/黑色。
  */
-private val HOLOGRAPHIC_TITLES = setOf("Premium", "种子用户", "破界者")
+// 标题文本匹配集合：与站点下发的徽章标题做等值比较，是逻辑不是展示文案，保持字面量不本地化。
+    private val HOLOGRAPHIC_TITLES = setOf("Premium", "种子用户", "破界者")
 
 /** 是否属于会走全息效果的称号。 */
 internal fun isHolographicTitle(title: String?): Boolean =

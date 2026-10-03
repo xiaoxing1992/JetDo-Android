@@ -1,5 +1,8 @@
 package com.arkdo.android.services.connect
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.ConnectBarItem
 import com.arkdo.android.data.models.ConnectLevelData
 import com.arkdo.android.data.models.ConnectQuotaItem
@@ -104,7 +107,7 @@ object ConnectLevelParser {
     }
 
     private fun normalize(obj: RawConnectLevel): ConnectLevelData = ConnectLevelData(
-        title = obj.title?.takeIf { it.isNotEmpty() } ?: "信任级别要求",
+        title = obj.title?.takeIf { it.isNotEmpty() } ?: AppContextHolder.getString(R.string.user_trust_reqs),
         statusLabel = obj.statusLabel.orEmpty(),
         statusIsMet = obj.statusIsMet == true,
         subtitle = obj.subtitle.orEmpty(),

@@ -1,5 +1,8 @@
 package com.arkdo.android.feature.home
 
+import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.Composable
+import com.arkdo.android.feature.home.R
 import com.arkdo.android.core.model.HomeFeed
 import com.arkdo.android.core.model.HomeQuery
 
@@ -28,11 +31,12 @@ internal fun HomeQuery.summaryTag(): String? =
     if (categoryId != null) tag?.takeIf(String::isNotBlank) else null
 
 /** 抽屉确认区的完整描述，不省略任何一项。 */
+@Composable
 internal fun describeHomeQuery(query: HomeQuery): String {
     val parts = mutableListOf(query.feed.label)
     when {
         !query.categoryName.isNullOrBlank() -> parts.add(query.categoryName!!)
-        query.tag.isNullOrBlank() -> parts.add("全站")
+        query.tag.isNullOrBlank() -> parts.add(stringResource(R.string.drawer_site_wide))
     }
     query.tag?.takeIf(String::isNotBlank)?.let { parts.add(it) }
     return parts.joinToString(" · ")

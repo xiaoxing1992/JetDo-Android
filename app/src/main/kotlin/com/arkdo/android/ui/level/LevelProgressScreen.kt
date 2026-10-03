@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.level
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.webkit.WebView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -187,10 +190,10 @@ fun LevelProgressScreen(
                         PoweredByFooter(connect)
                     }
                     phase == LevelPhase.LOADING -> LevelLoading()
-                    phase == LevelPhase.ANON -> LevelMessage("请先登录", "登录后即可查看等级升级进度", false, onRetry = {}, onOpenWeb = onOpenWeb)
+                    phase == LevelPhase.ANON -> LevelMessage(stringResource(R.string.login_required), stringResource(R.string.user_trust_login_required), false, onRetry = {}, onOpenWeb = onOpenWeb)
                     else -> LevelMessage(
-                        "暂时无法获取",
-                        "可能是网络问题或需要在浏览器完成验证",
+                        stringResource(R.string.doh_unknown_state),
+                        stringResource(R.string.challenge_maybe_verify),
                         true,
                         onRetry = {
                             data = null
@@ -230,9 +233,9 @@ private fun LevelTopBar(onBack: () -> Unit) {
             .padding(horizontal = 4.dp)
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
         }
-        Text("等级进度", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = arkdoColors.textPrimary)
+        Text(stringResource(R.string.user_trust_progress), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = arkdoColors.textPrimary)
     }
 }
 
@@ -249,7 +252,7 @@ private fun LevelCard(data: ConnectLevelData, connect: ConnectColors) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = data.title.ifEmpty { "信任级别要求" },
+                text = data.title.ifEmpty { stringResource(R.string.user_trust_reqs) },
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = connect.textPrimary,
@@ -282,17 +285,17 @@ private fun LevelCard(data: ConnectLevelData, connect: ConnectColors) {
             )
         }
         if (data.rings.isNotEmpty()) {
-            SectionTitle("活跃程度", first = true, connect = connect)
+            SectionTitle(stringResource(R.string.trust_activity), first = true, connect = connect)
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = SectionBottom)) {
                 data.rings.forEach { RingItem(it, connect, Modifier.weight(1f)) }
             }
         }
         if (data.bars.isNotEmpty()) {
-            SectionTitle("互动参与", first = data.rings.isEmpty(), connect = connect)
+            SectionTitle(stringResource(R.string.user_engagement), first = data.rings.isEmpty(), connect = connect)
             data.bars.forEachIndexed { index, bar -> BarItem(bar, spaced = index > 0, connect = connect) }
         }
         if (data.quotas.isNotEmpty() || data.vetos.isNotEmpty()) {
-            SectionTitle("合规记录", first = data.rings.isEmpty() && data.bars.isEmpty(), connect = connect)
+            SectionTitle(stringResource(R.string.user_compliance_records), first = data.rings.isEmpty() && data.bars.isEmpty(), connect = connect)
             data.quotas.forEachIndexed { index, quota -> QuotaCard(quota, spaced = index > 0, connect = connect) }
             data.vetos.forEachIndexed { index, veto ->
                 VetoCard(veto, spaced = index > 0 || data.quotas.isNotEmpty(), connect = connect)
@@ -477,7 +480,7 @@ private fun LevelLoading() {
         modifier = Modifier.fillMaxWidth().height(280.dp)
     ) {
         CircularProgressIndicator(modifier = Modifier.size(32.dp), color = arkdoColors.ldAccent, strokeWidth = 3.dp)
-        Text("正在加载等级数据", fontSize = 14.sp, color = arkdoColors.textSecondary, modifier = Modifier.padding(top = 14.dp))
+        Text(stringResource(R.string.user_loading_trust), fontSize = 14.sp, color = arkdoColors.textSecondary, modifier = Modifier.padding(top = 14.dp))
     }
 }
 
@@ -513,17 +516,17 @@ private fun LevelMessage(
                         .clip(RoundedCornerShape(21.dp))
                         .background(colors.ldAccent)
                 ) {
-                    Text("重试", fontSize = 15.sp, color = Color.White, modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(stringResource(R.string.common_retry), fontSize = 15.sp, color = Color.White, modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 TextButton(
-                    onClick = { onOpenWeb(AppConstants.CONNECT_URL, "等级进度") },
+                    onClick = { onOpenWeb(AppConstants.CONNECT_URL, AppContextHolder.getString(R.string.user_trust_progress)) },
                     modifier = Modifier
                         .height(42.dp)
                         .clip(RoundedCornerShape(21.dp))
                         .background(colors.surfaceCard)
                 ) {
-                    Text("浏览器打开", fontSize = 15.sp, color = colors.ldAccent, modifier = Modifier.padding(horizontal = 8.dp))
+                    Text(stringResource(R.string.common_open_browser), fontSize = 15.sp, color = colors.ldAccent, modifier = Modifier.padding(horizontal = 8.dp))
                 }
             }
         }

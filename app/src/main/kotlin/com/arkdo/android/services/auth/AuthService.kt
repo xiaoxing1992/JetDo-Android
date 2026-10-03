@@ -1,5 +1,8 @@
 package com.arkdo.android.services.auth
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.User
 import com.arkdo.android.services.network.ChallengeState
 import com.arkdo.android.services.network.JsonNetworkClient
@@ -64,7 +67,7 @@ class AuthService(private val bridge: JsonNetworkClient) {
             return NetworkResults.forwardFailure(response)
         }
         if (response.data == null) {
-            return unexpectedResponse(response, "Linux.do 当前会话响应为空。")
+            return unexpectedResponse(response, AppContextHolder.getString(R.string.err_session_empty))
         }
         return try {
             val payload = Json { ignoreUnknownKeys = true }
@@ -79,7 +82,7 @@ class AuthService(private val bridge: JsonNetworkClient) {
                 )
             }
             if (sourceUser.id == null || sourceUser.username == null) {
-                return unexpectedResponse(response, "Linux.do 当前用户响应字段无效。")
+                return unexpectedResponse(response, AppContextHolder.getString(R.string.err_current_user_invalid))
             }
             NetworkResult(
                 success = true,
@@ -101,7 +104,7 @@ class AuthService(private val bridge: JsonNetworkClient) {
                 )
             )
         } catch (e: Exception) {
-            unexpectedResponse(response, "Linux.do 当前会话响应不是有效 JSON。")
+            unexpectedResponse(response, AppContextHolder.getString(R.string.err_session_json))
         }
     }
 

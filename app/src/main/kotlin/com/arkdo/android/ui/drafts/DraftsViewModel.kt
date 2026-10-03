@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.drafts
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.arkdo.android.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.Draft
@@ -18,7 +21,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DraftsViewModel @Inject constructor(
-    private val draftService: DraftService
+    private val draftService: DraftService,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DraftsUiState())
@@ -52,7 +56,7 @@ class DraftsViewModel @Inject constructor(
                     it.copy(
                         initialLoading = false,
                         refreshing = false,
-                        error = if (silent && it.drafts.isNotEmpty()) it.error else result.error?.message ?: "草稿加载失败"
+                        error = if (silent && it.drafts.isNotEmpty()) it.error else result.error?.message ?: appContext.getString(R.string.drafts_load_failed)
                     )
                 }
             }
@@ -110,9 +114,9 @@ class DraftsViewModel @Inject constructor(
                     if (next.size != state.drafts.size) {
                         offset = (offset - 1).coerceAtLeast(0)
                     }
-                    state.copy(drafts = next, deletingKey = "", notice = "草稿已删除")
+                    state.copy(drafts = next, deletingKey = "", notice = appContext.getString(R.string.drafts_deleted))
                 } else {
-                    state.copy(deletingKey = "", notice = result.error?.message ?: "删除失败，请稍后再试")
+                    state.copy(deletingKey = "", notice = result.error?.message ?: appContext.getString(R.string.common_delete_failed))
                 }
             }
         }

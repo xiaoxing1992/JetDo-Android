@@ -1,5 +1,7 @@
 package com.arkdo.android.services.network
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import android.content.Context
 import com.arkdo.android.common.constants.StorageKeys
 import kotlinx.serialization.Serializable
@@ -18,12 +20,12 @@ import timber.log.Timber
 
 /** 内置 DoH：不可删除，首次启动种子数据，也是删除 active 后的兜底。 */
 const val DOH_EDGE_ID = "builtin-edge"
-private const val DOH_EDGE_NAME = "Linux.do 优选"
+private val DOH_EDGE_NAME: String get() = AppContextHolder.getString(R.string.site_linuxdo_premium)
 private const val DOH_EDGE_URL = "https://edge.47258.xyz/linuxdo"
 
 /** 保留原 id 兼容旧安装；现降为第二预设。 */
 const val DOH_BUILTIN_ID = "builtin-default"
-private const val DOH_BUILTIN_NAME = "系统默认"
+private val DOH_BUILTIN_NAME: String get() = AppContextHolder.getString(R.string.settings_system_default)
 private const val DOH_BUILTIN_URL = "https://arkdo.ddd.oaifree.com/query-dns"
 
 /** DoH 解析模式：AUTO 失败回退系统 DNS；SECURE_ONLY 只用 DoH。 */

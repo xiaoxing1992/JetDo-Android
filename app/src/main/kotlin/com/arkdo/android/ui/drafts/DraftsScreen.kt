@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.drafts
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -75,7 +77,7 @@ fun DraftsScreen(
     val colors = arkdoColors
     val context = LocalContext.current
     var pendingDelete by remember { mutableStateOf<Draft?>(null) }
-    val title = if (state.drafts.isNotEmpty()) "我的草稿 · ${state.drafts.size}" else "我的草稿"
+    val title = if (state.drafts.isNotEmpty()) stringResource(R.string.drafts_count, state.drafts.size) else stringResource(R.string.drafts_title)
 
     LaunchedEffect(Unit) { viewModel.loadInitial() }
 
@@ -108,7 +110,7 @@ fun DraftsScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
         }
@@ -123,9 +125,9 @@ fun DraftsScreen(
             state.drafts.isEmpty() && state.error != null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(state.error ?: "草稿加载失败", color = colors.textSecondary)
+                        Text(state.error ?: stringResource(R.string.drafts_load_failed), color = colors.textSecondary)
                         Text(
-                            "重试",
+                            stringResource(R.string.common_retry),
                             color = colors.ldAccent,
                             modifier = Modifier.padding(top = 12.dp).clickable { viewModel.loadInitial() }
                         )
@@ -137,13 +139,13 @@ fun DraftsScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         FaIcon("pen-to-square", colors.textTertiary, 36.dp)
                         Text(
-                            "还没有草稿",
+                            stringResource(R.string.drafts_empty),
                             fontSize = 16.sp,
                             color = colors.textPrimary,
                             modifier = Modifier.padding(top = 12.dp)
                         )
                         Text(
-                            "编辑帖子时会自动存草稿，没写完也不怕丢",
+                            stringResource(R.string.drafts_hint),
                             fontSize = 13.sp,
                             color = colors.textTertiary,
                             modifier = Modifier.padding(top = 6.dp)
@@ -188,7 +190,7 @@ fun DraftsScreen(
                                         color = colors.ldAccent,
                                         strokeWidth = 2.dp
                                     )
-                                    !state.hasMore -> Text("没有更多了", fontSize = 13.sp, color = colors.textFaint)
+                                    !state.hasMore -> Text(stringResource(R.string.common_no_more), fontSize = 13.sp, color = colors.textFaint)
                                 }
                             }
                         }
@@ -201,16 +203,16 @@ fun DraftsScreen(
     pendingDelete?.let { draft ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除草稿") },
-            text = { Text("确定要删除「${draft.displayTitle}」吗？删除后无法恢复。") },
+            title = { Text(stringResource(R.string.drafts_delete)) },
+            text = { Text(stringResource(R.string.drafts_delete_confirm, draft.displayTitle)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.delete(draft)
                     pendingDelete = null
-                }) { Text("删除", color = colors.ldDanger) }
+                }) { Text(stringResource(R.string.common_delete), color = colors.ldDanger) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -281,12 +283,13 @@ private fun DraftRow(
     }
 }
 
+@Composable
 private fun actionLabel(action: DraftAction): String = when (action) {
-    DraftAction.NEW_TOPIC -> "主题"
-    DraftAction.REPLY -> "回帖"
-    DraftAction.PRIVATE_MESSAGE -> "私信"
-    DraftAction.EDIT -> "编辑"
-    DraftAction.OTHER -> "草稿"
+    DraftAction.NEW_TOPIC -> stringResource(R.string.filter_topics)
+    DraftAction.REPLY -> stringResource(R.string.user_replies_tab)
+    DraftAction.PRIVATE_MESSAGE -> stringResource(R.string.user_pm)
+    DraftAction.EDIT -> stringResource(R.string.common_edit)
+    DraftAction.OTHER -> stringResource(R.string.drafts_draft)
 }
 
 /** 点击分流，对齐鸿蒙 DraftsPage.openDraft。 */

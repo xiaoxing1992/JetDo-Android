@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,7 +80,7 @@ fun ReactionUsersSheetContent(
 
     Column(modifier = modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)) {
         Text(
-            text = "表情回应",
+            text = stringResource(R.string.detail_reactions),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -95,7 +97,7 @@ fun ReactionUsersSheetContent(
                 .padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
         ) {
             ReactionFilterChip(
-                label = "所有",
+                label = stringResource(R.string.common_all),
                 iconAsset = null,
                 count = totalRows,
                 selected = selectedReaction.isEmpty(),
@@ -118,7 +120,7 @@ fun ReactionUsersSheetContent(
             initialLoading && users.isEmpty() -> SheetStateBlock {
                 CircularProgressIndicator(color = colors.brand, modifier = Modifier.size(24.dp))
                 Text(
-                    text = "正在加载表情回应",
+                    text = stringResource(R.string.detail_loading_reactions),
                     fontSize = 14.sp,
                     color = colors.textTertiary,
                     modifier = Modifier.padding(top = 12.dp)
@@ -132,11 +134,11 @@ fun ReactionUsersSheetContent(
                     maxLines = 2,
                     modifier = Modifier.padding(horizontal = 24.dp)
                 )
-                SheetTextButton("重试", onRetry, Modifier.padding(top = 12.dp))
+                SheetTextButton(stringResource(R.string.common_retry), onRetry, Modifier.padding(top = 12.dp))
             }
             users.isEmpty() && !hasMore -> SheetStateBlock {
                 Text(
-                    text = "暂无表情回应",
+                    text = stringResource(R.string.detail_no_reactions),
                     fontSize = 14.sp,
                     color = colors.textTertiary,
                     modifier = Modifier.padding(top = 36.dp)
@@ -144,12 +146,12 @@ fun ReactionUsersSheetContent(
             }
             filteredUsers.isEmpty() -> SheetStateBlock {
                 Text(
-                    text = "当前已加载的回应中没有此表情",
+                    text = stringResource(R.string.detail_reaction_not_loaded),
                     fontSize = 14.sp,
                     color = colors.textTertiary
                 )
                 if (hasMore) {
-                    SheetTextButton("继续加载", onLoadMore, Modifier.padding(top = 12.dp))
+                    SheetTextButton(stringResource(R.string.common_continue_loading), onLoadMore, Modifier.padding(top = 12.dp))
                 }
             }
             else -> {
@@ -293,16 +295,16 @@ private fun ReactionLoadFooter(
             loadMoreLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(color = colors.brand, modifier = Modifier.size(16.dp))
                 Text(
-                    text = "正在加载更多",
+                    text = stringResource(R.string.common_loading_more),
                     fontSize = 13.sp,
                     color = colors.textTertiary,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
-            loadMoreError != null -> SheetTextButton("加载失败，点击重试", onRetry, Modifier.fillMaxWidth())
-            hasMore -> SheetTextButton("继续加载", onLoadMore, Modifier.fillMaxWidth())
+            loadMoreError != null -> SheetTextButton(stringResource(R.string.common_load_failed_tap), onRetry, Modifier.fillMaxWidth())
+            hasMore -> SheetTextButton(stringResource(R.string.common_continue_loading), onLoadMore, Modifier.fillMaxWidth())
             else -> Text(
-                text = "已加载全部表情回应",
+                text = stringResource(R.string.detail_reactions_loaded),
                 fontSize = 13.sp,
                 color = colors.textTertiary
             )

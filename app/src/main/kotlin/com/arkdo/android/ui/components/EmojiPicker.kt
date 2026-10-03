@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -59,16 +61,17 @@ private const val CELL_HEIGHT = 44
 private const val EMOJI_IMAGE_SIZE = 30
 
 /** 分组 key → 中文名。对齐鸿蒙 EmojiPicker.groupLabel；未列出的组直接用 key。 */
+@Composable
 private fun groupLabel(key: String): String = when (key) {
-    "smileys_&_emotion" -> "笑脸"
-    "people_&_body" -> "人物"
-    "animals_&_nature" -> "自然"
-    "food_&_drink" -> "食物"
-    "travel_&_places" -> "旅行"
-    "activities" -> "活动"
-    "objects" -> "物品"
-    "symbols" -> "符号"
-    "flags" -> "旗帜"
+    "smileys_&_emotion" -> stringResource(R.string.emoji_cat_smileys)
+    "people_&_body" -> stringResource(R.string.filter_users)
+    "animals_&_nature" -> stringResource(R.string.emoji_cat_nature)
+    "food_&_drink" -> stringResource(R.string.emoji_cat_food)
+    "travel_&_places" -> stringResource(R.string.emoji_cat_travel)
+    "activities" -> stringResource(R.string.user_activity_tab)
+    "objects" -> stringResource(R.string.emoji_cat_objects)
+    "symbols" -> stringResource(R.string.emoji_cat_symbols)
+    "flags" -> stringResource(R.string.emoji_cat_flags)
     else -> key
 }
 
@@ -157,7 +160,7 @@ fun EmojiPicker(
                 contentAlignment = Alignment.TopCenter
             ) {
                 Text(
-                    text = "表情加载中…",
+                    text = stringResource(R.string.emoji_loading),
                     fontSize = 13.sp,
                     color = colors.textTertiary,
                     textAlign = TextAlign.Center

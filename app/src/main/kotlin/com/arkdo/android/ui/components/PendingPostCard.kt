@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -45,7 +47,7 @@ fun PendingPostCard(
         // 元信息行:「需要审批」胶囊 + 相对时间。刻意不用 warning 橙——官方不把"排队待审"当告警。
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "需要审批",
+                text = stringResource(R.string.lottery_needs_review),
                 fontSize = 11.sp,
                 color = colors.textSecondary,
                 modifier = Modifier
@@ -99,7 +101,7 @@ fun PendingPostCard(
             ) {
                 FaIcon("trash-can", Color.White, 14.dp)
                 Text(
-                    text = "删除",
+                    text = stringResource(R.string.common_delete),
                     fontSize = 13.sp,
                     color = Color.White,
                     modifier = Modifier.padding(start = 6.dp)

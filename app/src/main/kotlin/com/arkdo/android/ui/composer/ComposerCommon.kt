@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.composer
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -55,7 +58,7 @@ internal fun PreviewPane(
     html: String?,
     rawText: String,
     loading: Boolean,
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    onResolveMedia: suspend (String) -> String = { error(AppContextHolder.getString(R.string.common_media_download_not_ready)) },
     modifier: Modifier = Modifier
 ) {
     val colors = arkdoColors
@@ -74,7 +77,7 @@ internal fun PreviewPane(
                     strokeWidth = 2.dp
                 )
                 Text(
-                    "正在生成预览...",
+                    stringResource(R.string.composer_generating_preview),
                     fontSize = 14.sp,
                     color = colors.textSecondary,
                     modifier = Modifier.padding(start = 10.dp)
@@ -98,7 +101,7 @@ internal fun PreviewPane(
             }
         } else if (rawText.isBlank()) {
             Text(
-                "(无内容可预览)",
+                stringResource(R.string.detail_empty_preview),
                 fontSize = 15.sp,
                 color = colors.textTertiary,
                 modifier = Modifier.padding(16.dp)
@@ -244,11 +247,11 @@ internal fun prepareRawUpload(
     if (declaredSize != null) {
         val overLimit = UploadService.checkSize(declaredSize, siteLimitKb, kindLabel)
         if (overLimit.isNotEmpty()) return RawFileResult.Failed(overLimit)
-        if (declaredSize == 0L) return RawFileResult.Failed("文件是空的")
+        if (declaredSize == 0L) return RawFileResult.Failed(AppContextHolder.getString(R.string.common_file_empty))
     }
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-        ?: return RawFileResult.Failed("文件读取失败")
-    if (bytes.isEmpty()) return RawFileResult.Failed("文件是空的")
+        ?: return RawFileResult.Failed(AppContextHolder.getString(R.string.common_file_read_failed))
+    if (bytes.isEmpty()) return RawFileResult.Failed(AppContextHolder.getString(R.string.common_file_empty))
     // provider 不给 SIZE 时（少见）上面那道闸门是空的，读完再兜一次。
     val afterRead = UploadService.checkSize(bytes.size.toLong(), siteLimitKb, kindLabel)
     if (afterRead.isNotEmpty()) return RawFileResult.Failed(afterRead)
@@ -261,7 +264,7 @@ internal fun prepareRawUpload(
             byteLength = bytes.size.toLong()
         )
     )
-}.getOrElse { RawFileResult.Failed("文件读取失败") }
+}.getOrElse { RawFileResult.Failed(AppContextHolder.getString(R.string.common_file_read_failed)) }
 
 internal fun queryFileSize(resolver: ContentResolver, uri: Uri): Long? =
     resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->

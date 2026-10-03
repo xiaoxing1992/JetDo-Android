@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -119,17 +122,17 @@ private fun ProfileTopBar(onNavigateBack: () -> Unit, onOpenSettings: () -> Unit
             .padding(horizontal = 4.dp)
     ) {
         IconButton(onClick = onNavigateBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = arkdoColors.textPrimary)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = arkdoColors.textPrimary)
         }
         Text(
-            text = "我的",
+            text = stringResource(R.string.home_profile),
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             color = arkdoColors.textPrimary,
             modifier = Modifier.weight(1f)
         )
         IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Filled.Settings, contentDescription = "设置", tint = arkdoColors.textPrimary)
+            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.common_settings), tint = arkdoColors.textPrimary)
         }
     }
 }
@@ -279,25 +282,25 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录", color = arkdoColors.textPrimary) },
-            text = { Text("确定要退出当前账号吗?", color = arkdoColors.textSecondary) },
+            title = { Text(stringResource(R.string.login_logout), color = arkdoColors.textPrimary) },
+            text = { Text(stringResource(R.string.logout_confirm), color = arkdoColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
                     viewModel.logout { ok ->
                         Toast.makeText(
                             context,
-                            if (ok) "已退出登录" else "退出登录失败,请稍后再试",
+                            if (ok) context.getString(R.string.login_logged_out) else context.getString(R.string.logout_failed),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                 }) {
-                    Text("退出", color = arkdoColors.ldDanger)
+                    Text(stringResource(R.string.common_exit), color = arkdoColors.ldDanger)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("取消", color = arkdoColors.textSecondary)
+                    Text(stringResource(R.string.common_cancel), color = arkdoColors.textSecondary)
                 }
             }
         )
@@ -434,7 +437,7 @@ private fun LoggedInContent(
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.ldAccent, strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("正在加载论坛数据", fontSize = 13.sp, color = colors.textSecondary)
+                Text(stringResource(R.string.drawer_loading_forum), fontSize = 13.sp, color = colors.textSecondary)
             }
         }
     }
@@ -448,16 +451,16 @@ private fun LoggedInContent(
             .background(colors.surfaceCard)
             .padding(top = CardPadding, bottom = 14.dp)
     ) {
-        QuickEntryNative(icon = "clock-rotate-left", label = "浏览历史", love = false) {
+        QuickEntryNative(icon = "clock-rotate-left", label = stringResource(R.string.user_browse_history), love = false) {
             onOpenReadTopics()
         }
-        QuickEntryNative(icon = "bookmark", label = "我的书签", love = false) {
+        QuickEntryNative(icon = "bookmark", label = stringResource(R.string.bookmarks_title), love = false) {
             onOpenBookmarks()
         }
-        QuickEntryNative(icon = "heart", label = "我的点赞", love = true) {
-            onOpenActivity(username, "1", "我的点赞")
+        QuickEntryNative(icon = "heart", label = stringResource(R.string.user_likes_given), love = true) {
+            onOpenActivity(username, "1", AppContextHolder.getString(R.string.user_likes_given))
         }
-        QuickEntryNative(icon = "pen-to-square", label = "我的草稿", badgeCount = draftBadgeCount) {
+        QuickEntryNative(icon = "pen-to-square", label = stringResource(R.string.drafts_title), badgeCount = draftBadgeCount) {
             onOpenDrafts()
         }
     }
@@ -473,7 +476,7 @@ private fun LoggedInContent(
             .background(colors.surfaceCard)
     ) {
         SectionHeadProfile(
-            title = if ((profile?.badgeCount ?: 0) > 0) "徽章 · ${profile?.badgeCount}" else "徽章",
+            title = if ((profile?.badgeCount ?: 0) > 0) stringResource(R.string.drawer_badges_profile_count, profile?.badgeCount ?: 0) else stringResource(R.string.user_badges),
             onMore = { onOpenBadges(username, profile?.badgeCount ?: 0) }
         )
         if (state.topBadges.isNotEmpty()) {
@@ -496,7 +499,7 @@ private fun LoggedInContent(
             }
         } else {
             Text(
-                text = "暂无徽章",
+                text = stringResource(R.string.user_no_badges),
                 fontSize = 13.sp,
                 color = colors.textFaint,
                 modifier = Modifier
@@ -515,8 +518,8 @@ private fun LoggedInContent(
             .background(colors.surfaceCard)
     ) {
         SectionHeadProfile(
-            title = "最近活动",
-            onMore = { onOpenActivity(username, "4,5", "最近活动") }
+            title = stringResource(R.string.user_recent_activity),
+            onMore = { onOpenActivity(username, "4,5", AppContextHolder.getString(R.string.user_recent_activity)) }
         )
         if (state.recentActivity.isNotEmpty()) {
             state.recentActivity.forEachIndexed { index, item ->
@@ -526,23 +529,23 @@ private fun LoggedInContent(
                 ProfileActivityRow(item, state, onOpenTopic)
             }
             // 底部「我的话题 N › · 我的回复 N ›」。
-            val topicsLabel = state.stats?.let { "我的话题 ${formatCount(it.topicCount)} ›" } ?: "我的话题 ›"
-            val repliesLabel = state.stats?.let { "我的回复 ${formatCount(it.postCount)} ›" } ?: "我的回复 ›"
+            val topicsLabel = state.stats?.let { stringResource(R.string.drawer_my_topics_count, formatCount(it.topicCount)) } ?: stringResource(R.string.drawer_my_topics)
+            val repliesLabel = state.stats?.let { stringResource(R.string.drawer_my_replies_count, formatCount(it.postCount)) } ?: stringResource(R.string.drawer_my_replies)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = CardPadding, end = CardPadding, top = 8.dp, bottom = 14.dp)
             ) {
                 Text(topicsLabel, fontSize = 13.sp, color = colors.ldAccent,
-                    modifier = Modifier.clickable { onOpenActivity(username, "4", "我的话题") })
+                    modifier = Modifier.clickable { onOpenActivity(username, "4", AppContextHolder.getString(R.string.user_my_topics)) })
                 Text("·", fontSize = 13.sp, color = colors.textFaint,
                     modifier = Modifier.padding(start = 10.dp, end = 10.dp))
                 Text(repliesLabel, fontSize = 13.sp, color = colors.ldAccent,
-                    modifier = Modifier.clickable { onOpenActivity(username, "5", "我的回复") })
+                    modifier = Modifier.clickable { onOpenActivity(username, "5", AppContextHolder.getString(R.string.user_my_replies)) })
             }
         } else {
             Text(
-                text = "最近没有发帖",
+                text = stringResource(R.string.user_no_posts),
                 fontSize = 13.sp,
                 color = colors.textFaint,
                 modifier = Modifier
@@ -564,7 +567,7 @@ private fun LoggedInContent(
             .clickable(onClick = onRequestLogout)
             .padding(top = 14.dp, bottom = 14.dp)
     ) {
-        Text("退出登录", fontSize = 15.sp, color = colors.ldDanger)
+        Text(stringResource(R.string.login_logout), fontSize = 15.sp, color = colors.ldDanger)
     }
 }
 
@@ -572,10 +575,10 @@ private fun LoggedInContent(
 private fun buildProfileMeta(profile: com.arkdo.android.data.models.UserProfileDetail?): String {
     if (profile == null) return ""
     val parts = mutableListOf<String>()
-    daysSince(profile.createdAt).takeIf { it > 0 }?.let { parts.add("加入 $it 天") }
-    RelativeTime.fromNow(profile.lastPostedAt).takeIf { it.isNotEmpty() }?.let { parts.add("最近发帖 $it") }
+    daysSince(profile.createdAt).takeIf { it > 0 }?.let { parts.add(stringResource(R.string.user_joined_days, it)) }
+    RelativeTime.fromNow(profile.lastPostedAt).takeIf { it.isNotEmpty() }?.let { parts.add(stringResource(R.string.composer_recent_posts, it)) }
     if ((profile.profileViewCount ?: 0) > 0) {
-        parts.add("浏览量 ${formatCount(profile.profileViewCount ?: 0)}")
+        parts.add(stringResource(R.string.user_profile_views, formatCount(profile.profileViewCount ?: 0)))
     }
     return parts.joinToString(" · ")
 }
@@ -590,7 +593,7 @@ private fun SectionHeadProfile(title: String, onMore: () -> Unit) {
     ) {
         Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = arkdoColors.textPrimary)
         Spacer(modifier = Modifier.weight(1f))
-        Text("全部 ›", fontSize = 12.sp, color = arkdoColors.ldAccent,
+        Text(stringResource(R.string.common_all_more), fontSize = 12.sp, color = arkdoColors.ldAccent,
             modifier = Modifier.clickable(onClick = onMore))
     }
 }
@@ -600,18 +603,18 @@ private fun StatsGrid(stats: com.arkdo.android.data.models.UserSummaryStats) {
     val colors = arkdoColors
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 14.dp)) {
-            StatCellProfile(formatCount(stats.daysVisited), "访问天数")
-            StatCellProfile(formatTimeRead(stats.timeReadSeconds), "阅读时长")
-            StatCellProfile(formatCount(stats.likesReceived), "收到的赞")
-            StatCellProfile(formatCount(stats.likesGiven), "送出的赞")
+            StatCellProfile(formatCount(stats.daysVisited), stringResource(R.string.user_days_visited))
+            StatCellProfile(formatTimeRead(stats.timeReadSeconds), stringResource(R.string.user_time_read))
+            StatCellProfile(formatCount(stats.likesReceived), stringResource(R.string.user_likes_received))
+            StatCellProfile(formatCount(stats.likesGiven), stringResource(R.string.user_likes_given2))
         }
         Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = CardPadding)) {
-            StatCellProfile(formatCount(stats.topicCount), "创建话题")
-            StatCellProfile(formatCount(stats.postCount), "回复")
-            StatCellProfile(formatCount(stats.topicsEntered), "浏览话题")
+            StatCellProfile(formatCount(stats.topicCount), stringResource(R.string.composer_new_topic))
+            StatCellProfile(formatCount(stats.postCount), stringResource(R.string.common_reply))
+            StatCellProfile(formatCount(stats.topicsEntered), stringResource(R.string.action_browse_topics))
             StatCellProfile(
                 if (stats.solvedCount != null) formatCount(stats.solvedCount) else "—",
-                "解决方案"
+                stringResource(R.string.detail_solution)
             )
         }
     }
@@ -632,9 +635,9 @@ private fun LdcEntryCard(state: LdcEntryState, onOpen: (Boolean) -> Unit, onRetr
     val anonymous = state.phase == LdcEntryPhase.ANON
     val gold = if (isArkdoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
     val subtitle = when (state.phase) {
-        LdcEntryPhase.ANON -> "使用 LINUX DO 账号登录后查看"
-        LdcEntryPhase.ERROR -> "暂时无法获取余额"
-        else -> "查看最近 7 天获取记录"
+        LdcEntryPhase.ANON -> stringResource(R.string.credit_login_to_view)
+        LdcEntryPhase.ERROR -> stringResource(R.string.credit_balance_unavailable)
+        else -> stringResource(R.string.credit_recent_records)
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -661,7 +664,7 @@ private fun LdcEntryCard(state: LdcEntryState, onOpen: (Boolean) -> Unit, onRetr
                 Text(formatLdcAmount(state.info.availableBalance), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
             }
             else -> {
-                Text(if (anonymous) "去登录" else "重试", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.ldAccent)
+                Text(if (anonymous) stringResource(R.string.login_go) else stringResource(R.string.common_retry), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.ldAccent)
             }
         }
         FaIcon("chevron-right", colors.textFaint, 14.dp, Modifier.padding(start = 6.dp))
@@ -824,7 +827,7 @@ private fun AnonymousContent(username: String, onLoginClick: () -> Unit) {
             FaIcon("user", colors.textFaint, 32.dp)
         }
         Text(
-            text = "登录 Linux.do",
+            text = stringResource(R.string.login_linuxdo),
             fontSize = 19.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textPrimary,
@@ -833,7 +836,7 @@ private fun AnonymousContent(username: String, onLoginClick: () -> Unit) {
             modifier = Modifier.padding(top = 16.dp, start = CardPadding, end = CardPadding)
         )
         Text(
-            text = "账号由该论坛提供,登录后即可参与讨论。登录在论坛自己的页面完成,ArkDO 不经手你的密码。",
+            text = stringResource(R.string.login_account_note),
             fontSize = 13.sp,
             color = colors.textSecondary,
             textAlign = TextAlign.Center,
@@ -848,13 +851,13 @@ private fun AnonymousContent(username: String, onLoginClick: () -> Unit) {
                 .padding(horizontal = 44.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("立即登录", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
+            Text(stringResource(R.string.login_now), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
         }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(top = 16.dp)
         ) {
-            listOf("参与回帖、点赞与投票", "私信与实时通知提醒", "跨设备同步阅读进度").forEachIndexed { index, line ->
+            listOf(stringResource(R.string.login_benefit_engage), stringResource(R.string.login_benefit_pm), stringResource(R.string.login_benefit_sync)).forEachIndexed { index, line ->
                 Text(
                     text = line,
                     fontSize = 13.sp,

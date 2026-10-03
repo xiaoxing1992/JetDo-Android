@@ -1,5 +1,7 @@
 package com.arkdo.android.feature.home
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.feature.home.R
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +74,7 @@ fun HomeRoute(
         if (query.tag != tag.name) {
             viewModel.setQuery(query.copy(tag = tag.name, tagId = tag.id, tagSlug = tag.slug))
             // 顶栏此刻多半已随滚动收起，副行看不见，给一句 toast 交代刚发生了什么。
-            Toast.makeText(context, "已按标签「${tag.name}」筛选", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.search_filtered_tag, tag.name), Toast.LENGTH_SHORT).show()
         }
     }
     val onBadgeCategoryClick: (HomeCategory) -> Unit = { category ->
@@ -86,7 +88,7 @@ fun HomeRoute(
                     categoryName = category.name
                 )
             )
-            Toast.makeText(context, "已按分类「${category.name}」筛选", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.search_filtered_category, category.name), Toast.LENGTH_SHORT).show()
         }
     }
 

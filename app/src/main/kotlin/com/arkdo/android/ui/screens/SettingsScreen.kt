@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -85,10 +88,10 @@ private val CardPadding = 16.dp
 private val CardGap = 12.dp
 private const val OFFICIAL_SITE_URL = "https://arkdo.app"
 
-private const val DISCLAIMER = "本应用是第三方论坛客户端，不提供、不托管、不审核任何内容。\n\n" +
-    "应用内显示的全部内容均来自你自行添加的第三方站点，由该站点及其运营方负责。" +
-    "你选择访问哪些站点，完全由你自己决定。\n\n" +
-    "本应用与任何论坛站点及其运营方之间，不存在隶属、合作或授权关系。"
+private val DISCLAIMER: String get() = AppContextHolder.getString(R.string.about_disclaimer1b) +
+    AppContextHolder.getString(R.string.about_disclaimer3) +
+    AppContextHolder.getString(R.string.about_disclaimer4b) +
+    AppContextHolder.getString(R.string.about_disclaimer2)
 
 @Composable
 fun SettingsScreen(
@@ -142,7 +145,7 @@ fun SettingsScreen(
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.TextFormat,
-                    label = "帖子列表样式",
+                    label = stringResource(R.string.settings_topic_list_style),
                     onClick = onOpenTopicListStyle
                 )
                 Hairline()
@@ -156,25 +159,25 @@ fun SettingsScreen(
             SettingsCard {
                 SettingRow(
                     icon = Icons.Outlined.Notifications,
-                    label = "通知",
+                    label = stringResource(R.string.home_notifications),
                     onClick = onOpenPushSettings
                 )
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.Wifi,
-                    label = "网络与连接",
+                    label = stringResource(R.string.settings_network),
                     onClick = onOpenNetworkSettings
                 )
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.Science,
-                    label = "实验性功能",
+                    label = stringResource(R.string.settings_experimental),
                     onClick = onOpenExperimental
                 )
             }
 
             Text(
-                text = "关于",
+                text = stringResource(R.string.settings_about),
                 fontSize = 13.sp,
                 color = arkdoColors.textFaint,
                 modifier = Modifier
@@ -184,26 +187,26 @@ fun SettingsScreen(
             SettingsCard(modifier = Modifier.padding(top = 0.dp)) {
                 SettingRow(
                     icon = Icons.Outlined.ChatBubbleOutline,
-                    label = "反馈与建议",
+                    label = stringResource(R.string.settings_feedback),
                     onClick = onOpenFeedback
                 )
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.Info,
-                    label = "关于 ArkDO",
+                    label = stringResource(R.string.about_arkdo),
                     value = versionLabel,
                     onClick = { showAbout = true }
                 )
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.Description,
-                    label = "免责声明",
+                    label = stringResource(R.string.about_disclaimer),
                     onClick = { showDisclaimer = true }
                 )
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.BugReport,
-                    label = "诊断日志",
+                    label = stringResource(R.string.debug_diagnostics),
                     onClick = onOpenDiagnostics
                 )
             }
@@ -223,10 +226,10 @@ private fun SettingsTopBar(onNavigateBack: () -> Unit) {
             .padding(horizontal = 4.dp)
     ) {
         IconButton(onClick = onNavigateBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = arkdoColors.textPrimary)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = arkdoColors.textPrimary)
         }
         Text(
-            text = "设置",
+            text = stringResource(R.string.common_settings),
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             color = arkdoColors.textPrimary
@@ -263,7 +266,7 @@ private fun AppearanceRow(mode: AppThemeMode) {
     Box(modifier = Modifier.fillMaxWidth()) {
         SettingRow(
             icon = Icons.Outlined.DarkMode,
-            label = "外观",
+            label = stringResource(R.string.settings_appearance),
             value = mode.label(),
             onClick = { expanded = true }
         )
@@ -300,9 +303,9 @@ private fun FabGlassRow(enabled: Boolean) {
                 .padding(start = 14.dp, end = 12.dp)
                 .weight(1f)
         ) {
-            Text("悬浮按钮玻璃效果", fontSize = 15.sp, color = arkdoColors.textPrimary)
+            Text(stringResource(R.string.settings_fab_glass), fontSize = 15.sp, color = arkdoColors.textPrimary)
             Text(
-                "首页与详情页右下角按钮显示液态玻璃",
+                stringResource(R.string.settings_fab_glass_desc),
                 fontSize = 12.sp,
                 color = arkdoColors.textFaint,
                 modifier = Modifier.padding(top = 2.dp)
@@ -325,7 +328,7 @@ private fun FabGlassRadiusRow(radius: Int) {
             .padding(start = CardPadding, end = CardPadding, top = 12.dp, bottom = 4.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("磨砂强度", fontSize = 15.sp, color = arkdoColors.textPrimary, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.settings_frost_intensity), fontSize = 15.sp, color = arkdoColors.textPrimary, modifier = Modifier.weight(1f))
             Text(radius.toString(), fontSize = 13.sp, color = arkdoColors.textFaint)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -414,20 +417,20 @@ private fun AboutDialog(
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "支持基于 Discourse（开源论坛程序）搭建的站点",
+                    stringResource(R.string.about_discourse_desc),
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     color = arkdoColors.textSecondary,
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    "版本 $versionLabel",
+                    stringResource(R.string.about_version, versionLabel),
                     fontSize = 13.sp,
                     color = arkdoColors.textFaint,
                     modifier = Modifier.padding(top = 14.dp)
                 )
                 Row(modifier = Modifier.padding(top = 6.dp)) {
-                    Text("官网 ", fontSize = 14.sp, color = arkdoColors.textSecondary)
+                    Text(stringResource(R.string.about_website), fontSize = 14.sp, color = arkdoColors.textSecondary)
                     Text(
                         OFFICIAL_SITE_URL,
                         fontSize = 14.sp,
@@ -440,7 +443,7 @@ private fun AboutDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("关闭", color = arkdoColors.textPrimary, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.common_close), color = arkdoColors.textPrimary, fontWeight = FontWeight.Medium)
             }
         }
     )
@@ -453,7 +456,7 @@ private fun DisclaimerDialog(onDismiss: () -> Unit) {
         containerColor = arkdoColors.surfaceCard,
         title = {
             Text(
-                "免责声明",
+                stringResource(R.string.about_disclaimer),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
                 color = arkdoColors.textPrimary,
@@ -471,16 +474,17 @@ private fun DisclaimerDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("知道了", color = arkdoColors.ldAccent, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.common_got_it), color = arkdoColors.ldAccent, fontWeight = FontWeight.Medium)
             }
         }
     )
 }
 
+@Composable
 private fun AppThemeMode.label(): String = when (this) {
-    AppThemeMode.SYSTEM -> "跟随系统"
-    AppThemeMode.LIGHT -> "浅色"
-    AppThemeMode.DARK -> "深色"
+    AppThemeMode.SYSTEM -> stringResource(R.string.settings_follow_system)
+    AppThemeMode.LIGHT -> stringResource(R.string.settings_light)
+    AppThemeMode.DARK -> stringResource(R.string.settings_dark)
 }
 
 private fun openOfficialSite(context: android.content.Context) {
@@ -490,5 +494,5 @@ private fun openOfficialSite(context: android.content.Context) {
     if (opened) return
     val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("arkdo", OFFICIAL_SITE_URL))
-    Toast.makeText(context, "打不开浏览器，官网地址已复制", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.about_browser_failed), Toast.LENGTH_SHORT).show()
 }

@@ -1,5 +1,8 @@
 package com.arkdo.android.services.user
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.UserProfileDetail
 import com.arkdo.android.data.models.EndorsableCategoriesResult
 import com.arkdo.android.data.models.EndorsableCategory
@@ -239,14 +242,14 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户资料响应为空。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_profile_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscourseUserProfileResponse>(data)
             val source = payload.user
             if (source == null || source.id == null || source.username.isNullOrEmpty()) {
                 return NetworkResults.unexpectedResponse(
-                    response.statusCode, response.challengeState, "站点用户资料响应字段无效。"
+                    response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_profile_invalid)
                 )
             }
             val detail = UserProfileDetail(
@@ -288,7 +291,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户资料响应不是有效 JSON。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_profile_json)
             )
         }
     }
@@ -301,14 +304,14 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户摘要响应为空。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_summary_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscourseSummaryResponse>(data)
             val src = payload.userSummary
             if (src == null) {
                 return NetworkResults.unexpectedResponse(
-                    response.statusCode, response.challengeState, "站点用户摘要响应缺少 user_summary。"
+                    response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_summary_missing)
                 )
             }
             // 对齐鸿蒙映射:徽章取「顶层定义 ∩ 本用户授予计数」;热门话题按 topic_ids 顺序
@@ -375,7 +378,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户摘要响应不是有效 JSON。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_summary_json)
             )
         }
     }
@@ -395,7 +398,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户活动响应为空。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_activity_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscourseUserActionsResponse>(data)
@@ -412,7 +415,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点用户活动响应不是有效 JSON。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_user_activity_json)
             )
         }
     }
@@ -473,7 +476,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点解决方案响应为空。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_solutions_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscourseSolvedResponse>(data)
@@ -500,7 +503,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点解决方案响应不是有效 JSON。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_solutions_json)
             )
         }
     }
@@ -539,7 +542,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点认可分类响应为空。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_endorse_categories_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscourseEndorsableResponse>(data)
@@ -556,7 +559,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点认可分类响应不是有效 JSON。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_endorse_categories_json)
             )
         }
     }
@@ -570,7 +573,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
                 challengeState = ChallengeState.NONE,
                 error = com.arkdo.android.services.network.NetworkError(
                     code = com.arkdo.android.services.network.NetworkErrorCode.UNEXPECTED_RESPONSE,
-                    message = "请至少选择一个类别。",
+                    message = AppContextHolder.getString(R.string.user_endorse_pick_category),
                     requiresChallenge = false
                 )
             )
@@ -591,7 +594,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         }
         val data = response.data
             ?: return NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点徽章响应为空。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_badges_empty)
             )
         return try {
             val payload = json.decodeFromString<DiscourseUserBadgesResponse>(data)
@@ -603,7 +606,7 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
             )
         } catch (_: Exception) {
             NetworkResults.unexpectedResponse(
-                response.statusCode, response.challengeState, "站点徽章响应不是有效 JSON。"
+                response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_badges_json)
             )
         }
     }
@@ -651,9 +654,9 @@ class UserProfileService(private val bridge: JsonNetworkClient) {
         val name = typeNames[typeId]
         if (!name.isNullOrEmpty()) return name
         return when (typeId) {
-            1 -> "金牌"
-            2 -> "银牌"
-            else -> "铜牌"
+            1 -> AppContextHolder.getString(R.string.trust_gold)
+            2 -> AppContextHolder.getString(R.string.trust_silver)
+            else -> AppContextHolder.getString(R.string.trust_bronze)
         }
     }
 

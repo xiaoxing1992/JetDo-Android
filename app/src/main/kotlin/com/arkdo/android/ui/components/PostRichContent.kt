@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -102,7 +105,7 @@ fun PostRichContent(
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit = {},
     // 媒体解析(论坛同源上传件下载过 CF → 本地路径),音频播放条用;未接入时点播报错误态。
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    onResolveMedia: suspend (String) -> String = { error(AppContextHolder.getString(R.string.common_media_download_not_ready)) },
     // 附件（`<a class="attachment">`）点击：参数是 (下载地址, 文件名)。不传则用默认实现
     // （下载 → 交系统「打开方式」面板），见 rememberAttachmentOpener()。
     onAttachmentClick: ((String, String) -> Unit)? = null,
@@ -202,7 +205,7 @@ private fun BlockView(
     viewerImages: List<ViewerImage> = emptyList(),
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onLinkClick: (String) -> Unit,
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") }
+    onResolveMedia: suspend (String) -> String = { error(AppContextHolder.getString(R.string.common_media_download_not_ready)) }
 ) {
     when (block.type) {
         RichBlockType.PARAGRAPH -> InlineText(
@@ -242,7 +245,7 @@ private fun BlockView(
         RichBlockType.DIVIDER -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         RichBlockType.POLL -> Text(
-            text = "投票 · ${block.pollName ?: "poll"}",
+            text = stringResource(R.string.poll_named, block.pollName ?: "poll"),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
@@ -726,7 +729,7 @@ private fun SpoilerBlock(
                 .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("已遮蔽内容，点击显示", fontSize = 13.sp, color = MaterialTheme.colorScheme.surface)
+            Text(stringResource(R.string.detail_blurred_content), fontSize = 13.sp, color = MaterialTheme.colorScheme.surface)
         }
     }
 }
@@ -756,12 +759,12 @@ private fun DisclosureBlock(
                 .padding(10.dp)
         ) {
             Text(
-                text = plainNodeText(block.title ?: "详情"),
+                text = plainNodeText(block.title ?: stringResource(R.string.common_details)),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
             )
-            Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            Text(if (expanded) stringResource(R.string.common_collapse) else stringResource(R.string.common_expand), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
         }
         if (expanded) {
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) {

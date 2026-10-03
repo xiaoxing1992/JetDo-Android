@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.composer
 
+import com.arkdo.android.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
@@ -381,10 +382,10 @@ class NewTopicViewModel @Inject constructor(
 
     /** 发送按钮置灰时点它:说清楚缺什么,而不是毫无反应。 */
     fun explainBlocked(): String? = when {
-        _uiState.value.title.trim().isEmpty() -> "还没写标题"
-        _uiState.value.categoryId == null -> "还没选分类"
-        _uiState.value.tags.isEmpty() -> "至少选一个标签"
-        _uiState.value.body.trim().isEmpty() -> "正文不能为空"
+        _uiState.value.title.trim().isEmpty() -> appContext.getString(R.string.composer_title_missing)
+        _uiState.value.categoryId == null -> appContext.getString(R.string.composer_category_missing)
+        _uiState.value.tags.isEmpty() -> appContext.getString(R.string.composer_tag_required)
+        _uiState.value.body.trim().isEmpty() -> appContext.getString(R.string.composer_body_empty)
         else -> null
     }
 
@@ -399,7 +400,7 @@ class NewTopicViewModel @Inject constructor(
         val state = _uiState.value
         if (state.isSubmitting) return
         if (!ensureLoggedIn()) {
-            done(false, null, "请先登录")
+            done(false, null, appContext.getString(R.string.login_required))
             return
         }
         _uiState.update { it.copy(isSubmitting = true) }
@@ -419,12 +420,12 @@ class NewTopicViewModel @Inject constructor(
                 deleteDraftAfterPublish()
                 val outcome = result.data
                 if (outcome.pending) {
-                    done(true, null, "帖子已提交,等待审核")
+                    done(true, null, appContext.getString(R.string.composer_topic_pending))
                 } else {
-                    done(true, outcome.topicId, "帖子已发布")
+                    done(true, outcome.topicId, appContext.getString(R.string.composer_topic_published))
                 }
             } else {
-                val reason = result.error?.message ?: "发布失败,请稍后重试。"
+                val reason = result.error?.message ?: appContext.getString(R.string.composer_publish_failed2)
                 done(false, null, reason)
             }
         }

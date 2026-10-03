@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.user
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +65,7 @@ private val AVATAR_SIZE = 40.dp
 fun ActivityScreen(
     username: String,
     filter: String = "4,5",
-    pageTitle: String = "动态",
+    pageTitle: String = stringResource(R.string.user_activity),
     onNavigateBack: () -> Unit,
     onOpenTopic: (Long, String, Int?) -> Unit = { _, _, _ -> },
     onOpenUser: (String, String?, String?) -> Unit = { _, _, _ -> },
@@ -90,7 +92,7 @@ fun ActivityScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
             Text(pageTitle, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = arkdoColors.textPrimary)
         }
@@ -107,14 +109,14 @@ fun ActivityScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(err, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
-                        Text("重试", color = arkdoColors.ldAccent,
+                        Text(stringResource(R.string.common_retry), color = arkdoColors.ldAccent,
                             modifier = Modifier.padding(top = 12.dp).clickable { viewModel.loadInitial(username, filter) })
                     }
                 }
             }
             state.items.isEmpty() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("这里还没有内容", color = arkdoColors.textTertiary)
+                    Text(stringResource(R.string.common_empty_here), color = arkdoColors.textTertiary)
                 }
             }
             else -> {
@@ -150,7 +152,7 @@ fun ActivityScreen(
                                         color = arkdoColors.ldAccent,
                                         strokeWidth = 2.dp
                                     )
-                                    !state.hasMore -> Text("没有更多了", fontSize = 13.sp, color = arkdoColors.textFaint)
+                                    !state.hasMore -> Text(stringResource(R.string.common_no_more), fontSize = 13.sp, color = arkdoColors.textFaint)
                                     else -> {}
                                 }
                             }

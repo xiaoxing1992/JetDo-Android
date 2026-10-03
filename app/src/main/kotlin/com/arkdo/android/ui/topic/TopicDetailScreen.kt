@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.topic
 
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -215,9 +216,9 @@ fun TopicDetailScreen(
                 // 附件下载交 host WebView 的下载委托：带 _t / cf_clearance 且跟随重定向。
                 // 宿主未就绪时退回内置 WebView，总之不进系统浏览器丢登录态。
                 if (ArkWebNetworkBridge.startDownload(route.url)) {
-                    Toast.makeText(context, "开始下载…", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.common_download_started), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "宿主未就绪，改用页面打开", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.bridge_host_not_ready_fallback), Toast.LENGTH_SHORT).show()
                     onOpenWeb(route.url, null)
                 }
             }
@@ -240,9 +241,9 @@ fun TopicDetailScreen(
         val unsubscribe = DownloadEventBus.subscribe { result ->
             mainHandler.post {
                 val text = if (result.success) {
-                    "已下载 ${result.fileName}"
+                    context.getString(R.string.media_downloaded, result.fileName)
                 } else {
-                    result.message.ifEmpty { "下载失败" }
+                    result.message.ifEmpty { context.getString(R.string.common_download_failed) }
                 }
                 Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
             }
@@ -517,7 +518,7 @@ fun TopicDetailScreen(
                     .align(Alignment.TopCenter)
                     .zIndex(2f),
                 summaryVisible = summaryVisible,
-                title = ui.topic?.title ?: title ?: "话题详情",
+                title = ui.topic?.title ?: title ?: stringResource(R.string.detail_topic_title),
                 category = CategoryIndex.find(ui.categories, ui.topic?.categoryId),
                 parentCategory = CategoryIndex.findParent(ui.categories, ui.topic?.categoryId),
                 tags = ui.topic?.tags.orEmpty(),
@@ -572,16 +573,16 @@ fun TopicDetailScreen(
         pendingDeleteTarget?.let { target ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { pendingDeleteTarget = null },
-                title = { Text("删除待审核内容") },
-                text = { Text("删除后这条内容不会再进入审核，也无法恢复。确定删除吗？") },
+                title = { Text(stringResource(R.string.lottery_delete_pending)) },
+                text = { Text(stringResource(R.string.lottery_delete_confirm)) },
                 confirmButton = {
                     TextButton(onClick = {
                         pendingDeleteTarget = null
                         viewModel.deletePendingPost(target)
-                    }) { Text("删除", color = arkdoColors.ldDanger) }
+                    }) { Text(stringResource(R.string.common_delete), color = arkdoColors.ldDanger) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingDeleteTarget = null }) { Text("取消") }
+                    TextButton(onClick = { pendingDeleteTarget = null }) { Text(stringResource(R.string.common_cancel)) }
                 }
             )
         }
@@ -990,7 +991,7 @@ private fun TopicDetailContent(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp))
                     } else {
                         TextButton(onClick = onLoadEarlier) {
-                            Text(if (earlierCount > 0) "加载更早（还有 $earlierCount 楼）" else "加载更早")
+                            Text(if (earlierCount > 0) stringResource(R.string.detail_load_earlier_count, earlierCount) else stringResource(R.string.detail_load_earlier))
                         }
                     }
                 }
@@ -1043,7 +1044,7 @@ private fun TopicDetailContent(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     Text(
-                        text = loadMoreMessage.ifBlank { "没有更多了" },
+                        text = loadMoreMessage.ifBlank { stringResource(R.string.common_no_more) },
                         fontSize = 13.sp,
                         color = arkdoColors.textTertiary
                     )
@@ -1178,14 +1179,14 @@ private fun TopicDetailHeaderBar(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
+                    contentDescription = stringResource(R.string.common_back),
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }
             Box(modifier = Modifier.weight(1f).height(56.dp)) {
                 // 图层 A：静态「帖子详情」。
                 Text(
-                    text = "帖子详情",
+                    text = stringResource(R.string.detail_title),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -1207,7 +1208,7 @@ private fun TopicDetailHeaderBar(
                         if (bookmarked) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_fa_bookmark_gray),
-                                contentDescription = "已收藏",
+                                contentDescription = stringResource(R.string.common_bookmarked),
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(15.dp)
                             )
@@ -1216,7 +1217,7 @@ private fun TopicDetailHeaderBar(
                         if (solved) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_fa_far_square_check_green),
-                                contentDescription = "已解决",
+                                contentDescription = stringResource(R.string.detail_solved),
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(15.dp)
                             )
@@ -1254,7 +1255,7 @@ private fun TopicDetailHeaderBar(
                 IconButton(onClick = onOpenChallenge) {
                     Icon(
                         imageVector = Icons.Outlined.Shield,
-                        contentDescription = "手动验证",
+                        contentDescription = stringResource(R.string.common_manual_verify),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -1301,7 +1302,7 @@ private fun TopicHeader(
         val likeCount = topic.likeCount ?: 0
         val viewCount = topic.viewCount ?: 0
         Text(
-            text = "${postsCount} 帖 · ${replyCount} 回复 · ${likeCount} 赞 · ${viewCount} 浏览",
+            text = stringResource(R.string.user_stats_line, postsCount, replyCount, likeCount, viewCount),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp)
@@ -1339,7 +1340,7 @@ private fun ErrorView(
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onRetry) {
-            Text("重试")
+            Text(stringResource(R.string.common_retry))
         }
     }
 }
