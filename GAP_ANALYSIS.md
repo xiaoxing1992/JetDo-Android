@@ -9,7 +9,7 @@
 
 ## 一、结论先行
 
-**还剩 8 项 + 1 条微清理。**
+**还剩 7 项 + 1 条微清理。**
 
 ### 1.1 缺口分布
 
@@ -17,10 +17,10 @@
 |---|---|---|
 | P0 | 1 | 用户一眼能看出没做 |
 | P1 | 1 | 功能不完整，用起来别扭 |
-| 半截 | 1 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
+| 半截 | 0 | 差一次接通的已清（S14 已落地）|
 | 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
 | P2 | 5 | 工程化与发布 |
-| **合计** | **8** | 上表逐项相加（1+1+1+0+5）|
+| **合计** | **7** | 上表逐项相加（1+1+0+0+5）|
 | 死代码 | 0 | 4 组已全部清理（逐符号复核后删除）|
 | 微清理 | 1 条 | 仅剩 M2（Boost 本地刷新）|
 
@@ -51,11 +51,9 @@
 | 12 | **版本公告源未定** | `announce/VersionAnnouncement.ets` | 代码完整，但 `ANNOUNCE_PROMPT_ENABLED = false` → **不扫描、不弹层**。当前源是鸿蒙版发布日志帖（`2590051` / `joeyyin`），`[v900008+]` 体系与 Android `versionCode` 对不上，开着会每次冷启动误弹鸿蒙公告。**链路全部就绪，只差决定 Android 自己的公告帖与账号** | `services/announce/VersionAnnouncement.kt:15/17/22`；`RootTabScreen.kt:160`（`if (!ANNOUNCE_PROMPT_ENABLED) return@LaunchedEffect`）|
 ---
 
-## 四、半截 · 差一次接通（1 项）
+## 四、半截 · 差一次接通（0 项，已清）
 
-| # | 现象 | 根因 | 证据 |
-|---|---|---|---|
-| S14 | 过盾快捷入口的用户开关缺失 | 快捷入口会渲染、订阅（`ChallengeShortcutEventBus` → `TopicDetailViewModel:161`）与 `reset()` 都已接通，但无 `ChallengeShortcutPrefs` 开关与网络设置页开关项；鸿蒙该开关默认**关** | `TopicDetailViewModel.kt:128` 自述；`NetworkSettingsScreen.kt:52` 自述；参考 `NetworkSettingsPage.ets:199-231` |
+~~S14 过盾快捷入口的用户开关缺失~~ **已完成**（`services/challenge/ChallengeShortcutPrefs`（默认关，复用预留键 `PREFS_CHALLENGE_SHORTCUT`）+ 网络设置页第二张卡开关行；入口可见 = 开关 ∧ bus 被拦，两条件在 `TopicDetailViewModel.challengeBlocked` 的 combine 里 AND）。
 
 ---
 
@@ -133,7 +131,7 @@
 
 **第 1 步 · 差一次接通（改动小）**
 4. ~~N6 详情已读态回写首页~~ **已完成**（`TopicReadStateSource` 单例：详情页 `onDetailDetach` 结算、首页订阅更新对应行，不搬 bus；feature/home 单测覆盖）
-5. **S14 过盾快捷入口开关**：`ChallengeShortcutPrefs`（默认关）+ 网络设置页开关项，入口/订阅/reset 均已就位
+5. ~~S14 过盾快捷入口开关~~ **已完成**（`ChallengeShortcutPrefs` 默认关 + 网络设置页开关项，入口/订阅/reset 原已就位，combine AND 门控）
 
 **第 2 步 · 用户一眼能看到**
 6. **版本公告定源**（P1-12）：决定 Android 自己的公告帖与账号，`ANNOUNCE_PROMPT_ENABLED` 置 `true`，链路已就绪
