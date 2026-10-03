@@ -8,6 +8,7 @@ import com.arkdo.android.core.designsystem.FabGlassStore
 import com.arkdo.android.core.designsystem.TopicListStyleStore
 import com.arkdo.android.feature.home.BadgeFilterPrefs
 import com.arkdo.android.services.announce.VersionAnnouncePrefs
+import com.arkdo.android.services.challenge.ChallengeShortcutPrefs
 import com.arkdo.android.services.topic.LotteryTipPrefs
 import com.arkdo.android.services.topic.TwoPageReadingPrefs
 import com.arkdo.android.services.realtime.RealtimePostsPrefs
@@ -74,6 +75,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         LotteryTipPrefs.init(this)
         TwoPageReadingPrefs.init(this)
         BadgeFilterPrefs.init(this)
+        ChallengeShortcutPrefs.init(this)
         com.arkdo.android.services.avatar.AnimatedAvatarPrefs.init(this)
         // 通知渠道：API 26 起，没有渠道的通知会被系统**直接丢弃且不报错**，
         // 所以渠道必须在第一次发通知之前就位。在这里建（而不是发通知时惰性建）

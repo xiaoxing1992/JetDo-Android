@@ -31,6 +31,7 @@ import com.arkdo.android.services.network.JsonRequestOptions
 import com.arkdo.android.services.challenge.ChallengeRecoveryEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryState
 import com.arkdo.android.services.challenge.ChallengeShortcutEventBus
+import com.arkdo.android.services.challenge.ChallengeShortcutPrefs
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.services.site.SiteSettingsService
 import com.arkdo.android.services.site.SiteUploadSettings
@@ -66,8 +67,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -155,15 +159,18 @@ class TopicDetailViewModel @Inject constructor(
      * 真源是全局 [ChallengeShortcutEventBus]：ReadingTracker 的后台上报（notifyChallenge:false，
      * 不弹验证页）撞盾时置真，之后上报通了置假。这里只做镜像，让页面能用 Compose 状态订阅它。
      *
-     * 语义对齐鸿蒙 TopicDetailPage.challengeBlocked —— 即「入口只在真出事时才亮」，
-     * 不是常驻按钮；鸿蒙另外还要求用户先开 ChallengeShortcutPrefs 开关（默认关），
-     * Android 侧尚未迁移该开关，故这里只保留「真拦下才显示」这一半。
+     * 语义对齐鸿蒙 TopicDetailPage.challengeBlocked：入口可见 = 用户开了 ChallengeShortcutPrefs
+     * 开关（默认关）∧ 真被拦下（bus 置真）。两条件在 combine 里 AND，开关翻转时入口即时显隐。
      */
-    private val _challengeBlocked = MutableStateFlow(false)
-    val challengeBlocked: StateFlow<Boolean> = _challengeBlocked.asStateFlow()
+    private val _busChallengeBlocked = MutableStateFlow(false)
+    val challengeBlocked: StateFlow<Boolean> = combine(
+        _busChallengeBlocked,
+        ChallengeShortcutPrefs.enabled
+    ) { blocked, enabled -> blocked && enabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val challengeShortcutUnsubscribe = ChallengeShortcutEventBus.subscribe { blocked ->
-        _challengeBlocked.value = blocked
+        _busChallengeBlocked.value = blocked
     }
 
     /** 用户点顶栏「手动验证」：请求恢复协调器停下来静默重试、把验证页交给用户（对齐鸿蒙 onOpenChallenge）。 */
@@ -284,7 +291,7 @@ class TopicDetailViewModel @Inject constructor(
         // 换了话题：清掉上一帖的撞盾运行态（对齐鸿蒙 aboutToAppear 里的 ChallengeShortcutEventBus.reset）。
         // reset 不广播，所以镜像状态要自己同步回落，否则新帖首帧会误亮「手动验证」入口。
         ChallengeShortcutEventBus.reset()
-        _challengeBlocked.value = false
+        _busChallengeBlocked.value = false
         // 换了话题：红线水位与锚楼一并复位（否则新帖会沿用上一帖的锚楼 id）。
         lastVisitedSnapshot = 0
         lastVisitedAnchorPostId = 0L
