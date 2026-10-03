@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.animateFloatAsState
@@ -67,7 +70,7 @@ fun AcceptedAnswerPanel(
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onOpenLink: (String) -> Unit = {},
     // 采纳答案正文里也可能带音频:透传媒体解析回调(同 PostRichContent)。
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    onResolveMedia: suspend (String) -> String = { error(AppContextHolder.getString(R.string.common_media_download_not_ready)) },
     // 引用卡：采纳答案里的引用卡也要能展开全文 / 跳转（对齐鸿蒙 AcceptedAnswerPanel 透传同名回调）。
     onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit = { _, _, _ -> },
     onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" },
@@ -102,7 +105,7 @@ fun AcceptedAnswerPanel(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "已解决",
+                text = stringResource(R.string.detail_solved),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White
@@ -110,7 +113,7 @@ fun AcceptedAnswerPanel(
             if (answers.size > 1) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "· ${answers.size} 个方案",
+                    text = stringResource(R.string.solution_count_suffix, answers.size),
                     fontSize = 13.sp,
                     color = Color.White.copy(alpha = 0.8f)
                 )
@@ -274,7 +277,7 @@ private fun AcceptedAnswerCard(
                         Spacer(modifier = Modifier.width(6.dp))
                     }
                     Text(
-                        text = "阅读更多",
+                        text = stringResource(R.string.common_read_more),
                         fontSize = 15.sp,
                         color = colors.ldAccent
                     )

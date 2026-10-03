@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.bookmarks
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -88,7 +90,7 @@ fun BookmarksScreen(
             .fillMaxSize()
             .background(colors.pageBg)
     ) {
-        val title = if (state.items.isNotEmpty()) "书签 · ${state.items.size}" else "书签"
+        val title = if (state.items.isNotEmpty()) stringResource(R.string.bookmarks_count, state.items.size) else stringResource(R.string.bookmarks_bookmark)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -98,7 +100,7 @@ fun BookmarksScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = colors.textPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = colors.textPrimary)
             }
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
         }
@@ -110,9 +112,9 @@ fun BookmarksScreen(
             }
             state.items.isEmpty() && state.error != null -> Centered {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(state.error ?: "书签加载失败", color = colors.textSecondary)
+                    Text(state.error ?: stringResource(R.string.bookmarks_load_failed), color = colors.textSecondary)
                     Text(
-                        "重试",
+                        stringResource(R.string.common_retry),
                         color = colors.ldAccent,
                         modifier = Modifier
                             .padding(top = 12.dp)
@@ -123,9 +125,9 @@ fun BookmarksScreen(
             state.items.isEmpty() -> Centered {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     FaIcon("bookmark", colors.textFaint, 36.dp)
-                    Text("还没有书签", fontSize = 16.sp, color = colors.textPrimary, modifier = Modifier.padding(top = 12.dp))
+                    Text(stringResource(R.string.bookmarks_empty), fontSize = 16.sp, color = colors.textPrimary, modifier = Modifier.padding(top = 12.dp))
                     Text(
-                        "在帖子里点书签图标，就能把它存到这里随时回看",
+                        stringResource(R.string.bookmarks_hint),
                         fontSize = 13.sp,
                         color = colors.textFaint,
                         modifier = Modifier.padding(top = 6.dp, start = 32.dp, end = 32.dp)
@@ -168,16 +170,16 @@ fun BookmarksScreen(
     pendingDelete?.let { item ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除书签") },
-            text = { Text("确定要删除这个书签吗？") },
+            title = { Text(stringResource(R.string.bookmarks_delete)) },
+            text = { Text(stringResource(R.string.bookmarks_delete_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     pendingDelete = null
                     viewModel.delete(item, context)
-                }) { Text("删除", color = arkdoColors.ldDanger) }
+                }) { Text(stringResource(R.string.common_delete), color = arkdoColors.ldDanger) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -260,7 +262,7 @@ private fun BookmarkRow(
                 .fillMaxWidth()
                 .padding(top = 6.dp)
         ) {
-            Text("${item.replyCount} 回复", fontSize = 13.sp, color = colors.textSecondary)
+            Text(stringResource(R.string.poll_reply_count, item.replyCount), fontSize = 13.sp, color = colors.textSecondary)
             Spacer(Modifier.weight(1f))
             if (time != null) {
                 Text(time, fontSize = 13.sp, color = colors.textFaint)
@@ -271,14 +273,14 @@ private fun BookmarkRow(
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text(if (item.pinned) "取消置顶" else "置顶") },
+                        text = { Text(if (item.pinned) stringResource(R.string.common_unpin) else stringResource(R.string.common_pin)) },
                         onClick = {
                             menuOpen = false
                             onTogglePin()
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("删除", color = colors.ldDanger) },
+                        text = { Text(stringResource(R.string.common_delete), color = colors.ldDanger) },
                         onClick = {
                             menuOpen = false
                             onDelete()
@@ -306,7 +308,7 @@ private fun ListFooter(loadingMore: Boolean, hasMore: Boolean) {
                 color = colors.ldAccent,
                 strokeWidth = 2.dp
             )
-            !hasMore -> Text("没有更多了", fontSize = 13.sp, color = colors.textFaint)
+            !hasMore -> Text(stringResource(R.string.common_no_more), fontSize = 13.sp, color = colors.textFaint)
         }
     }
 }

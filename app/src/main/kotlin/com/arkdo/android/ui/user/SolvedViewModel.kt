@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.user
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.arkdo.android.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.SolvedPostItem
@@ -21,7 +24,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SolvedViewModel @Inject constructor(
-    private val userProfileService: UserProfileService
+    private val userProfileService: UserProfileService,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     data class UiState(
@@ -71,7 +75,7 @@ class SolvedViewModel @Inject constructor(
                     it.copy(
                         initialLoading = false,
                         refreshing = false,
-                        error = result.error?.message ?: "加载失败，请重试"
+                        error = result.error?.message ?: appContext.getString(R.string.home_load_failed_retry)
                     )
                 }
             }

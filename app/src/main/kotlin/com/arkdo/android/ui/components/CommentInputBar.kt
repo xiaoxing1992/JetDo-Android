@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -288,7 +290,7 @@ fun CommentInputOverlay(
     fun warnIfOverMaxChars() {
         val over = overMaxChars()
         if (over && !wasOverMaxChars) {
-            Toast.makeText(context, "最多 $maxChars 个字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.composer_max_chars, maxChars), Toast.LENGTH_SHORT).show()
         }
         wasOverMaxChars = over
     }
@@ -298,11 +300,11 @@ fun CommentInputOverlay(
         val trimmed = fieldValue.text.trim()
         val len = trimmedLength()
         if (len < minChars) {
-            Toast.makeText(context, "至少还需 ${minChars - len} 个字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.composer_min_chars_left, minChars - len), Toast.LENGTH_SHORT).show()
             return
         }
         if (overMaxChars()) {
-            Toast.makeText(context, "超出 ${len - maxChars} 个字，最多 $maxChars 字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.composer_over_chars, len - maxChars, maxChars), Toast.LENGTH_SHORT).show()
             return
         }
         localSubmitting = true
@@ -544,7 +546,7 @@ fun CommentInputOverlay(
                             .clickable(onClick = { toggleEmojiPanel() })
                             .semantics {
                                 // 对齐鸿蒙 accessibilityText：读屏用户也该知道这个钮会切到哪去。
-                                contentDescription = if (showEmojiPanel) "切换到键盘" else "选择表情"
+                                contentDescription = if (showEmojiPanel) AppContextHolder.getString(R.string.composer_switch_keyboard) else AppContextHolder.getString(R.string.detail_pick_emoji)
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -596,7 +598,7 @@ fun CommentInputOverlay(
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_fa_reply),
-                                contentDescription = "发送回复",
+                                contentDescription = stringResource(R.string.detail_send_reply),
                                 tint = ArkdoFixedColors.OnDarkFg,
                                 modifier = Modifier.size(18.dp)
                             )

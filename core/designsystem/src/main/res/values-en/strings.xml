@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="relative_days">%1$s days</string>
+    <string name="relative_full_date">%3$s/%2$s/%1$s</string>
+    <string name="relative_hours">%1$s hours</string>
+    <string name="relative_just_now">Just now</string>
+    <string name="relative_minutes">%1$s min</string>
+    <string name="relative_month_day"> %2$s/%1$s</string>
+    <string name="relative_one_day">1 day</string>
+    <string name="relative_one_hour">1 hour</string>
+</resources>

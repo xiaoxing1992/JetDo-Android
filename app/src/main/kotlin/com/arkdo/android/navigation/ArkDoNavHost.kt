@@ -1,5 +1,8 @@
 package com.arkdo.android.navigation
 
+import com.arkdo.android.core.data.AppContextHolder
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -515,14 +518,14 @@ fun ArkDoNavHost(
             arguments = listOf(
                 navArgument("username") { type = NavType.StringType },
                 navArgument("filter") { type = NavType.StringType; nullable = true; defaultValue = "4,5" },
-                navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = "动态" }
+                navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = AppContextHolder.getString(R.string.user_activity) }
             )
         ) { entry ->
             val args = entry.arguments
             ActivityScreen(
                 username = args?.getString("username").orEmpty(),
                 filter = args?.getString("filter") ?: "4,5",
-                pageTitle = args?.getString("title") ?: "动态",
+                pageTitle = args?.getString("title") ?: stringResource(R.string.user_activity),
                 onNavigateBack = { navController.popBackStack() },
                 onOpenTopic = { tid, title, postNum ->
                     val parts = mutableListOf<String>()

@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.user
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,10 +85,10 @@ fun BadgesScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
             }
             Text(
-                text = if (badgeCount > 0) "徽章 · $badgeCount" else "徽章",
+                text = if (badgeCount > 0) stringResource(R.string.drawer_badges_count, badgeCount) else stringResource(R.string.user_badges),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = arkdoColors.textPrimary
@@ -103,11 +105,11 @@ fun BadgesScreen(
                 BoxCenter {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(err, color = MaterialTheme.colorScheme.error)
-                        Text("重试", color = arkdoColors.ldAccent, modifier = Modifier.padding(top = 12.dp).clickable { viewModel.load(username) })
+                        Text(stringResource(R.string.common_retry), color = arkdoColors.ldAccent, modifier = Modifier.padding(top = 12.dp).clickable { viewModel.load(username) })
                     }
                 }
             }
-            state.groups.isEmpty() -> BoxCenter { Text("暂无徽章", color = arkdoColors.textTertiary) }
+            state.groups.isEmpty() -> BoxCenter { Text(stringResource(R.string.user_no_badges), color = arkdoColors.textTertiary) }
             else -> {
                 Column(
                     modifier = Modifier
@@ -267,10 +269,11 @@ private fun BadgeLarge(badge: UserBadgeItem) {
 }
 
 /** 详情副信息:获得 N 次 · 授予于 相对时间(对齐 getDetailMeta)。 */
+@Composable
 private fun badgeDetailMeta(badge: UserBadgeItem): String {
     val parts = mutableListOf<String>()
-    if ((badge.grantCount ?: 0) > 1) parts.add("获得 ${badge.grantCount} 次")
+    if ((badge.grantCount ?: 0) > 1) parts.add(stringResource(R.string.user_badge_grant_count, badge.grantCount ?: 0))
     com.arkdo.android.core.model.RelativeTime.fromNow(badge.grantedAt)
-        .takeIf { it.isNotEmpty() }?.let { parts.add("授予于 $it") }
+        .takeIf { it.isNotEmpty() }?.let { parts.add(stringResource(R.string.user_badge_granted_on, it)) }
     return parts.joinToString(" · ")
 }

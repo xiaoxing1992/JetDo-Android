@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
@@ -37,8 +39,8 @@ internal fun rememberAttachmentOpener(): (String, String) -> Unit {
     return remember(context) {
         { url: String, name: String ->
             if (url.isNotEmpty()) {
-                val label = name.ifEmpty { "附件" }
-                Toast.makeText(context, "正在下载 $label…", Toast.LENGTH_SHORT).show()
+                val label = name.ifEmpty { context.getString(R.string.composer_kind_file) }
+                Toast.makeText(context, context.getString(R.string.common_downloading, label), Toast.LENGTH_SHORT).show()
                 scope.launch {
                     // 这里**不能**套 Dispatchers.IO：整条链路是挂起式的（等系统广播结算），
                     // 真正的 IO 在 WebView/DownloadManager 那边；而途中的 loadUrl 是 WebView 调用、
@@ -46,14 +48,14 @@ internal fun rememberAttachmentOpener(): (String, String) -> Unit {
                     val path = runCatching { ArkWebNetworkBridge.downloadAttachment(url) }.getOrNull()
                     val file = path?.let { File(it) }
                     if (file == null || !file.exists() || file.length() == 0L) {
-                        Toast.makeText(context, "下载失败，请稍后重试", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.common_download_failed_retry), Toast.LENGTH_SHORT).show()
                         return@launch
                     }
                     // 类型按**落盘名**推断：服务端在重名时会加后缀，落盘名才是真身；
                     // 链接文字（name）只用于提示文案。
                     val opened = AttachmentOpener.openWithSystem(context, file)
                     if (!opened) {
-                        Toast.makeText(context, "没有可以打开该文件的应用", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.common_no_app_for_file), Toast.LENGTH_SHORT).show()
                     }
                 }
             }

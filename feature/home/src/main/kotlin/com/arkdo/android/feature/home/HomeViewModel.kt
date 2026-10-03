@@ -1,5 +1,7 @@
 package com.arkdo.android.feature.home
 
+import com.arkdo.android.feature.home.R
+import com.arkdo.android.core.data.AppContextHolder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.core.data.home.HomeRepository
@@ -165,14 +167,14 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isCategoriesLoading = true, categoriesError = null) }
         viewModelScope.launch {
             val result = runCatching { categoryRepository.load() }
-                .getOrElse { CategoryLoadResult.Failure(it.message ?: "版块加载失败") }
+                .getOrElse { CategoryLoadResult.Failure(it.message ?: AppContextHolder.getString(R.string.drawer_categories_failed)) }
             when (result) {
                 is CategoryLoadResult.Success -> _uiState.update {
                     it.copy(
                         categories = result.categories,
                         topTags = result.topTags,
                         isCategoriesLoading = false,
-                        categoriesError = if (result.categories.isEmpty()) "站点未返回任何版块" else null
+                        categoriesError = if (result.categories.isEmpty()) AppContextHolder.getString(R.string.err_no_categories) else null
                     )
                 }
                 is CategoryLoadResult.Failure -> {
@@ -413,14 +415,14 @@ class HomeViewModel @Inject constructor(
         val requestEpoch = ++incomingRequestEpoch
         viewModelScope.launch {
             val result = runCatching { repository.loadByIds(requestedIds) }
-                .getOrElse { HomePageResult.Failure(it.message ?: "加载失败，请重试") }
+                .getOrElse { HomePageResult.Failure(it.message ?: AppContextHolder.getString(R.string.home_load_failed_retry)) }
             if (requestEpoch != incomingRequestEpoch) return@launch
             when (result) {
                 is HomePageResult.Success -> {
                     val incoming = result.page.items.distinctBy(HomeTopic::id)
                     if (incoming.isEmpty()) {
                         // 空结果保留提示条，用户可以再点一次。对齐鸿蒙：toast 后不摘掉待处理 id。
-                        _uiState.update { it.copy(isLoadingIncoming = false, error = "暂未获取到新话题，请稍后重试") }
+                        _uiState.update { it.copy(isLoadingIncoming = false, error = AppContextHolder.getString(R.string.home_no_new_topics)) }
                     } else {
                         _uiState.update { current ->
                             val incomingIds = incoming.mapTo(HashSet(), HomeTopic::id)
@@ -512,7 +514,7 @@ class HomeViewModel @Inject constructor(
 
         viewModelScope.launch {
             val result = runCatching { repository.load(requestedQuery, page) }
-                .getOrElse { HomePageResult.Failure(it.message ?: "加载失败，请重试") }
+                .getOrElse { HomePageResult.Failure(it.message ?: AppContextHolder.getString(R.string.home_load_failed_retry)) }
             requestInFlight = false
 
             if (requestedGeneration == generation) {

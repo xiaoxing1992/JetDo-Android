@@ -5,6 +5,8 @@
 
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.app.Activity
 import android.content.Context
 import android.view.inputmethod.InputMethodManager
@@ -403,7 +405,7 @@ fun signalLoginSuccess(source: String, url: String) {
                 .padding(horizontal = 16.dp)
         ) {
                 Text(
-                    text = "登录",
+                    text = stringResource(R.string.login_action),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.textPrimary,

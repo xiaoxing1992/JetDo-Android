@@ -6,11 +6,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.arkdo.android.common.TestStrings
+import org.junit.Before
 
 /**
  * 上传工具纯函数：与鸿蒙 UploadService 逐条对齐，边界值按服务端行为定。
  */
 class UploadServiceTest {
+
+    @Before
+    fun installStrings() = TestStrings.install()
+
 
     private fun settings(
         authorized: List<String> = listOf("jpg", "png", "zip", "xz"),

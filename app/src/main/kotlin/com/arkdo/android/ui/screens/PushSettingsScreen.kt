@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -106,11 +108,11 @@ fun PushSettingsScreen(
     ) { granted ->
         state = resolveNotificationState(context, activity)
         when {
-            granted -> toast(context, "通知权限已开启")
+            granted -> toast(context, context.getString(R.string.notif_granted))
             // 已走到永久拒绝：系统不会再弹框，只能去系统设置。
             state == NotificationPermissionState.DENIED_PERMANENT ->
-                toast(context, "系统已不再询问，请在系统设置中开启")
-            else -> toast(context, "未授予通知权限")
+                toast(context, context.getString(R.string.notif_dont_ask))
+            else -> toast(context, context.getString(R.string.notif_not_granted))
         }
     }
 
@@ -144,7 +146,7 @@ fun PushSettingsScreen(
 
                             // 永久拒绝：再 launch 也弹不出框，直接送用户去系统设置。
                             wantOn && state == NotificationPermissionState.DENIED_PERMANENT -> {
-                                toast(context, "请在系统设置中开启通知")
+                                toast(context, context.getString(R.string.notif_enable_in_settings))
                                 NotificationPermission.openSystemSettings(context)
                             }
 
@@ -157,7 +159,7 @@ fun PushSettingsScreen(
 
                             else -> {
                                 // App 无权撤销自己的通知权限，这个方向的开关只能由系统设置完成。
-                                toast(context, "请在系统设置中关闭")
+                                toast(context, context.getString(R.string.notif_disable_in_settings))
                                 NotificationPermission.openSystemSettings(context)
                             }
                         }
@@ -176,7 +178,7 @@ fun PushSettingsScreen(
                                 sending = false
                                 toast(
                                     context,
-                                    if (ok) "已发送，请下拉通知栏查看" else "发送失败，请检查系统设置中的通知开关"
+                                    if (ok) context.getString(R.string.notif_test_sent) else context.getString(R.string.notif_test_failed)
                                 )
                             }
                         }
@@ -193,8 +195,8 @@ fun PushSettingsScreen(
             }
 
             Text(
-                text = "通知权限由系统管理。关闭后，论坛的回复、私信与提及都不会出现在通知栏，" +
-                    "但应用内通知页仍会正常累积未读。",
+                text = stringResource(R.string.notif_managed_by_system1) +
+                    stringResource(R.string.notif_managed_by_system2),
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
                 color = arkdoColors.textFaint,
@@ -217,10 +219,10 @@ private fun PushSettingsTopBar(onNavigateBack: () -> Unit) {
             .padding(horizontal = 4.dp)
     ) {
         IconButton(onClick = onNavigateBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = arkdoColors.textPrimary)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = arkdoColors.textPrimary)
         }
         Text(
-            text = "通知",
+            text = stringResource(R.string.home_notifications),
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             color = arkdoColors.textPrimary
@@ -250,12 +252,12 @@ private fun NotificationPermissionRow(
                 .padding(start = 14.dp, end = 12.dp)
                 .weight(1f)
         ) {
-            Text("系统通知权限", fontSize = 15.sp, color = arkdoColors.textPrimary)
+            Text(stringResource(R.string.notif_permission), fontSize = 15.sp, color = arkdoColors.textPrimary)
             Text(
                 text = when (state) {
-                    NotificationPermissionState.GRANTED -> "已开启，可接收系统通知"
-                    NotificationPermissionState.DENIED_CAN_ASK -> "未开启，打开开关即可授权"
-                    NotificationPermissionState.DENIED_PERMANENT -> "已被系统关闭，需前往系统设置开启"
+                    NotificationPermissionState.GRANTED -> stringResource(R.string.notif_on_desc)
+                    NotificationPermissionState.DENIED_CAN_ASK -> stringResource(R.string.notif_off_desc)
+                    NotificationPermissionState.DENIED_PERMANENT -> stringResource(R.string.notif_disabled_by_system)
                 },
                 fontSize = 12.sp,
                 color = arkdoColors.textFaint,
@@ -290,9 +292,9 @@ private fun TestNotificationRow(sending: Boolean, onClick: () -> Unit) {
                 .padding(start = 14.dp, end = 12.dp)
                 .weight(1f)
         ) {
-            Text("发送测试通知", fontSize = 15.sp, color = arkdoColors.textPrimary)
+            Text(stringResource(R.string.notif_send_test), fontSize = 15.sp, color = arkdoColors.textPrimary)
             Text(
-                text = "验证通知能否真正抵达通知栏",
+                text = stringResource(R.string.notif_test_desc),
                 fontSize = 12.sp,
                 color = arkdoColors.textFaint,
                 modifier = Modifier.padding(top = 2.dp)
@@ -327,9 +329,9 @@ private fun OpenSettingsRow(onClick: () -> Unit) {
                 .padding(start = 14.dp, end = 12.dp)
                 .weight(1f)
         ) {
-            Text("前往系统设置", fontSize = 15.sp, color = arkdoColors.textPrimary)
+            Text(stringResource(R.string.pdns_open_settings), fontSize = 15.sp, color = arkdoColors.textPrimary)
             Text(
-                text = "在系统的通知设置里重新打开",
+                text = stringResource(R.string.notif_reopen_in_settings),
                 fontSize = 12.sp,
                 color = arkdoColors.textFaint,
                 modifier = Modifier.padding(top = 2.dp)

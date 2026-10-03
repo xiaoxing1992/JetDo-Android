@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -105,7 +108,7 @@ fun TopicPostItem(
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
     onOpenUser: (User) -> Unit = {},
     // 帖内音频播放:论坛同源上传件经桥下载过 CF(见 AudioPlayer);未传入时点播报错误态。
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    onResolveMedia: suspend (String) -> String = { error(AppContextHolder.getString(R.string.common_media_download_not_ready)) },
     // 回应人数胶囊点击 → 「谁回应了」弹层(对齐鸿蒙 openReactionUsers;未接时胶囊不可点)。
     onOpenReactions: () -> Unit = {},
     // 采纳答案面板:仅一楼下发非空数组(对齐鸿蒙:postNumber===1 才传 detail.acceptedAnswers)。
@@ -264,7 +267,7 @@ fun TopicPostItem(
                     if (url != null) {
                         clipboard.setText(AnnotatedString(url))
                         android.widget.Toast
-                            .makeText(context, "已拷贝链接", android.widget.Toast.LENGTH_SHORT)
+                            .makeText(context, context.getString(R.string.common_link_copied), android.widget.Toast.LENGTH_SHORT)
                             .show()
                     }
                 },
@@ -583,7 +586,7 @@ private fun PostFooter(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (sharedIssueCreatedLocal) "俺也一样($sharedIssueCountLocal)" else "俺也一样",
+                    text = if (sharedIssueCreatedLocal) stringResource(R.string.detail_same_here_count, sharedIssueCountLocal) else stringResource(R.string.detail_same_here),
                     fontSize = 15.sp,
                     color = colors.meTooFg
                 )
@@ -804,7 +807,7 @@ private fun RepliesSection(
     onOpenUser: (User) -> Unit,
     onOpenLink: (String) -> Unit,
     onOpenImages: (List<ViewerImage>, Int) -> Unit = { _, _ -> },
-    onResolveMedia: suspend (String) -> String = { error("媒体下载未接入") },
+    onResolveMedia: suspend (String) -> String = { error(AppContextHolder.getString(R.string.common_media_download_not_ready)) },
     onJumpToQuote: (topicId: Long, postNumber: Int, fallbackUrl: String?) -> Unit = { _, _, _ -> },
     onResolveQuotedPost: suspend (topicId: Long, postNumber: Int) -> String = { _, _ -> "" },
     onCollapse: () -> Unit,
@@ -912,7 +915,7 @@ private fun RepliesSection(
                     ) {
                         FaIcon("arrow-down", MaterialTheme.colorScheme.onSurfaceVariant, 12.dp)
                         Text(
-                            text = "跳到帖子",
+                            text = stringResource(R.string.common_jump_to_post),
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -944,7 +947,7 @@ private fun LastVisitedDivider() {
             thickness = 1.dp
         )
         Text(
-            text = "上次访问",
+            text = stringResource(R.string.user_last_seen),
             fontSize = 12.sp,
             color = parseHexColor(LAST_VISIT_RED),
             modifier = Modifier.padding(start = 10.dp, end = 10.dp)

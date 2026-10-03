@@ -1,5 +1,7 @@
 package com.arkdo.android.services.logging
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import android.content.Context
 import android.util.Log
 import java.io.File

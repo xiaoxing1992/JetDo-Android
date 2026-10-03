@@ -1,5 +1,6 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -233,7 +234,7 @@ fun VideoPlayer(
             ) {
                 FaIcon("circle-exclamation", Color.White, 40.dp)
                 Text(
-                    text = "加载失败，点击重试",
+                    text = stringResource(R.string.common_load_failed_tap),
                     fontSize = 13.sp,
                     color = Color.White,
                     modifier = Modifier.padding(top = 10.dp)

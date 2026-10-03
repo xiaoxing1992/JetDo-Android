@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,7 +43,7 @@ fun ContentEmptyPane(modifier: Modifier = Modifier) {
             color = colors.textSecondary
         )
         Text(
-            text = "从左侧选择一个帖子开始阅读",
+            text = stringResource(R.string.home_pick_topic),
             fontSize = 15.sp,
             color = colors.textTertiary,
             textAlign = TextAlign.Center,

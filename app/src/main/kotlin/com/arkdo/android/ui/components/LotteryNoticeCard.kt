@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,7 +58,7 @@ fun LotteryNoticeCard(
             ) {
                 FaIcon("gift", colors.warning, 14.dp, Modifier.padding(end = 8.dp))
                 Text(
-                    text = if (collapsed) "抽奖帖 · 回复请说明你为什么需要这个奖品" else "抽奖帖提醒",
+                    text = if (collapsed) stringResource(R.string.lottery_badge) else stringResource(R.string.lottery_alert),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.warning,
@@ -73,24 +75,24 @@ fun LotteryNoticeCard(
 
             if (!collapsed) {
                 Text(
-                    text = "回复被举报后会被删除并永久禁言的三种情况：",
+                    text = stringResource(R.string.lottery_three_cases),
                     fontSize = 13.sp,
                     color = colors.textBody,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 )
-                LotteryBullet("纯凑字数（符号、单字、英文占位）")
-                LotteryBullet("复读或复制别人的回复")
-                LotteryBullet("与奖品无关的内容")
+                LotteryBullet(stringResource(R.string.lottery_padding))
+                LotteryBullet(stringResource(R.string.lottery_duplicate))
+                LotteryBullet(stringResource(R.string.lottery_offtopic))
 
                 Text(
-                    text = "永久禁言后仍可登录浏览、私信，但不能再回复、发帖和参与抽奖。如有异议可私信管理申诉。",
+                    text = stringResource(R.string.lottery_ban_note),
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
                     color = colors.textSecondary,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 )
                 Text(
-                    text = "官方建议：非必要不参与抽奖。确实需要，就说说你为什么需要它。",
+                    text = stringResource(R.string.lottery_rule1),
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
                     color = colors.textBody,
@@ -106,7 +108,7 @@ fun LotteryNoticeCard(
                         .clickable(onClick = onOpenAnnouncement)
                 ) {
                     Text(
-                        text = "查看官方公告",
+                        text = stringResource(R.string.announce_view_announcement),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = colors.ldAccent

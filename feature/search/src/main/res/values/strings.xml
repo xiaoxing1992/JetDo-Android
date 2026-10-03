@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_advanced_filter">高级筛选</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_clear">清空</string>
+    <string name="common_no_more">没有更多了</string>
+    <string name="common_ok">确定</string>
+    <string name="common_pull_load_more">上拉加载更多</string>
+    <string name="common_reset">重置</string>
+    <string name="common_sort">排序</string>
+    <string name="composer_env_not_ready">正在准备请求环境，请稍后重试</string>
+    <string name="detail_topic_author">发帖人</string>
+    <string name="detail_topic_status">话题状态</string>
+    <string name="drawer_about_me">与我相关</string>
+    <string name="drawer_about_me_login">「与我相关」需要登录后才有结果。</string>
+    <string name="filter_apply_count">应用 (%1$s)</string>
+    <string name="login_username">用户名</string>
+    <string name="range_max">最大值</string>
+    <string name="range_min">最小值</string>
+    <string name="search_after">晚于</string>
+    <string name="search_all_categories">所有分类</string>
+    <string name="search_before">早于</string>
+    <string name="search_category">分类</string>
+    <string name="search_challenge">搜索遇到访问验证，请稍后重试</string>
+    <string name="search_hint">输入关键词搜索帖子</string>
+    <string name="search_history">搜索历史</string>
+    <string name="search_login_required">登录后才能搜索</string>
+    <string name="search_match_all">全都含</string>
+    <string name="search_match_any">含任一</string>
+    <string name="search_no_tags">没有匹配的标签</string>
+    <string name="search_no_tags_available">暂无可选标签</string>
+    <string name="search_no_topics">未找到相关帖子</string>
+    <string name="search_no_users">未找到相关用户</string>
+    <string name="search_pick_date">选择日期</string>
+    <string name="search_scope">搜索范围</string>
+    <string name="search_tag">标签</string>
+    <string name="search_tags">搜索标签</string>
+    <string name="settings_application">应用</string>
+    <string name="sort_publish_time">发布时间</string>
+    <string name="user_post_count">帖子数</string>
+    <string name="user_view_count">浏览量</string>
+</resources>

@@ -1,5 +1,8 @@
 package com.arkdo.android.feature.home
 
+import androidx.compose.ui.res.stringResource
+import android.content.Context
+import com.arkdo.android.feature.home.R
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -92,7 +95,8 @@ private const val GROUP_NONE = -1
 private const val GROUP_MINE = 0
 private const val GROUP_ALL = 1
 /** 未登录点受限入口的提示文案（对齐鸿蒙 CategoryDrawer.ets:257 的 onNotice 文案）。 */
-private const val LOGIN_REQUIRED_HINT = "登录后可查看该入口"
+private fun loginRequiredHint(context: Context): String =
+    context.getString(R.string.user_login_to_view)
 
 @Composable
 internal fun HomeDrawer(
@@ -274,7 +278,7 @@ private fun DrawerHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "筛选",
+            text = stringResource(R.string.common_filter),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textPrimary,
@@ -284,7 +288,7 @@ private fun DrawerHeader(
         // 草稿回到全默认时这个入口整个消失，不占位。
         if (showReset) {
             Text(
-                text = "重置",
+                text = stringResource(R.string.common_reset),
                 fontSize = 13.sp,
                 color = colors.brand,
                 modifier = Modifier
@@ -348,7 +352,7 @@ private fun FilterSection(
                 // 此前是 onBlockedTap = onClose —— 用户点了没任何反馈，只看到抽屉收起来，
                 // 完全不知道是「要登录」还是「点了没生效」。对齐鸿蒙 onNotice 语义。
                 onBlockedTap = {
-                    Toast.makeText(context, LOGIN_REQUIRED_HINT, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, loginRequiredHint(context), Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -367,7 +371,7 @@ private fun ScopeTabBar(
 ) {
     Row(modifier = Modifier.padding(horizontal = 16.dp)) {
         ScopeTab(
-            label = "版块",
+            label = stringResource(R.string.drawer_category),
             active = activeTab == TAB_CATEGORY,
             showDot = categoryPicked,
             colors = colors,
@@ -375,7 +379,7 @@ private fun ScopeTabBar(
             modifier = Modifier.weight(1f)
         )
         ScopeTab(
-            label = "标签",
+            label = stringResource(R.string.search_tag),
             active = activeTab == TAB_TAG,
             showDot = tagPicked,
             colors = colors,
@@ -469,7 +473,7 @@ private fun CategoryTab(
 
     ScopeAllRow(
         iconId = "layer-group",
-        label = "不限版块",
+        label = stringResource(R.string.search_any_category),
         selected = draft.categoryId == null,
         colors = colors,
         onClick = { onPick(null) }
@@ -499,7 +503,7 @@ private fun CategoryTab(
     }
 
     GroupHeader(
-        label = "我的版块",
+        label = stringResource(R.string.drawer_my_categories),
         count = mine.size,
         open = categoryGroup == GROUP_MINE,
         colors = colors,
@@ -522,7 +526,7 @@ private fun CategoryTab(
     }
 
     GroupHeader(
-        label = "所有版块",
+        label = stringResource(R.string.drawer_all_categories),
         count = topLevel.size,
         open = categoryGroup == GROUP_ALL,
         colors = colors,
@@ -625,12 +629,12 @@ private fun CategoryPlaceholder(
                 strokeWidth = 2.dp,
                 color = colors.brand
             )
-            Text("正在加载版块…", fontSize = 13.sp, color = colors.textTertiary)
+            Text(stringResource(R.string.drawer_loading_categories), fontSize = 13.sp, color = colors.textTertiary)
             return@Column
         }
 
         Text(
-            text = error ?: "暂无版块",
+            text = error ?: stringResource(R.string.drawer_no_categories),
             fontSize = 13.sp,
             color = colors.textTertiary,
             textAlign = TextAlign.Center
@@ -646,7 +650,7 @@ private fun CategoryPlaceholder(
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("重试", fontSize = 14.sp, color = colors.brand)
+                Text(stringResource(R.string.common_retry), fontSize = 14.sp, color = colors.brand)
             }
         }
     }
@@ -736,7 +740,7 @@ private fun CategoryRow(
             // 用户看到半透明的版块点不动，不知道为什么。
             .clickable {
                 if (restricted) {
-                    Toast.makeText(context, LOGIN_REQUIRED_HINT, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, loginRequiredHint(context), Toast.LENGTH_SHORT).show()
                 } else {
                     onPick(category)
                 }
@@ -842,7 +846,7 @@ private fun TagTab(
             // 这里保持同样的对齐语义。
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (tagQuery.isEmpty()) {
-                    Text("搜索标签", fontSize = 14.sp, color = colors.textTertiary)
+                    Text(stringResource(R.string.search_tags), fontSize = 14.sp, color = colors.textTertiary)
                 }
                 BasicTextField(
                     value = tagQuery,
@@ -870,7 +874,7 @@ private fun TagTab(
 
     ScopeAllRow(
         iconId = "tags",
-        label = "不限标签",
+        label = stringResource(R.string.search_any_tag),
         selected = draft.tag.isNullOrBlank(),
         colors = colors,
         onClick = { onPick(null) }
@@ -886,7 +890,7 @@ private fun TagTab(
 
     if (accordion) {
         GroupHeader(
-            label = "我的标签",
+            label = stringResource(R.string.search_my_tags),
             count = myTags.size,
             open = tagGroup == GROUP_MINE,
             colors = colors,
@@ -903,7 +907,7 @@ private fun TagTab(
         }
 
         GroupHeader(
-            label = "热门标签",
+            label = stringResource(R.string.search_hot_tags),
             count = hotResults.size,
             open = tagGroup == GROUP_ALL,
             colors = colors,
@@ -962,7 +966,7 @@ private fun TagResultList(
     }
     if (tagLoading) return
     Text(
-        text = if (searching) "没有匹配的标签" else "暂无可选标签",
+        text = if (searching) stringResource(R.string.search_no_tags) else stringResource(R.string.search_no_tags_available),
         fontSize = 13.sp,
         color = colors.textTertiary,
         textAlign = TextAlign.Center,
@@ -1166,7 +1170,7 @@ private fun ConfirmBar(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (isDirty) "查看结果" else "关闭",
+                text = if (isDirty) stringResource(R.string.common_view_results) else stringResource(R.string.common_close),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (isDirty) Color.White else colors.textSecondary

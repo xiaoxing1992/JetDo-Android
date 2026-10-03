@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.bookmarks
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -79,9 +81,9 @@ fun ReadTopicsScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = colors.textPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = colors.textPrimary)
             }
-            Text("浏览历史", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+            Text(stringResource(R.string.user_browse_history), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
         }
         HorizontalDivider(color = colors.border, thickness = 0.5.dp)
 
@@ -91,9 +93,9 @@ fun ReadTopicsScreen(
             }
             state.items.isEmpty() && state.error != null -> Centered {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(state.error ?: "加载失败", color = colors.textSecondary)
+                    Text(state.error ?: stringResource(R.string.common_load_failed), color = colors.textSecondary)
                     Text(
-                        "重试",
+                        stringResource(R.string.common_retry),
                         color = colors.ldAccent,
                         modifier = Modifier
                             .padding(top = 12.dp)
@@ -102,7 +104,7 @@ fun ReadTopicsScreen(
                 }
             }
             state.items.isEmpty() -> Centered {
-                Text("还没有读过的帖子", color = colors.textTertiary)
+                Text(stringResource(R.string.user_no_read_topics), color = colors.textTertiary)
             }
             else -> PullToRefreshBox(
                 isRefreshing = state.refreshing,
@@ -143,7 +145,7 @@ fun ReadTopicsScreen(
                                         color = colors.ldAccent,
                                         strokeWidth = 2.dp
                                     )
-                                    !state.hasMore -> Text("没有更多了", fontSize = 13.sp, color = colors.textFaint)
+                                    !state.hasMore -> Text(stringResource(R.string.common_no_more), fontSize = 13.sp, color = colors.textFaint)
                                 }
                             }
                         }

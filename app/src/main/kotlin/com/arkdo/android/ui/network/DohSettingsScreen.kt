@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.network
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -163,19 +166,19 @@ fun DohSettingsScreen(
             IconButton(onClick = onNavigateBack) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
+                    contentDescription = stringResource(R.string.common_back),
                     tint = arkdoColors.textPrimary
                 )
             }
             Text(
-                text = "DoH 配置",
+                text = stringResource(R.string.doh_config),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = arkdoColors.textPrimary,
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "添加 DoH", tint = arkdoColors.textPrimary)
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.doh_add), tint = arkdoColors.textPrimary)
             }
         }
         HorizontalDivider(color = arkdoColors.border, thickness = 0.5.dp)
@@ -196,9 +199,9 @@ fun DohSettingsScreen(
                         .padding(horizontal = CardPadding, vertical = 12.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("启用 DoH", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(stringResource(R.string.doh_enable), fontSize = 15.sp, color = arkdoColors.textPrimary)
                         Text(
-                            "关闭后走系统 DNS（可能被污染）",
+                            stringResource(R.string.doh_off_fallback_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)
@@ -212,7 +215,7 @@ fun DohSettingsScreen(
                             onDohApplied()
                             Toast.makeText(
                                 context,
-                                if (on) "DoH 已启用" else "DoH 已关闭",
+                                if (on) context.getString(R.string.doh_enabled) else context.getString(R.string.doh_disabled),
                                 Toast.LENGTH_SHORT
                             ).show()
                         },
@@ -234,7 +237,7 @@ fun DohSettingsScreen(
                                 DohManager.setActive(context, row.server.id)
                                 // DoH 关闭时只记录选择（下次开启才生效），不重载，避免误导。
                                 if (enabled) onDohApplied()
-                                Toast.makeText(context, "已切换 DoH", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.doh_switched), Toast.LENGTH_SHORT).show()
                             }
                         },
                         onTest = { testOne(row.server.id) },
@@ -254,12 +257,12 @@ fun DohSettingsScreen(
                     .clickable { rows.forEach { testOne(it.server.id) } },
                 contentAlignment = Alignment.Center
             ) {
-                Text("一键测速全部", fontSize = 15.sp, color = arkdoColors.ldAccent)
+                Text(stringResource(R.string.doh_test_all), fontSize = 15.sp, color = arkdoColors.ldAccent)
             }
 
             // 卡片 3：解析模式。
             Text(
-                text = "解析模式",
+                text = stringResource(R.string.doh_mode2),
                 fontSize = 13.sp,
                 color = arkdoColors.textFaint,
                 modifier = Modifier
@@ -277,9 +280,9 @@ fun DohSettingsScreen(
             )
 
             Text(
-                text = "DoH 用加密的 HTTPS 通道解析域名，绕过被污染的本地 DNS。\n" +
-                    "生效范围与鸿蒙版略有差异：Android 无法给 WebView 指定全局 DoH，" +
-                    "改由每个请求逐条接管，因此只覆盖 GET 请求。",
+                text = stringResource(R.string.doh_desc_nl2) +
+                    stringResource(R.string.pdns_scope_note1) +
+                    stringResource(R.string.pdns_scope_note2),
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
                 color = arkdoColors.textFaint,
@@ -297,10 +300,10 @@ fun DohSettingsScreen(
                 showAddDialog = false
                 val created = DohManager.addServer(context, name, url)
                 if (created == null) {
-                    Toast.makeText(context, "添加失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.common_add_failed), Toast.LENGTH_SHORT).show()
                 } else {
                     reload()
-                    Toast.makeText(context, "已添加", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.common_added), Toast.LENGTH_SHORT).show()
                 }
             },
             onInvalid = { reason ->
@@ -314,8 +317,8 @@ fun DohSettingsScreen(
     pendingDelete?.let { server ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除 DoH", color = arkdoColors.textPrimary) },
-            text = { Text("确定删除「${server.name}」吗？", color = arkdoColors.textSecondary) },
+            title = { Text(stringResource(R.string.doh_delete), color = arkdoColors.textPrimary) },
+            text = { Text(stringResource(R.string.doh_delete_confirm, server.name), color = arkdoColors.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     val wasActive = activeId == server.id
@@ -324,14 +327,14 @@ fun DohSettingsScreen(
                     reload()
                     // 删的是当前项：已回退内置默认并重新下发，需重载宿主（仅启用态）。
                     if (wasActive && enabled) onDohApplied()
-                    Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.common_deleted), Toast.LENGTH_SHORT).show()
                 }) {
-                    Text("删除", color = arkdoColors.ldDanger)
+                    Text(stringResource(R.string.common_delete), color = arkdoColors.ldDanger)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) {
-                    Text("取消", color = arkdoColors.textSecondary)
+                    Text(stringResource(R.string.common_cancel), color = arkdoColors.textSecondary)
                 }
             }
         )
@@ -426,7 +429,7 @@ private fun ServerRow(
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Filled.Delete,
-                    contentDescription = "删除",
+                    contentDescription = stringResource(R.string.common_delete),
                     tint = arkdoColors.ldDanger,
                     modifier = Modifier.size(18.dp)
                 )
@@ -464,10 +467,11 @@ private fun LatencyBadge(row: DohRow, onTest: () -> Unit) {
     }
 }
 
+@Composable
 private fun badgeLabel(row: DohRow): String = when (row.state) {
     RowTestState.OK -> "${row.latencyMs}ms"
-    RowTestState.FAIL -> if (row.message.isNotEmpty()) row.message else "重试"
-    else -> "测速"
+    RowTestState.FAIL -> if (row.message.isNotEmpty()) row.message else stringResource(R.string.common_retry)
+    else -> stringResource(R.string.doh_speed_test)
 }
 
 /** 药丸文字色：idle/fail 走主题色（硬编码会在深色模式下露白或发暗）。 */
@@ -499,12 +503,12 @@ private fun ModeCard(mode: DohResolveMode, onSelect: (DohResolveMode) -> Unit) {
                 .padding(start = CardPadding, end = CardPadding, top = 14.dp, bottom = 14.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("DNS 解析模式", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                Text(stringResource(R.string.doh_mode), fontSize = 15.sp, color = arkdoColors.textPrimary)
                 Text(
                     text = if (mode == DohResolveMode.SECURE_ONLY) {
-                        "只用 DoH，解析失败即加载失败"
+                        stringResource(R.string.doh_no_fallback_desc)
                     } else {
-                        "DoH 失败时回退系统 DNS"
+                        stringResource(R.string.doh_fallback)
                     },
                     fontSize = 12.sp,
                     color = arkdoColors.textFaint,
@@ -512,7 +516,7 @@ private fun ModeCard(mode: DohResolveMode, onSelect: (DohResolveMode) -> Unit) {
                 )
             }
             Text(
-                text = if (mode == DohResolveMode.SECURE_ONLY) "仅 DoH" else "自动",
+                text = if (mode == DohResolveMode.SECURE_ONLY) stringResource(R.string.doh_only) else stringResource(R.string.settings_auto),
                 fontSize = 13.sp,
                 color = arkdoColors.textFaint,
                 modifier = Modifier.padding(end = 6.dp)
@@ -526,14 +530,14 @@ private fun ModeCard(mode: DohResolveMode, onSelect: (DohResolveMode) -> Unit) {
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
-                text = { Text("自动（推荐）") },
+                text = { Text(stringResource(R.string.settings_auto_recommended)) },
                 onClick = {
                     expanded = false
                     onSelect(DohResolveMode.AUTO)
                 }
             )
             DropdownMenuItem(
-                text = { Text("仅 DoH") },
+                text = { Text(stringResource(R.string.doh_only)) },
                 onClick = {
                     expanded = false
                     onSelect(DohResolveMode.SECURE_ONLY)
@@ -557,7 +561,7 @@ private fun AddDohDialog(
         containerColor = arkdoColors.surfaceCard,
         title = {
             Text(
-                text = "添加 DoH",
+                text = stringResource(R.string.doh_add),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
                 color = arkdoColors.textPrimary,
@@ -570,7 +574,7 @@ private fun AddDohDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = { Text("名称（可留空，默认取域名）") },
+                    placeholder = { Text(stringResource(R.string.doh_name_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -589,18 +593,18 @@ private fun AddDohDialog(
             TextButton(onClick = {
                 val trimmedUrl = url.trim()
                 if (!trimmedUrl.startsWith("https://") || trimmedUrl.length < 12) {
-                    onInvalid("请填写有效的 https DoH 地址")
+                    onInvalid(AppContextHolder.getString(R.string.doh_invalid_url))
                     return@TextButton
                 }
                 val trimmedName = name.trim()
                 onConfirm(if (trimmedName.isNotEmpty()) trimmedName else hostOf(trimmedUrl), trimmedUrl)
             }) {
-                Text("添加", color = arkdoColors.ldAccent, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.common_add), color = arkdoColors.ldAccent, fontWeight = FontWeight.Medium)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消", color = arkdoColors.textSecondary)
+                Text(stringResource(R.string.common_cancel), color = arkdoColors.textSecondary)
             }
         }
     )

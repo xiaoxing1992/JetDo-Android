@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -107,7 +109,7 @@ fun CfChallengeScreen(
                 .padding(horizontal = 16.dp)
         ) {
             Text(
-                text = "Cloudflare 验证",
+                text = stringResource(R.string.challenge_title),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -117,7 +119,7 @@ fun CfChallengeScreen(
                 onClick = onClose,
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
-                Icon(Icons.Default.Close, contentDescription = "关闭")
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
             }
         }
         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -134,12 +136,12 @@ fun CfChallengeScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "验证服务连不上",
+                        text = stringResource(R.string.challenge_service_unreachable),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Text(
-                        text = "Cloudflare 验证脚本多次无法加载,当前网络下验证可能无法完成。挂上代理后重新打开通常可解决。",
+                        text = stringResource(R.string.challenge_script_failed),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )

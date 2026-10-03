@@ -5,8 +5,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.arkdo.android.common.TestStrings
+import org.junit.Before
 
 class ConnectLevelParserTest {
+
+    @Before
+    fun installStrings() = TestStrings.install()
+
 
     @Test
     fun parseReturnsNullWhenPageNotReady() {

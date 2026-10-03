@@ -1,5 +1,8 @@
 package com.arkdo.android.services.site
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.DiscourseCategory
 import com.arkdo.android.data.models.DiscourseSiteResponse
 import com.arkdo.android.data.models.SiteMetadata
@@ -34,7 +37,7 @@ class SiteService(private val bridge: JsonNetworkClient) {
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 站点信息响应为空。"
+                AppContextHolder.getString(R.string.err_site_info_empty)
             )
         }
 
@@ -46,7 +49,7 @@ class SiteService(private val bridge: JsonNetworkClient) {
                 return NetworkResults.unexpectedResponse(
                     response.statusCode,
                     response.challengeState,
-                    "Linux.do 站点信息响应缺少 categories。"
+                    AppContextHolder.getString(R.string.err_site_info_missing_categories)
                 )
             }
 
@@ -65,7 +68,7 @@ class SiteService(private val bridge: JsonNetworkClient) {
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
-                "Linux.do 站点信息响应不是有效 JSON。"
+                AppContextHolder.getString(R.string.err_site_info_json)
             )
         }
     }

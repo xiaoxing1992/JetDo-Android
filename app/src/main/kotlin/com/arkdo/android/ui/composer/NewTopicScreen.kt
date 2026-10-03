@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.composer
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -261,11 +264,11 @@ fun NewTopicScreen(
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    SegmentTab("编辑", selected = editMode) {
+                    SegmentTab(stringResource(R.string.common_edit), selected = editMode) {
                         editMode = true
                         previewJob?.cancel()
                     }
-                    SegmentTab("预览", selected = !editMode) {
+                    SegmentTab(stringResource(R.string.composer_preview), selected = !editMode) {
                         editMode = false
                         previewHtml = null
                         isPreviewLoading = true
@@ -317,7 +320,7 @@ fun NewTopicScreen(
                     decorationBox = { inner ->
                         Box {
                             if (title.isEmpty()) {
-                                Text("标题", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = colors.textTertiary)
+                                Text(stringResource(R.string.composer_title), fontSize = 18.sp, fontWeight = FontWeight.Medium, color = colors.textTertiary)
                             }
                             inner()
                         }
@@ -357,9 +360,9 @@ fun NewTopicScreen(
                         tagCount = uiState.tags.size,
                         onClick = {
                             if (uiState.categoryId == null) {
-                                Toast.makeText(context, "请先选择分类", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.composer_pick_category), Toast.LENGTH_SHORT).show()
                             } else if (uiState.tags.size >= COMPOSER_MAX_TAGS) {
-                                Toast.makeText(context, "最多选 $COMPOSER_MAX_TAGS 个标签", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.composer_tag_limit, COMPOSER_MAX_TAGS), Toast.LENGTH_SHORT).show()
                             } else {
                                 viewModel.openTagPicker()
                                 tagPickerVisible = true
@@ -387,7 +390,7 @@ fun NewTopicScreen(
                             Box {
                                 if (bodyField.text.isEmpty()) {
                                     Text(
-                                        "正文(支持 Markdown)",
+                                        stringResource(R.string.composer_body_hint),
                                         fontSize = 16.sp,
                                         lineHeight = 16.sp,
                                         color = colors.textTertiary
@@ -447,7 +450,7 @@ fun NewTopicScreen(
                         strokeWidth = 2.dp
                     )
                     Text(
-                        uiState.uploadProgressText ?: "上传中...",
+                        uiState.uploadProgressText ?: stringResource(R.string.composer_uploading),
                         fontSize = 15.sp,
                         color = colors.textPrimary
                     )
@@ -455,7 +458,7 @@ fun NewTopicScreen(
                     // 上传阶段不给 —— 请求已经发出去了，取消也收不回来。
                     if (uiState.uploadCancelable) {
                         Text(
-                            "取消",
+                            stringResource(R.string.common_cancel),
                             fontSize = 14.sp,
                             color = colors.ldAccent,
                             modifier = Modifier
@@ -479,7 +482,7 @@ fun NewTopicScreen(
         ) {
             Column(modifier = Modifier.fillMaxHeight(0.66f)) {
                 Text(
-                    "选择分类",
+                    stringResource(R.string.composer_select_category),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.textPrimary,
@@ -537,7 +540,7 @@ fun NewTopicScreen(
         ) {
             Column(modifier = Modifier.fillMaxHeight(0.8f)) {
                 Text(
-                    "选择标签",
+                    stringResource(R.string.composer_select_tags),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.textPrimary,
@@ -554,7 +557,7 @@ fun NewTopicScreen(
                     },
                     onToggle = { tag ->
                         if (!viewModel.toggleTag(tag)) {
-                            Toast.makeText(context, "最多选 $COMPOSER_MAX_TAGS 个标签", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.composer_tag_limit, COMPOSER_MAX_TAGS), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -634,7 +637,7 @@ private fun CategoryChip(
             }
         }
         Text(
-            selected?.name ?: "选择分类",
+            selected?.name ?: stringResource(R.string.composer_select_category),
             fontSize = 13.sp,
             color = if (selectedId != null) colors.textBody else colors.textTertiary
         )
@@ -685,7 +688,7 @@ private fun AddTagChip(categorySelected: Boolean, tagCount: Int, onClick: () -> 
     ) {
         FaIcon("plus", fg, 12.dp)
         Text(
-            if (tagCount > 0) "标签" else "添加标签",
+            if (tagCount > 0) stringResource(R.string.search_tag) else stringResource(R.string.composer_add_tag),
             fontSize = 13.sp,
             color = fg,
             modifier = Modifier.padding(start = 4.dp)
@@ -802,7 +805,7 @@ private fun TagPickerContent(
                 cursorBrush = SolidColor(colors.textPrimary),
                 decorationBox = { inner ->
                     Box(modifier = Modifier.heightIn(min = 44.dp), contentAlignment = Alignment.CenterStart) {
-                        if (query.isEmpty()) Text("搜索标签", fontSize = 15.sp, color = colors.textTertiary)
+                        if (query.isEmpty()) Text(stringResource(R.string.search_tags), fontSize = 15.sp, color = colors.textTertiary)
                         inner()
                     }
                 },
@@ -823,7 +826,7 @@ private fun TagPickerContent(
             } else if (results.isEmpty()) {
                 item {
                     Text(
-                        if (query.isNotEmpty()) "没有匹配的标签" else "该分类下暂无可选标签",
+                        if (query.isNotEmpty()) stringResource(R.string.search_no_tags) else stringResource(R.string.search_no_tags_in_category),
                         fontSize = 14.sp,
                         color = colors.textTertiary,
                         modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 28.dp),
@@ -928,8 +931,8 @@ fun MarkdownToolbar(
             ToolIcon("file-arrow-up", enabled = !uploading, onClick = onUploadAttachment)
         }
         DividerSpace()
-        ToolIcon("bold", enabled = true) { onAction(MdAction.Wrap("**", "**", "加粗文字")) }
-        ToolIcon("italic", enabled = true) { onAction(MdAction.Wrap("_", "_", "斜体文字")) }
+        ToolIcon("bold", enabled = true) { onAction(MdAction.Wrap("**", "**", AppContextHolder.getString(R.string.composer_bold_text))) }
+        ToolIcon("italic", enabled = true) { onAction(MdAction.Wrap("_", "_", AppContextHolder.getString(R.string.composer_italic_text))) }
         ToolIcon("quote-left", enabled = true) { onAction(MdAction.LinePrefix("> ", ordered = false)) }
         ToolIcon("code", enabled = true) { onAction(MdAction.Wrap("`", "`", "code")) }
         ToolIcon("file-code", enabled = true) { onAction(MdAction.InsertCursor("```\n\n```", 4)) }
@@ -937,7 +940,7 @@ fun MarkdownToolbar(
         ToolIcon("list-ol", enabled = true) { onAction(MdAction.LinePrefix("", ordered = true)) }
         ToolIcon("hashtag", enabled = true) { onAction(MdAction.LinePrefix("# ", ordered = false)) }
         DividerSpace()
-        ToolIcon("link", enabled = true) { onAction(MdAction.Wrap("[", "](url)", "链接文字")) }
+        ToolIcon("link", enabled = true) { onAction(MdAction.Wrap("[", "](url)", AppContextHolder.getString(R.string.composer_link_text))) }
     }
 }
 

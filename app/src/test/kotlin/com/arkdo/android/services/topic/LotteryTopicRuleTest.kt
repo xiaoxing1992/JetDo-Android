@@ -4,9 +4,15 @@ import com.arkdo.android.data.models.TopicTag
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.arkdo.android.common.TestStrings
+import org.junit.Before
 
 // 对齐鸿蒙 LotteryTopicRule.ets 的判定语义:排除优先、包含匹配、双状态豁免、本人豁免。
 class LotteryTopicRuleTest {
+
+    @Before
+    fun installStrings() = TestStrings.install()
+
 
     private fun tag(id: Long? = null, name: String) = TopicTag(id = id, name = name)
 

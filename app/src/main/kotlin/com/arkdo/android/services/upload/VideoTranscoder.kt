@@ -1,5 +1,7 @@
 package com.arkdo.android.services.upload
 
+import com.arkdo.android.R
+import com.arkdo.android.core.data.AppContextHolder
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -85,10 +87,10 @@ class VideoTranscoder(private val context: Context) {
 
         val probe = known ?: withContext(Dispatchers.IO) {
             runCatching { probeVideo(context, sourceUri) }.getOrNull()
-        } ?: return VideoTranscodeResult(error = "读不出这个视频的信息，无法压缩")
+        } ?: return VideoTranscodeResult(error = AppContextHolder.getString(R.string.composer_video_unreadable))
 
         if (probe.durationSeconds <= 0.0 || probe.width <= 0 || probe.height <= 0) {
-            return VideoTranscodeResult(error = "读不出这个视频的时长或尺寸，无法压缩")
+            return VideoTranscodeResult(error = AppContextHolder.getString(R.string.composer_video_probe_failed))
         }
 
         val usableBits = targetBytes.toDouble() * 8.0 * SIZE_SAFETY
@@ -99,8 +101,8 @@ class VideoTranscoder(private val context: Context) {
             // 时长超限。把上限算出来告诉用户，比干巴巴一句「太长了」有用。
             val limit = maxDurationSeconds(targetBytes)
             return VideoTranscodeResult(
-                error = "视频 ${readableDuration(probe.durationSeconds)} 太长，" +
-                    "压不进 ${readableSize(targetBytes)}（上限约 ${readableDuration(limit.toDouble())}）"
+                error = AppContextHolder.getString(R.string.composer_video_too_long, readableDuration(probe.durationSeconds)) +
+                    AppContextHolder.getString(R.string.composer_cannot_fit, readableSize(targetBytes), readableDuration(limit.toDouble()))
             )
         }
 
@@ -137,7 +139,7 @@ class VideoTranscoder(private val context: Context) {
                 discard(outputPath)
                 if (cancelled.get()) return VideoTranscodeResult(error = "")
                 Timber.i(e, "[ArkDO][Transcode] pass=%d failed", pass)
-                lastError = "视频压缩失败"
+                lastError = AppContextHolder.getString(R.string.composer_video_compress_failed)
                 break
             }
 
@@ -156,7 +158,7 @@ class VideoTranscoder(private val context: Context) {
         }
 
         return VideoTranscodeResult(
-            error = lastError ?: "这个视频压不到 ${readableSize(targetBytes)} 以内"
+            error = lastError ?: AppContextHolder.getString(R.string.composer_cannot_compress_to, readableSize(targetBytes))
         )
     }
 
@@ -415,10 +417,10 @@ class VideoTranscoder(private val context: Context) {
 
         internal fun readableDuration(seconds: Double): String {
             val total = seconds.roundToInt()
-            if (total < 60) return "$total 秒"
+            if (total < 60) return AppContextHolder.getString(R.string.relative_seconds, total)
             val minutes = total / 60
             val rest = total % 60
-            return if (rest == 0) "$minutes 分钟" else "$minutes 分 $rest 秒"
+            return if (rest == 0) AppContextHolder.getString(R.string.relative_minutes, minutes) else AppContextHolder.getString(R.string.relative_min_sec, minutes, rest)
         }
 
         internal fun readableSize(bytes: Long): String {

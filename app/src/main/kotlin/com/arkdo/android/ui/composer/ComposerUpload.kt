@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.composer
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
@@ -35,9 +38,9 @@ internal data class UploadOutcome(val snippet: String?, val error: String?)
  * 公开而非 internal：两个 ViewModel 的公开上传方法都以它作参数。
  */
 enum class ComposerUploadKind(val label: String, val progressText: String) {
-    Image("图片", "图片上传中..."),
-    Attachment("附件", "附件上传中..."),
-    Media("视频", "视频上传中...")
+    Image(AppContextHolder.getString(R.string.composer_kind_image), AppContextHolder.getString(R.string.composer_uploading_image)),
+    Attachment(AppContextHolder.getString(R.string.composer_kind_file), AppContextHolder.getString(R.string.composer_uploading_file)),
+    Media(AppContextHolder.getString(R.string.composer_kind_video), AppContextHolder.getString(R.string.composer_uploading_video))
 }
 
 /** 一次成功上传的服务端字段（三条入口共用）。 */
@@ -63,12 +66,12 @@ private val uploadJson = Json { ignoreUnknownKeys = true }
  */
 internal fun parseUploadedFile(
     response: NetworkResult<String>,
-    kindLabel: String = "文件",
+    kindLabel: String = AppContextHolder.getString(R.string.composer_file),
     fallbackName: String = "",
     fallbackSize: Long = 0L,
 ): ParsedUpload {
     if (!response.success || response.data == null) {
-        return ParsedUpload(null, response.error?.message ?: "${kindLabel}上传失败，请稍后重试。")
+        return ParsedUpload(null, response.error?.message ?: AppContextHolder.getString(R.string.composer_upload_failed, kindLabel))
     }
     return runCatching {
         val root = uploadJson.parseToJsonElement(response.data).jsonObject
@@ -76,7 +79,7 @@ internal fun parseUploadedFile(
         if (shortUrl.isNullOrEmpty()) {
             // 2xx 但缺 short_url = Discourse 校验失败，服务端 errors 里有人话。
             val errors = root["errors"]?.jsonArray?.joinToString(" ") { it.jsonPrimitive.content }
-            ParsedUpload(null, errors?.takeIf { it.isNotEmpty() } ?: "${kindLabel}上传失败，请检查格式或大小。")
+            ParsedUpload(null, errors?.takeIf { it.isNotEmpty() } ?: AppContextHolder.getString(R.string.composer_upload_failed_format, kindLabel))
         } else {
             val size = root["filesize"]?.jsonPrimitive?.longOrNull ?: fallbackSize
             val human = root["human_filesize"]?.jsonPrimitive?.content.orEmpty()
@@ -106,7 +109,7 @@ internal fun parseUploadedFile(
         }
     }.getOrElse {
         Timber.e(it, "[ArkDO][Composer] 上传响应解析失败")
-        ParsedUpload(null, "${kindLabel}上传失败，请稍后重试。")
+        ParsedUpload(null, AppContextHolder.getString(R.string.composer_upload_failed, kindLabel))
     }
 }
 
@@ -138,7 +141,7 @@ internal suspend fun runUploadBatch(
 
     /** 除「压缩进度」外的常态文案。压缩阶段由 [prepareMediaForBatch] 自己往外发。 */
     fun phaseText(index: Int) = UploadProgress(
-        if (uris.size > 1) "${kind.label}上传中 (${index + 1}/${uris.size})" else "${kind.label}上传中..."
+        if (uris.size > 1) AppContextHolder.getString(R.string.composer_uploading_n, kind.label, index + 1, uris.size) else AppContextHolder.getString(R.string.composer_uploading_kind, kind.label)
     )
 
     uris.forEachIndexed { index, uri ->
@@ -212,8 +215,8 @@ private suspend fun prepareMediaForBatch(
     /** 把一份源（原始 uri 或转码产物文件）读成载荷。 */
     fun readBytesOf(target: Uri): RawFileResult = runCatching {
         val bytes = resolver.openInputStream(target)?.use { it.readBytes() }
-            ?: return RawFileResult.Failed("视频读取失败")
-        if (bytes.isEmpty()) return RawFileResult.Failed("文件是空的")
+            ?: return RawFileResult.Failed(AppContextHolder.getString(R.string.common_video_read_failed))
+        if (bytes.isEmpty()) return RawFileResult.Failed(AppContextHolder.getString(R.string.common_file_empty))
         RawFileResult.Ok(
             PreparedRawFile(
                 base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
@@ -225,7 +228,7 @@ private suspend fun prepareMediaForBatch(
                 displayHeight = displayHeight
             )
         )
-    }.getOrElse { RawFileResult.Failed("视频读取失败") }
+    }.getOrElse { RawFileResult.Failed(AppContextHolder.getString(R.string.common_video_read_failed)) }
 
     // 体积未知（provider 不给 SIZE）时不敢断言「已达标」，走转码那条路更安全 ——
     // 但探不出元数据时转码也无从下手，此时只能原样传，由服务端去拒。
@@ -245,12 +248,12 @@ private suspend fun prepareMediaForBatch(
             known = probe,
             onPlan = { plan ->
                 if (plan.willDegrade) {
-                    onProgress(UploadProgress("视频较长，压缩后画质会明显下降", cancelable = true))
+                    onProgress(UploadProgress(AppContextHolder.getString(R.string.composer_video_long_warning), cancelable = true))
                 }
             },
             onProgress = { percent, pass ->
-                val round = if (pass > 1) "（第 $pass 遍）" else ""
-                onProgress(UploadProgress("视频压缩中$round $percent%", cancelable = true))
+                val round = if (pass > 1) AppContextHolder.getString(R.string.composer_compress_pass, pass) else ""
+                onProgress(UploadProgress(AppContextHolder.getString(R.string.composer_compressing, round, percent), cancelable = true))
             }
         )
     } finally {
@@ -282,7 +285,7 @@ private fun prepareImageForBatch(
     limitKb: Int,
     kindLabel: String
 ): RawFileResult {
-    val prepared = prepareImageUpload(resolver, uri) ?: return RawFileResult.Failed("图片读取失败")
+    val prepared = prepareImageUpload(resolver, uri) ?: return RawFileResult.Failed(AppContextHolder.getString(R.string.common_image_read_failed))
     val approxBytes = prepared.base64.length.toLong() / 4L * 3L
     val overLimit = UploadService.checkSize(approxBytes, limitKb, kindLabel)
     if (overLimit.isNotEmpty()) return RawFileResult.Failed(overLimit)
@@ -293,14 +296,14 @@ private fun prepareImageForBatch(
 
 /** 解析 /uploads.json 响应：成功取 short_url 拼 markdown 图；失败给用户可读文案。 */
 internal fun parseUploadOutcome(response: NetworkResult<String>): UploadOutcome {
-    val parsed = parseUploadedFile(response, kindLabel = "图片")
+    val parsed = parseUploadedFile(response, kindLabel = AppContextHolder.getString(R.string.composer_kind_image))
     val file = parsed.file ?: return UploadOutcome(null, parsed.error)
     return UploadOutcome(UploadMarkdown.buildImage(file.fileName, file.width, file.height, file.shortUrl), null)
 }
 
 /** 附件：`[名.zip|attachment](upload://…) (38.3 KB)`。 */
 internal fun parseAttachmentOutcome(response: NetworkResult<String>): UploadOutcome {
-    val parsed = parseUploadedFile(response, kindLabel = "附件")
+    val parsed = parseUploadedFile(response, kindLabel = AppContextHolder.getString(R.string.composer_kind_file))
     val file = parsed.file ?: return UploadOutcome(null, parsed.error)
     return UploadOutcome(
         UploadService.buildAttachmentMarkdown(file.fileName, file.humanFileSize, file.shortUrl),
@@ -321,7 +324,7 @@ internal fun parseMediaOutcome(
     localHeight: Int,
     mediaMimeType: String,
 ): UploadOutcome {
-    val parsed = parseUploadedFile(response, kindLabel = "视频")
+    val parsed = parseUploadedFile(response, kindLabel = AppContextHolder.getString(R.string.composer_kind_video))
     val file = parsed.file ?: return UploadOutcome(null, parsed.error)
     val width = if (file.width > 0) file.width else localWidth
     val height = if (file.height > 0) file.height else localHeight

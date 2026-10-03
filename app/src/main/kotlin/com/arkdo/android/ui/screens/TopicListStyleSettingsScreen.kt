@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -64,9 +67,9 @@ private val CardPadding = 16.dp
 private val CardGap = 12.dp
 
 private val WeightOptions = listOf(
-    "常规" to TITLE_FONT_WEIGHT_REGULAR,
-    "中等" to TITLE_FONT_WEIGHT_MEDIUM,
-    "加粗" to TITLE_FONT_WEIGHT_SEMI_BOLD
+    AppContextHolder.getString(R.string.weight_regular) to TITLE_FONT_WEIGHT_REGULAR,
+    AppContextHolder.getString(R.string.weight_medium) to TITLE_FONT_WEIGHT_MEDIUM,
+    AppContextHolder.getString(R.string.weight_semibold) to TITLE_FONT_WEIGHT_SEMI_BOLD
 )
 
 /**
@@ -93,7 +96,7 @@ fun TopicListStyleSettingsScreen(
             unread = colors.ldAccent
         )
     }
-    val preview = remember { previewTopics() }
+    val preview = previewTopics()
 
     Column(
         modifier = modifier
@@ -109,10 +112,10 @@ fun TopicListStyleSettingsScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = colors.textPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = colors.textPrimary)
             }
             Text(
-                text = "帖子列表样式",
+                text = stringResource(R.string.settings_topic_list_style),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.textPrimary
@@ -157,7 +160,7 @@ fun TopicListStyleSettingsScreen(
                         .background(colors.surfaceCard, RoundedCornerShape(CardRadius))
                 ) {
                     StyleSlider(
-                        label = "标题字号",
+                        label = stringResource(R.string.settings_title_size),
                         valueLabel = style.titleFontSize.toString(),
                         value = style.titleFontSize.toFloat(),
                         min = TITLE_FONT_SIZE_MIN.toFloat(),
@@ -170,7 +173,7 @@ fun TopicListStyleSettingsScreen(
                     FontWeightRow(style)
                     Hairline()
                     StyleSlider(
-                        label = "行高",
+                        label = stringResource(R.string.settings_line_height),
                         valueLabel = String.format(Locale.US, "%.2f", style.lineHeightRatio),
                         value = style.lineHeightRatio,
                         min = LINE_HEIGHT_RATIO_MIN,
@@ -181,7 +184,7 @@ fun TopicListStyleSettingsScreen(
                     )
                     Hairline()
                     StyleSlider(
-                        label = "行间距",
+                        label = stringResource(R.string.settings_line_spacing),
                         valueLabel = style.rowPadding.toString(),
                         value = style.rowPadding.toFloat(),
                         min = ROW_PADDING_MIN.toFloat(),
@@ -192,7 +195,7 @@ fun TopicListStyleSettingsScreen(
                     )
                     Hairline()
                     StyleSlider(
-                        label = "头像大小",
+                        label = stringResource(R.string.settings_avatar_size),
                         valueLabel = style.avatarSize.toString(),
                         value = style.avatarSize.toFloat(),
                         min = AVATAR_SIZE_MIN.toFloat(),
@@ -203,7 +206,7 @@ fun TopicListStyleSettingsScreen(
                     )
                 }
                 Text(
-                    text = "设置对首页和搜索结果同时生效。",
+                    text = stringResource(R.string.search_filter_applies),
                     fontSize = 12.sp,
                     color = colors.textFaint,
                     modifier = Modifier
@@ -211,7 +214,7 @@ fun TopicListStyleSettingsScreen(
                         .padding(horizontal = CardPadding, vertical = 10.dp)
                 )
                 Text(
-                    text = "恢复默认",
+                    text = stringResource(R.string.settings_restore_defaults),
                     fontSize = 15.sp,
                     color = colors.textPrimary,
                     textAlign = TextAlign.Center,
@@ -282,7 +285,7 @@ private fun FontWeightRow(style: TopicListStyle) {
             .fillMaxWidth()
             .padding(horizontal = CardPadding, vertical = 12.dp)
     ) {
-        Text("标题字重", fontSize = 15.sp, color = arkdoColors.textPrimary)
+        Text(stringResource(R.string.settings_title_weight), fontSize = 15.sp, color = arkdoColors.textPrimary)
         Row(modifier = Modifier.padding(top = 8.dp)) {
             WeightOptions.forEach { (label, weight) ->
                 val selected = style.titleFontWeight == weight
@@ -324,23 +327,25 @@ private fun Hairline() {
 private fun formatBound(value: Float, step: Float): String =
     if (step < 1f) String.format(Locale.US, "%.2f", value) else value.toInt().toString()
 
-private fun previewCategory() = HomeCategory(id = 1, name = "资源分享", color = "0088CC")
+@Composable
+private fun previewCategory() = HomeCategory(id = 1, name = stringResource(R.string.category_resource_sharing), color = "0088CC")
 
+@Composable
 private fun previewTopics(): List<HomeTopic> {
     val now = System.currentTimeMillis()
     return listOf(
         HomeTopic(
             id = -1,
-            title = "这是一条用来预览的帖子标题，它足够长，好让你看清标题折行之后的行高与整体密度",
+            title = stringResource(R.string.preview_long_title),
             categoryId = 1,
-            tags = listOf(HomeTag("教程"), HomeTag("实用工具")),
+            tags = listOf(HomeTag(stringResource(R.string.drawer_tutorial)), HomeTag(stringResource(R.string.drawer_utilities))),
             lastPostedAt = java.time.Instant.ofEpochMilli(now - 15 * 60_000).toString(),
             unreadPosts = 12,
-            author = HomeUser(id = 10000, username = "demo_user", name = "示例用户")
+            author = HomeUser(id = 10000, username = "demo_user", name = stringResource(R.string.preview_example_user))
         ),
         HomeTopic(
             id = -2,
-            title = "一条较短的帖子标题",
+            title = stringResource(R.string.preview_short_title),
             lastPostedAt = java.time.Instant.ofEpochMilli(now - 3 * 60 * 60_000).toString(),
             bookmarked = true,
             hasAcceptedAnswer = true,

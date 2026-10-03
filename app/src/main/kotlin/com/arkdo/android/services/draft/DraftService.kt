@@ -1,5 +1,8 @@
 package com.arkdo.android.services.draft
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.Draft
 import com.arkdo.android.data.models.DraftAction
@@ -70,7 +73,7 @@ class DraftService(private val bridge: JsonNetworkClient) {
         val response = bridge.getJson("/drafts.json?offset=$offset&limit=$DRAFTS_PAGE_LIMIT")
         if (!response.success) return NetworkResults.forwardFailure(response)
         val body = response.data
-            ?: return NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, "站点草稿响应为空。")
+            ?: return NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_drafts_empty))
         return try {
             val source = json.decodeFromString<DraftListPayload>(body).drafts
             NetworkResult(
@@ -80,7 +83,7 @@ class DraftService(private val bridge: JsonNetworkClient) {
                 data = DraftPage(drafts = source, hasMore = source.size >= DRAFTS_PAGE_LIMIT)
             )
         } catch (_: Exception) {
-            NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, "站点草稿响应不是有效 JSON。")
+            NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_drafts_json))
         }
     }
 
@@ -147,16 +150,16 @@ class DraftService(private val bridge: JsonNetworkClient) {
         )
         if (!response.success) return NetworkResults.forwardFailure(response)
         val raw = response.data
-            ?: return NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, "站点删除草稿响应为空。")
+            ?: return NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_draft_delete_empty))
         return try {
             val payload = json.decodeFromString<SaveDraftResponse>(raw)
             if (payload.success != "OK") {
-                NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, "站点未确认草稿已删除。")
+                NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_draft_delete_unconfirmed))
             } else {
                 NetworkResult(true, response.statusCode, response.challengeState, true)
             }
         } catch (_: Exception) {
-            NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, "站点删除草稿响应不是有效 JSON。")
+            NetworkResults.unexpectedResponse(response.statusCode, response.challengeState, AppContextHolder.getString(R.string.err_draft_delete_json))
         }
     }
 

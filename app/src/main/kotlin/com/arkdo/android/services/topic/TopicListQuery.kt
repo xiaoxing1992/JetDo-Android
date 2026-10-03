@@ -1,5 +1,8 @@
 package com.arkdo.android.services.topic
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.FeedKey
 import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.data.models.TopicTag
@@ -119,7 +122,7 @@ fun describeTopicListQuery(query: TopicListQuery): String {
     val parts = mutableListOf(filterLabel(query.filter))
     when {
         query.category != null -> parts.add(query.category.name)
-        query.tag == null -> parts.add("全站")
+        query.tag == null -> parts.add(AppContextHolder.getString(R.string.drawer_site_wide))
     }
     query.tag?.let { parts.add(it.name) }
     return parts.joinToString(" · ")

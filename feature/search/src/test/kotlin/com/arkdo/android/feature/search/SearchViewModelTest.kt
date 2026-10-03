@@ -31,6 +31,23 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModelTest {
 
+    private val HOST_NOT_READY = "正在准备请求环境，请稍后重试"
+    private val LOGIN_REQUIRED = "登录后才能搜索"
+    private val CHALLENGE = "搜索遇到访问验证，请稍后重试"
+
+    @Before
+    fun installStrings() {
+        com.arkdo.android.core.data.AppContextHolder.resolver = { resId, _ ->
+            when (resId) {
+                R.string.composer_env_not_ready -> HOST_NOT_READY
+                R.string.search_login_required -> LOGIN_REQUIRED
+                R.string.search_challenge -> CHALLENGE
+                else -> "#$resId"
+            }
+        }
+    }
+
+
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -266,7 +283,7 @@ class SearchViewModelTest {
 
         // 未就绪:不发请求,提示准备中。
         assertTrue(repo.queries.isEmpty())
-        assertEquals(HOST_NOT_READY_MESSAGE, vm.uiState.value.error)
+        assertEquals(HOST_NOT_READY, vm.uiState.value.error)
 
         // 就绪后自动补发被拦下的搜索。
         vm.setHostReady(true)
@@ -457,7 +474,7 @@ class SearchViewModelTest {
 
         assertTrue(loginRequested)
         assertTrue(repo.queries.isEmpty())
-        assertEquals(LOGIN_REQUIRED_MESSAGE, vm.uiState.value.error)
+        assertEquals(LOGIN_REQUIRED, vm.uiState.value.error)
         assertFalse(vm.uiState.value.isSearching)
     }
 

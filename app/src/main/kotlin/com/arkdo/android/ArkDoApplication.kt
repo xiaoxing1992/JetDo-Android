@@ -43,6 +43,9 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
 
+        // 服务层 object 单例的 Context 入口（本地化文案等），必须最先就位。
+        com.arkdo.android.core.data.AppContextHolder.init(this)
+
         // 日志系统优先初始化：崩溃处理器要赶在任何业务代码之前装好，
         // 否则最早的异常抓不到。RecordingTree 把 Timber 输出抄进内存环形缓冲，
         // 崩溃瞬间落盘，下次启动在「设置 → 诊断日志」里回读、一键复制。

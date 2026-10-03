@@ -12,6 +12,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.arkdo.android.common.TestStrings
+import org.junit.Before
 
 /**
  * `GET /posts/by_number/{topicId}/{postNumber}` —— 引用卡「展开查看被引用楼层全文」的取数口。
@@ -21,6 +23,10 @@ import org.junit.Test
  * 表现是「引用卡的展开箭头点了没反应」—— 没有崩溃、没有日志，只能靠单测钉住判据。
  */
 class QuotedPostFetchTest {
+
+    @Before
+    fun installStrings() = TestStrings.install()
+
 
     @Test
     fun `正常响应取 cooked 且端点拼接正确`() = runBlocking {

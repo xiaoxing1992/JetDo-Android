@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.composer
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -142,7 +144,7 @@ internal fun ReplyComposerOverlay(
     fun warnIfOverMaxChars() {
         val over = overMaxChars()
         if (over && !wasOverMaxChars) {
-            Toast.makeText(context, "最多 $maxChars 个字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.composer_max_chars, maxChars), Toast.LENGTH_SHORT).show()
         }
         wasOverMaxChars = over
     }
@@ -212,11 +214,11 @@ internal fun ReplyComposerOverlay(
         val trimmed = bodyField.text.trim()
         val len = trimmedLength()
         if (len < minChars) {
-            Toast.makeText(context, "至少还需 ${minChars - len} 个字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.composer_min_chars_left, minChars - len), Toast.LENGTH_SHORT).show()
             return
         }
         if (overMaxChars()) {
-            Toast.makeText(context, "超出 ${len - maxChars} 个字，最多 $maxChars 字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.composer_over_chars, len - maxChars, maxChars), Toast.LENGTH_SHORT).show()
             return
         }
         localSubmitting = true
@@ -262,11 +264,11 @@ internal fun ReplyComposerOverlay(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SegmentTab(label = "编辑", selected = editTab) {
+                SegmentTab(label = stringResource(R.string.common_edit), selected = editTab) {
                     editTab = true
                     previewJob?.cancel()
                 }
-                SegmentTab(label = "预览", selected = !editTab) {
+                SegmentTab(label = stringResource(R.string.composer_preview), selected = !editTab) {
                     editTab = false
                     previewHtml = null
                     isPreviewLoading = true
@@ -382,7 +384,7 @@ internal fun ReplyComposerOverlay(
                 // 压缩阶段才给取消（一段 1080p 可能压几十秒）；上传阶段请求已发出，取消收不回来。
                 if (uploadCancelable) {
                     Text(
-                        text = "取消",
+                        text = stringResource(R.string.common_cancel),
                         fontSize = 12.5.sp,
                         color = colors.textSecondary,
                         modifier = Modifier

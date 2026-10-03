@@ -1,5 +1,8 @@
 package com.arkdo.android.services.credit
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.LdcUserInfo
 import com.arkdo.android.services.network.ArkWebJsonExecutor
@@ -23,9 +26,9 @@ internal suspend fun fetchCredit(executor: ArkWebJsonExecutor, path: String): Cr
     val script = WebFetchScriptFactory.createHeaderedFetchScript(path, CreditHeaders, AppConstants.CREDIT_HOME_URL)
         .replace("const baseUrl = 'https://linux.do';", "const baseUrl = '${AppConstants.CREDIT_BASE_URL}';")
     val raw = runCatching { executor.run(script) }.getOrNull()
-        ?: return CreditFetch(0, null, "LDC 请求失败。")
+        ?: return CreditFetch(0, null, AppContextHolder.getString(R.string.err_ldc_request))
     val envelope = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull()
-        ?: return CreditFetch(0, null, "LDC 请求失败。")
+        ?: return CreditFetch(0, null, AppContextHolder.getString(R.string.err_ldc_request))
     val status = envelope["statusCode"]?.jsonPrimitive?.intOrNull ?: 0
     val body = envelope["body"]?.jsonPrimitive?.contentOrNull
     val error = envelope["errorMessage"]?.jsonPrimitive?.contentOrNull.orEmpty()

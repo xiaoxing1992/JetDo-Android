@@ -3,6 +3,8 @@ package com.arkdo.android.services.upload
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.arkdo.android.common.TestStrings
+import org.junit.Before
 
 /**
  * 转码决策的纯函数：与鸿蒙 VideoTranscoder 逐条对齐。
@@ -12,6 +14,10 @@ import org.junit.Test
  * 白压一遍甚至压出横向拉伸画面（旋转视频把编码方向当播放方向）的地方。
  */
 class VideoTranscoderTest {
+
+    @Before
+    fun installStrings() = TestStrings.install()
+
 
     private val mib = 1024L * 1024L
 

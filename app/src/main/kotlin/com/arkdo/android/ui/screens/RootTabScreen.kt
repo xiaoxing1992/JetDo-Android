@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -165,13 +168,15 @@ fun RootTabScreen(
         // 新版本提示优先:两个弹层不能同时上,而「有新版可升级」比「本版更新了啥」更该先看到。
         // 本版公告的已弹标记这次不写:下次冷启动补弹,不会被升级提示吞掉。
         val newer = scan.newer
+        val newVersionTitle = AppContextHolder.getString(R.string.announce_new_version)
+        val whatsNewTitle = AppContextHolder.getString(R.string.announce_whats_new)
         if (newer != null) {
-            announceUi = AnnounceUi(title = "发现新版本", cookedHtml = newer.cookedHtml, jumpPost = newer.postNumber)
+            announceUi = AnnounceUi(title = newVersionTitle, cookedHtml = newer.cookedHtml, jumpPost = newer.postNumber)
             return@LaunchedEffect
         }
         if (!currentPending) return@LaunchedEffect
         val current = scan.current ?: return@LaunchedEffect
-        announceUi = AnnounceUi(title = "本次更新", cookedHtml = current.cookedHtml, jumpPost = 0)
+        announceUi = AnnounceUi(title = whatsNewTitle, cookedHtml = current.cookedHtml, jumpPost = 0)
         VersionAnnouncePrefs.markShown(versionCode)
     }
 
@@ -205,7 +210,7 @@ fun RootTabScreen(
                 }
                 if (announce.jumpPost > 0) {
                     Text(
-                        text = "查看完整更新内容",
+                        text = stringResource(R.string.announce_view_full),
                         fontSize = 15.sp,
                         color = Color.White,
                         textAlign = TextAlign.Center,
@@ -512,19 +517,19 @@ internal enum class RootTabDestination(
 ) {
     HOME(
         route = Routes.HOME,
-        label = "首页",
+        label = AppContextHolder.getString(R.string.home_title),
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home
     ),
     NOTIFICATION(
         route = Routes.NOTIFICATION,
-        label = "通知",
+        label = AppContextHolder.getString(R.string.home_notifications),
         selectedIcon = Icons.Filled.Notifications,
         unselectedIcon = Icons.Outlined.Notifications
     ),
     PROFILE(
         route = Routes.PROFILE,
-        label = "我的",
+        label = AppContextHolder.getString(R.string.home_profile),
         selectedIcon = Icons.Filled.Person,
         unselectedIcon = Icons.Outlined.Person
     )

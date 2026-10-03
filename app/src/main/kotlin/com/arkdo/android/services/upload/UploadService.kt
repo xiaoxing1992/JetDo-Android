@@ -1,5 +1,8 @@
 package com.arkdo.android.services.upload
 
+import android.content.Context
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.services.session.LoginGate
 import com.arkdo.android.services.session.TRUST_LEVEL_UNKNOWN
 import com.arkdo.android.services.site.IMAGE_EXTENSIONS
@@ -110,7 +113,7 @@ object UploadService {
         val box = videoBox(width, height)
         return "<video width=\"${box.width}\" height=\"${box.height}\" controls>\n" +
             "  <source src=\"$src\" type=\"$mediaMimeType\">\n" +
-            "  您的浏览器不支持 HTML5 video 标签。\n" +
+            AppContextHolder.getString(R.string.video_tag_fallback) +
             "</video>"
     }
 
@@ -181,9 +184,9 @@ object UploadService {
         val effective = effectiveLimitBytes(siteLimitKb)
         if (bytes <= effective) return ""
         return if (siteLimitBytes <= CLIENT_MAX_UPLOAD_BYTES) {
-            "$kindLabel ${humanSize(bytes)} 超过本站上限 ${humanSize(siteLimitBytes)}"
+            AppContextHolder.getString(R.string.composer_upload_too_large_site, kindLabel, humanSize(bytes), humanSize(siteLimitBytes))
         } else {
-            "$kindLabel ${humanSize(bytes)} 超过 App 单次上传上限 ${humanSize(effective)}"
+            AppContextHolder.getString(R.string.composer_upload_too_large_app, kindLabel, humanSize(bytes), humanSize(effective))
         }
     }
 

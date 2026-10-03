@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,6 +52,6 @@ fun IncomingPostsBanner(
     ) {
         // 用字符而非图标：鸿蒙侧就是 '↓'，且 FaIcon 对不在图标集里的名字会静默不画。
         Text("↓", fontSize = 13.sp, color = colors.brand, modifier = Modifier.padding(end = 6.dp))
-        Text("$count 条新回复", fontSize = 13.sp, color = colors.brand)
+        Text(stringResource(R.string.home_new_replies, count), fontSize = 13.sp, color = colors.brand)
     }
 }

@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.user
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.arkdo.android.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arkdo.android.data.models.TopicCategory
@@ -32,7 +35,8 @@ const val SEGMENT_RECENT = 2
  */
 @HiltViewModel
 class UserProfileViewModel @Inject constructor(
-    private val userProfileService: UserProfileService
+    private val userProfileService: UserProfileService,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     data class UiState(
@@ -149,7 +153,7 @@ class UserProfileViewModel @Inject constructor(
                 }
             } else {
                 _uiState.update {
-                    it.copy(loading = false, error = result.error?.message ?: "加载失败")
+                    it.copy(loading = false, error = result.error?.message ?: appContext.getString(R.string.common_load_failed))
                 }
             }
         }
@@ -169,7 +173,7 @@ class UserProfileViewModel @Inject constructor(
                     s.mostRepliedToUsers.size, s.mostLikedUsers.size, s.mostLikedByUsers.size)
                 _uiState.update { it.copy(summary = result.data) }
             } else {
-                _uiState.update { it.copy(error = result.error?.message ?: "摘要加载失败") }
+                _uiState.update { it.copy(error = result.error?.message ?: appContext.getString(R.string.detail_summary_failed)) }
             }
         }
     }

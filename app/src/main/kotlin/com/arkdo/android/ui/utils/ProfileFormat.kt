@@ -1,5 +1,8 @@
 package com.arkdo.android.ui.utils
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.core.data.AppContextHolder
+import com.arkdo.android.R
 import com.arkdo.android.data.models.UserProfileDetail
 
 // ==========================================================================
@@ -8,7 +11,7 @@ import com.arkdo.android.data.models.UserProfileDetail
 // ==========================================================================
 
 /** Discourse 信任等级中文名（0-4）。user.title 缺省时的兜底展示。 */
-val TRUST_LEVEL_NAMES = listOf("新用户", "基本用户", "成员", "活跃用户", "领导者")
+val TRUST_LEVEL_NAMES = listOf(AppContextHolder.getString(R.string.trust_newuser), AppContextHolder.getString(R.string.trust_basic), AppContextHolder.getString(R.string.trust_member), AppContextHolder.getString(R.string.search_active_users), AppContextHolder.getString(R.string.trust_leader))
 
 /** 计数缩写：1000 以下原样，1000-9999 保留一位小数（1.2k），万以上取整（12k）。 */
 fun formatCount(value: Int): String {
@@ -57,7 +60,7 @@ fun daysSince(iso: String?): Int {
 /** 注册日期，形如「2024年1月18日」。 */
 fun formatJoinDate(iso: String?): String {
     val parts = isoDateParts(iso) ?: return ""
-    return "${parts[0]}年${parts[1]}月${parts[2]}日"
+    return AppContextHolder.getString(R.string.relative_full_date_parts, parts[0], parts[1], parts[2])
 }
 
 private fun isoDateParts(iso: String?): List<Int>? {

@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
@@ -75,10 +77,10 @@ fun ExperimentalSettingsScreen(
                 .padding(horizontal = 4.dp)
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = arkdoColors.textPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back), tint = arkdoColors.textPrimary)
             }
             Text(
-                text = "实验性功能",
+                text = stringResource(R.string.settings_experimental),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = arkdoColors.textPrimary
@@ -101,9 +103,9 @@ fun ExperimentalSettingsScreen(
                     .padding(horizontal = CardPadding, vertical = 12.dp)
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                    Text("首页新话题提醒", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                    Text(stringResource(R.string.home_new_topic_alert), fontSize = 15.sp, color = arkdoColors.textPrimary)
                     Text(
-                        "首页顶部提示有新话题，点一下插进列表",
+                        stringResource(R.string.home_realtime_topics_desc),
                         fontSize = 12.sp,
                         color = arkdoColors.textFaint,
                         modifier = Modifier.padding(top = 2.dp)
@@ -128,9 +130,9 @@ fun ExperimentalSettingsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("帖子内新回复提醒", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(stringResource(R.string.home_in_topic_reply_alert), fontSize = 15.sp, color = arkdoColors.textPrimary)
                         Text(
-                            "看帖时自动接收他人的新回复",
+                            stringResource(R.string.home_realtime_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)
@@ -156,9 +158,9 @@ fun ExperimentalSettingsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("抽奖帖提醒", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(stringResource(R.string.lottery_alert), fontSize = 15.sp, color = arkdoColors.textPrimary)
                         Text(
-                            "抽奖帖回复前提示官方规则，避免被永久禁言",
+                            stringResource(R.string.lottery_alert_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)
@@ -185,9 +187,9 @@ fun ExperimentalSettingsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("双页阅读", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(stringResource(R.string.detail_two_page_reading), fontSize = 15.sp, color = arkdoColors.textPrimary)
                         Text(
-                            "折叠屏半折时，帖子详情排成左右两页",
+                            stringResource(R.string.detail_two_page_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)
@@ -214,9 +216,9 @@ fun ExperimentalSettingsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("点分类/标签快速筛选", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(stringResource(R.string.drawer_filter_hint), fontSize = 15.sp, color = arkdoColors.textPrimary)
                         Text(
-                            "首页帖子行上的分类与标签可点击筛选",
+                            stringResource(R.string.home_badges_tappable_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)
@@ -243,9 +245,9 @@ fun ExperimentalSettingsScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("动态头像", fontSize = 15.sp, color = arkdoColors.textPrimary)
+                        Text(stringResource(R.string.user_animated_avatar), fontSize = 15.sp, color = arkdoColors.textPrimary)
                         Text(
-                            "头像与角标播放动图；关闭后只显示首帧",
+                            stringResource(R.string.user_animated_avatar_desc),
                             fontSize = 12.sp,
                             color = arkdoColors.textFaint,
                             modifier = Modifier.padding(top = 2.dp)

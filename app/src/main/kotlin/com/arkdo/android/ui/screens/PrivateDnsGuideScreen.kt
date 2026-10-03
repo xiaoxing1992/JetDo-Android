@@ -1,5 +1,7 @@
 package com.arkdo.android.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.arkdo.android.R
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
@@ -50,10 +52,10 @@ fun PrivateDnsGuideScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("网络配置引导") },
+                title = { Text(stringResource(R.string.pdns_guide_title)) },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "关闭")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
                     }
                 }
             )
@@ -71,7 +73,7 @@ fun PrivateDnsGuideScreen(
             when {
                 checking -> {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text("正在检测网络连接...")
+                    Text(stringResource(R.string.pdns_checking))
                 }
                 canAccess == true -> {
                     Card(
@@ -89,7 +91,7 @@ fun PrivateDnsGuideScreen(
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
-                            Text("网络连接正常，可以访问 linux.do")
+                            Text(stringResource(R.string.pdns_ok))
                         }
                     }
                 }
@@ -111,11 +113,11 @@ fun PrivateDnsGuideScreen(
                             )
                             Column {
                                 Text(
-                                    "无法访问 linux.do",
+                                    stringResource(R.string.pdns_fail),
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "可能原因：DNS 污染或网络问题",
+                                    stringResource(R.string.pdns_fail_reason),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -128,14 +130,14 @@ fun PrivateDnsGuideScreen(
 
             // 说明文字
             Text(
-                "为什么需要配置 Private DNS？",
+                stringResource(R.string.pdns_why),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "linux.do 在中国大陆受到 DNS 污染，导致无法正常访问。" +
-                        "通过配置 Private DNS (DNS over HTTPS)，" +
-                        "可以绕过污染，正常访问网站。",
+                stringResource(R.string.pdns_polluted) +
+                        stringResource(R.string.pdns_intro) +
+                        stringResource(R.string.pdns_intro2),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -144,36 +146,36 @@ fun PrivateDnsGuideScreen(
 
             // 配置步骤
             Text(
-                "配置步骤",
+                stringResource(R.string.pdns_steps),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
 
             ConfigStep(
                 step = "1",
-                title = "点击下方按钮打开系统设置",
-                description = "将跳转到 Android 系统设置页面"
+                title = stringResource(R.string.notif_tap_settings),
+                description = stringResource(R.string.pdns_jumps_to_system)
             )
 
             ConfigStep(
                 step = "2",
-                title = "找到「Private DNS」选项",
-                description = "通常在「网络和互联网」→「Private DNS」"
+                title = stringResource(R.string.pdns_step_find),
+                description = stringResource(R.string.pdns_where)
             )
 
             ConfigStep(
                 step = "3",
-                title = "选择「Private DNS 提供商主机名」",
-                description = "推荐输入以下任一服务器：\n" +
-                        "• dns.alidns.com（阿里公共 DNS）\n" +
-                        "• dot.pub（腾讯 DNSPod）\n" +
+                title = stringResource(R.string.pdns_step_select),
+                description = stringResource(R.string.pdns_servers2) +
+                        stringResource(R.string.pdns_server_ali2) +
+                        stringResource(R.string.pdns_server_tencent2) +
                         "• dns.google（Google DNS）"
             )
 
             ConfigStep(
                 step = "4",
-                title = "保存设置并返回应用",
-                description = "点击下方「检测连接」按钮验证"
+                title = stringResource(R.string.challenge_save_and_return),
+                description = stringResource(R.string.pdns_verify_hint)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -194,7 +196,7 @@ fun PrivateDnsGuideScreen(
             ) {
                 Icon(Icons.Default.Settings, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("打开系统设置")
+                Text(stringResource(R.string.common_open_system_settings))
             }
 
             OutlinedButton(
@@ -202,14 +204,14 @@ fun PrivateDnsGuideScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !checking
             ) {
-                Text("检测连接")
+                Text(stringResource(R.string.pdns_check))
             }
 
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("稍后配置")
+                Text(stringResource(R.string.challenge_later))
             }
         }
     }
