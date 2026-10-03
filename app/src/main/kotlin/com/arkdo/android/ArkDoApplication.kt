@@ -64,6 +64,21 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         // 谁后装谁在外层。文件日志先刷盘，再交给内存缓冲那条去写 debug_log.txt。
         FileLoggerDaemon.init(this)
 
+        // 崩溃上报（腾讯 Bugly，P2-26）：必须装在日志崩溃链**之后**——UncaughtExceptionHandler
+        // 是「谁后装谁在外层」的链式结构，Bugly 在最外层先拿到崩溃、上报后再交给
+        // DebugLogStore/FileLoggerDaemon 落盘，两端现场都保得住。
+        // AppId 目前是官方演示值（BuildConfig.BUGLY_APP_ID），正式启用前替换；
+        // isDevEnable 跟 BuildConfig.DEBUG：debug 包崩溃时弹提交确认窗，release 包静默上报。
+        runCatching {
+            com.tencent.bugly.crashreport.CrashReport.initCrashReport(
+                this,
+                BuildConfig.BUGLY_APP_ID,
+                BuildConfig.DEBUG,
+            )
+        }
+            .onSuccess { Timber.i("[ArkDO][Startup] Bugly initialized appId=%s", BuildConfig.BUGLY_APP_ID) }
+            .onFailure { Timber.e(it, "[ArkDO][Startup] Bugly init failed") }
+
         Timber.i("[ArkDO][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
 
         // 初始化登录态持久化（SharedPreferences）

@@ -35,6 +35,9 @@ android {
         buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 腾讯 Bugly 崩溃上报 AppId（P2-26）。当前是官方文档演示 AppId，仅供 SDK 链路联调；
+        // ⚠️ 正式启用前到 bugly.qq.com 创建产品后替换，并在隐私政策中如实声明。
+        buildConfigField("String", "BUGLY_APP_ID", "\"900001573\"")
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -166,6 +169,9 @@ dependencies {
 
     // Timber
     implementation(libs.timber)
+
+    // Bugly 崩溃上报
+    implementation(libs.bugly.crashreport)
 
     // Testing
     testImplementation(libs.junit)
