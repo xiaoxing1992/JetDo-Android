@@ -497,7 +497,6 @@ object CookedHtmlParser {
         val text = htmlToPlainText(el.html())
         return RichBlock(
             type = RichBlockType.UNSUPPORTED,
-            unsupportedKind = kind,
             text = text.ifEmpty { "${kind}待实现" }
         )
     }
@@ -725,11 +724,10 @@ object CookedHtmlParser {
         return result
     }
 
-    /** 源优先取内部首个 <source src>（type 作 MIME），缺失回退标签自身 src。无有效 src 返回 null。 */
+    /** 源优先取内部首个 <source src>，缺失回退标签自身 src。无有效 src 返回 null。 */
     private fun mediaBlockFrom(el: Element): RichBlock? {
         val source = el.selectFirst("source")
         var src = source?.attr("src") ?: ""
-        val mediaType = source?.attr("type") ?: ""
         if (src.isEmpty()) {
             src = el.attr("src")
         }
@@ -741,7 +739,6 @@ object CookedHtmlParser {
         return RichBlock(
             type = if (isVideo) RichBlockType.VIDEO else RichBlockType.AUDIO,
             src = resolvedSrc,
-            mediaType = mediaType.ifEmpty { null },
             width = if (isVideo) parsePositiveNumber(el.attr("width")).takeIf { it > 0 }?.toInt() else null,
             height = if (isVideo) parsePositiveNumber(el.attr("height")).takeIf { it > 0 }?.toInt() else null
         )
@@ -778,7 +775,7 @@ object CookedHtmlParser {
         RichBlockType.PARAGRAPH, RichBlockType.HEADING -> !block.inlines.isNullOrEmpty()
         RichBlockType.QUOTE, RichBlockType.SPOILER -> !block.blocks.isNullOrEmpty()
         RichBlockType.CODE, RichBlockType.MATH -> !block.text.isNullOrEmpty()
-        RichBlockType.UNSUPPORTED -> !block.text.isNullOrEmpty() || !block.unsupportedKind.isNullOrEmpty()
+        RichBlockType.UNSUPPORTED -> !block.text.isNullOrEmpty()
         RichBlockType.IMAGE, RichBlockType.AUDIO, RichBlockType.VIDEO -> !block.src.isNullOrEmpty()
         RichBlockType.LIST -> !block.items.isNullOrEmpty()
         RichBlockType.TABLE -> !block.tableRows.isNullOrEmpty()

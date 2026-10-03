@@ -97,15 +97,12 @@ data class RichBlock(
     val tableRows: List<RichTableRow>? = null,
     val text: String? = null,
     val title: String? = null,
-    val unsupportedKind: String? = null,
     val language: String? = null,
     val src: String? = null,
     val alt: String? = null,
     val width: Int? = null,
     val height: Int? = null,
     val href: String? = null,
-    /** AUDIO/VIDEO 块：媒体 MIME（如 audio/mp4），来自 <source type>，供播放器与降级判断参考。 */
-    val mediaType: String? = null,
     val ordered: Boolean = false,
     val level: Int? = null,
     /** POLL 块：data-poll-name，用于在正文正确位置占位、并按名字关联 TopicPost.polls 的动态数据。 */

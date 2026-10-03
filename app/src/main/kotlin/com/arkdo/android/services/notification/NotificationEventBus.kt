@@ -4,7 +4,7 @@ import timber.log.Timber
 
 // ==========================================================================
 // 与 HarmonyOS 版 services/notification/NotificationEventBus.ets 逐字段对齐。
-// 未读数事件总线：NotificationService(轮询)与 RootTabPage(会话事件)都发到这里，
+// 未读数事件总线：通知数据源（core/data）与 RootTabPage(会话事件)都发到这里，
 // HomePage 订阅后驱动铃铛。保留 last 值，新订阅者可立即拿到当前数。
 // ==========================================================================
 

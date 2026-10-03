@@ -751,8 +751,6 @@ object Routes {
     const val READ_TOPICS = "read_topics"
     const val DRAFTS = "drafts"
     const val SETTINGS = "settings"
-    const val LOGIN = "login"
-    const val CF_CHALLENGE = "cf_challenge"
     const val DEBUG_LOG = "debug_log"
 
     // Settings 子页面

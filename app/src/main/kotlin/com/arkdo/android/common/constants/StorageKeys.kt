@@ -33,23 +33,12 @@ object StorageKeys {
     const val COMPOSER_OVERLAY_VISIBLE_KEY = "composerOverlayVisible"
     const val COMPOSER_OVERLAY_BACK_TICK_KEY = "composerOverlayBackTick"
 
-    // 草稿页的续写浮层 + 刷新信号
-    const val DRAFTS_COMPOSER_VISIBLE_KEY = "draftsComposerVisible"
-    const val DRAFTS_COMPOSER_BACK_TICK_KEY = "draftsComposerBackTick"
-    const val DRAFTS_REFRESH_TICK_KEY = "draftsRefreshTick"
     // 草稿角标数(鸿蒙的 profileDraftCount)在 Android 侧改为内存真源 DraftCountStore，
     // 不再走字符串 key，故此处不再定义。
-
-    // 站点列表变更信号
-    const val SITES_TICK = "sites_tick"
-
-    // DoH 设置变更信号
-    const val SETTINGS_DOH_TICK = "settings_doh_tick"
 
     // 会话与主题
     const val LOGGED_IN_STORAGE_KEY = "arkdoIsLoggedIn"
     const val APP_IS_DARK_STORAGE_KEY = "arkdoIsDark"
-    const val APP_IS_WIDE_STORAGE_KEY = "arkdoIsWide"
     const val MATH_HOST_ACTIVE_KEY = "mathHostActive"
 
     // 各类开关 prefs key（DataStore，值见 AppPreferences）
