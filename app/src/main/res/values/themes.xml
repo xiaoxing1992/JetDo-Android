@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme -->
+    <!-- Base application theme（浅色档；深色档资源级覆盖见 values-night/themes.xml） -->
     <style name="Theme.ArkDO" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Enable edge-to-edge -->
         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
@@ -8,5 +8,7 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <!-- 冷启动窗口底色：对齐 Compose 首帧的 pageBg，防深色模式白闪（见 colors.xml） -->
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 </resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 冷启动 windowBackground（Compose 首帧绘制前的窗口底色）。
+         取值对齐 ui/theme/ArkdoColors.kt 的 pageBg：亮 #FFFFFF / 暗 #17191D，
+         深色变体在 values-night 同名覆盖。没有它，深色模式下冷启动先闪一帧白。 -->
+    <color name="window_background">#FFFFFFFF</color>
+</resources>
