@@ -1,0 +1,45 @@
+# CI：push / PR 时编译 debug 包并跑全部 JVM 单测。
+#
+# 说明：
+# - 依赖仓库走阿里云镜像优先（settings.gradle.kts），GitHub runner 可直连，无需代理。
+# - assembleDebug 不需要签名配置，也不需要 local.properties。
+# - testDebugUnitTest 任务名匹配会在所有含该任务的模块（app / core×4 / feature×3）上执行。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Assemble & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Compile & Test
+        run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/build/reports/tests/**'
+          if-no-files-found: ignore
