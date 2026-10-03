@@ -609,4 +609,12 @@
     <string name="weight_regular">常规</string>
     <string name="weight_semibold">加粗</string>
     <string name="poll_named">投票 · %1$s</string>
+    <string name="privacy_consent_title">欢迎使用 ArkDO</string>
+    <string name="privacy_consent_body">在使用本应用前，请阅读并同意《隐私政策》与《用户协议》（完整内容见应用发布页）：\n\n· 本应用无广告、无埋点统计；你的账号数据仅在你的设备与 LINUX DO 社区之间流转。\n· 网络权限用于访问社区；通知权限仅在你授权后用于消息提醒。\n· 应用发生崩溃时，会通过腾讯 Bugly 上报崩溃堆栈与设备运行环境信息（不含账号与浏览记录），仅用于修复缺陷——经你同意后该功能才会启用。\n· 卸载应用即可删除全部本地数据。</string>
+    <string name="privacy_consent_agree">同意并继续</string>
+    <string name="privacy_consent_decline">不同意</string>
+    <string name="privacy_consent_exit_title">退出应用？</string>
+    <string name="privacy_consent_exit_body">未获得同意无法为你提供崩溃上报合规保障，应用将退出。你可以稍后重新打开再作决定。</string>
+    <string name="privacy_consent_exit_confirm">退出</string>
+    <string name="privacy_consent_exit_cancel">留下</string>
 </resources>
