@@ -1500,34 +1500,6 @@ class TopicDetailViewModel @Inject constructor(
     }
 
     /**
-     * 发 boost：成功把新气泡追加到该楼 boosts、并把 canBoost 置 false（一人一楼的本地约束，
-     * 对齐鸿蒙 submitBoost 的 ObjectLink 数组替换）。
-     */
-    fun createBoost(post: TopicPost, raw: String, done: (Boolean) -> Unit) {
-        val topicId = currentTopicId ?: return done(false)
-        viewModelScope.launch {
-            val result = topicService.createBoost(post.id, topicId, raw)
-            if (result.success && result.data != null) {
-                dataSource.findById(post.id)?.let { target ->
-                    val next = (target.boosts ?: emptyList()) + result.data!!
-                    dataSource.replacePost(target.copy(boosts = next, canBoost = false))
-                    _uiState.update {
-                        it.copy(
-                            posts = dataSource.snapshotPosts,
-                            boostDeleteTargetId = 0L,
-                            actionMessage = "Boost 已发送"
-                        )
-                    }
-                }
-                done(true)
-            } else {
-                _uiState.update { it.copy(actionMessage = "Boost 发送失败，请稍后重试") }
-                done(false)
-            }
-        }
-    }
-
-    /**
      * 删 boost：成功把该气泡从所在楼摘掉、canBoost 复原（对齐鸿蒙 deleteBoost）。
      */
     fun deleteBoost(post: TopicPost, boost: PostBoost, done: (Boolean) -> Unit) {
@@ -1536,17 +1508,21 @@ class TopicDetailViewModel @Inject constructor(
             _uiState.update { it.copy(boostDeleteLoadingId = boost.id) }
             val result = topicService.deleteBoost(boost.id, topicId)
             if (result.success) {
+                // 气泡摘除只在该楼仍在已加载窗口时做；楼不在窗口（findById null）时服务端已成功，
+                // 等下次该楼进窗口会带服务端权威态回来。但 loading/确认态的清理与成功提示必须
+                // 无条件执行——否则 boostDeleteLoadingId 卡在旧值（对齐鸿蒙：if (target) 只包
+                // 数组替换，toast 在外面）。
                 dataSource.findById(post.id)?.let { target ->
                     val next = (target.boosts ?: emptyList()).filterNot { it.id == boost.id }
                     dataSource.replacePost(target.copy(boosts = next, canBoost = true))
-                    _uiState.update {
-                        it.copy(
-                            posts = dataSource.snapshotPosts,
-                            boostDeleteTargetId = 0L,
-                            boostDeleteLoadingId = 0L,
-                            actionMessage = "Boost 已删除"
-                        )
-                    }
+                    _uiState.update { it.copy(posts = dataSource.snapshotPosts) }
+                }
+                _uiState.update {
+                    it.copy(
+                        boostDeleteTargetId = 0L,
+                        boostDeleteLoadingId = 0L,
+                        actionMessage = "Boost 已删除"
+                    )
                 }
                 done(true)
             } else {
