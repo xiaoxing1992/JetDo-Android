@@ -85,7 +85,7 @@
 - [ ] 隐私政策 / 用户协议补联系方式并发布为网页（GitHub Pages / 仓库渲染页均可）
 - [ ] 商店「隐私政策」链接指向网页版 privacy-policy.md
 - [ ] **到 bugly.qq.com 创建产品，替换 `app/build.gradle.kts` 里的演示 AppId（`BuildConfig.BUGLY_APP_ID`）**，并验证一次真实崩溃上报
-- [ ] 首启隐私同意弹窗：工信部合规要求崩溃收集须在用户同意《隐私政策》后进行（当前 Bugly 为启动即初始化，上架商店前需补同意流程或在发布渠道声明）
+- [x] 首启隐私同意弹窗：已实现（MainActivity 模态弹窗 + `PrivacyConsentStore` 落盘版本号；未同意前 Bugly 不初始化，政策实质变更递增 `POLICY_VERSION` 自动重弹）
 - [ ] 截图 6 张按上表拍摄
 - [ ] 图标 512×512 定稿
 - [ ] release 签名（GAP P2-20）后出正式包；release 混淆后如需还原堆栈，用 Bugly 符号表工具上传 mapping.txt

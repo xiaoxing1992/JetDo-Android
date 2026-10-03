@@ -145,7 +145,7 @@
 
 **第 5 步 · 发布准备**
 12. ~~签名配置 + androidTest 骨架（P2-20/21）~~ **P2-21 已完成**（2026-10-03）；P2-20 签名待密钥；CI 已建（P2-22 完成）
-13. ~~崩溃上报（P2-26）~~ **已完成（2026-10-03，腾讯 Bugly 4.1.9.3）**：crashreport 走 mavenCentral，`BuildConfig.BUGLY_APP_ID`（现为官方演示值 900001573，正式启用前到 bugly.qq.com 创建产品替换）；init 装在 DebugLogStore/FileLoggerDaemon 崩溃链之后（后装在外层，两端现场都保住）；混淆 keep 规则已加；模拟器实测 v4.1.9.3 初始化完成 + native SO 加载 + Java/Native/ANR 监视注册。隐私政策已同步修订（Bugly 采集范围如实声明）；合规注意：国内上架前需补首启隐私同意弹窗（store-listing checklist 已列）；~~隐私政策与商店素材（P2-27）~~ **已完成**（2026-10-03，docs/publish/ 三份，联系方式待补）；~~多语言 strings 抽取与翻译（P2-28）~~ **已完成**（679 条抽取 + values-en 全量翻译 + AppContextHolder 三路替换，e2e 双语验证）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
+13. ~~崩溃上报（P2-26）~~ **已完成（2026-10-03，腾讯 Bugly 4.1.9.3）**：crashreport 走 mavenCentral，`BuildConfig.BUGLY_APP_ID`（现为官方演示值 900001573，正式启用前到 bugly.qq.com 创建产品替换）；init 装在 DebugLogStore/FileLoggerDaemon 崩溃链之后（后装在外层，两端现场都保住）；混淆 keep 规则已加；模拟器实测 v4.1.9.3 初始化完成 + native SO 加载 + Java/Native/ANR 监视注册。**首启隐私同意弹窗已补（2026-10-04）**：`PrivacyConsentStore`（POLICY_VERSION 落盘）+ MainActivity 模态弹窗 + `initCrashReportIfAllowed()` 幂等闸门——未同意前 Bugly 不装，e2e 六步全闭环（弹窗→拒绝→二次确认退出→重启重现→同意初始化→重启不再弹）。隐私政策已同步修订（Bugly 采集范围如实声明）；~~隐私政策与商店素材（P2-27）~~ **已完成**（2026-10-03，docs/publish/ 三份，联系方式待补）；~~多语言 strings 抽取与翻译（P2-28）~~ **已完成**（679 条抽取 + values-en 全量翻译 + AppContextHolder 三路替换，e2e 双语验证）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
 
 ---
 

@@ -9,11 +9,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.arkdo.android.navigation.ArkDoNavHost
@@ -98,6 +104,12 @@ class MainActivity : ComponentActivity() {
                 var isWebViewReady by remember { mutableStateOf(false) }
                 var showPrivateDnsGuide by remember { mutableStateOf(false) }
                 var showChallengeSheet by remember { mutableStateOf(false) }
+                // 首启隐私同意（合规：先同意后采集）。读的是落盘版本号，
+                // 政策实质变更（POLICY_VERSION 递增）后老用户也会重见弹窗。
+                var privacyConsentNeeded by remember {
+                    mutableStateOf(com.arkdo.android.services.compliance.PrivacyConsentStore.needsConsent(this@MainActivity))
+                }
+                var showConsentExitConfirm by remember { mutableStateOf(false) }
 
                 // 初始化 Challenge 恢复协调器 + 订阅挑战信号 / 手动验证请求。
                 //
@@ -200,6 +212,55 @@ class MainActivity : ComponentActivity() {
                                     showChallengeSheet = false
                                     Timber.i("[ArkDO][MainActivity] Challenge resolved, closing sheet")
                                     challengeCoordinator?.notifySheetResolved()
+                                }
+                            )
+                        }
+
+                        // 首启隐私同意弹窗（置顶遮罩，盖过上面所有覆盖层）。
+                        // 模态：onDismissRequest 留空 = 点外部/Back 不关闭，必须二选一。
+                        // 同意前 Bugly 未初始化（无远程采集），这是闸门的全部意义。
+                        if (privacyConsentNeeded) {
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { /* 必须明确选择，不接受关闭 */ },
+                                title = { Text(stringResource(R.string.privacy_consent_title)) },
+                                text = {
+                                    Text(
+                                        stringResource(R.string.privacy_consent_body),
+                                        modifier = Modifier.verticalScroll(rememberScrollState())
+                                    )
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        com.arkdo.android.services.compliance.PrivacyConsentStore.agree(this@MainActivity)
+                                        (application as ArkDoApplication).initCrashReportIfAllowed()
+                                        Timber.i("[ArkDO][MainActivity] privacy consent given, crash report enabled")
+                                        privacyConsentNeeded = false
+                                    }) { Text(stringResource(R.string.privacy_consent_agree)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showConsentExitConfirm = true }) {
+                                        Text(stringResource(R.string.privacy_consent_decline))
+                                    }
+                                }
+                            )
+                        }
+
+                        // 拒绝同意的二次确认：不做无声强杀，把后果说清再退。
+                        if (showConsentExitConfirm) {
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { showConsentExitConfirm = false },
+                                title = { Text(stringResource(R.string.privacy_consent_exit_title)) },
+                                text = { Text(stringResource(R.string.privacy_consent_exit_body)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        Timber.i("[ArkDO][MainActivity] user declined privacy consent, exiting")
+                                        finishAffinity()
+                                    }) { Text(stringResource(R.string.privacy_consent_exit_confirm)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showConsentExitConfirm = false }) {
+                                        Text(stringResource(R.string.privacy_consent_exit_cancel))
+                                    }
                                 }
                             )
                         }

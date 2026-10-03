@@ -67,17 +67,9 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         // 崩溃上报（腾讯 Bugly，P2-26）：必须装在日志崩溃链**之后**——UncaughtExceptionHandler
         // 是「谁后装谁在外层」的链式结构，Bugly 在最外层先拿到崩溃、上报后再交给
         // DebugLogStore/FileLoggerDaemon 落盘，两端现场都保得住。
-        // AppId 目前是官方演示值（BuildConfig.BUGLY_APP_ID），正式启用前替换；
-        // isDevEnable 跟 BuildConfig.DEBUG：debug 包崩溃时弹提交确认窗，release 包静默上报。
-        runCatching {
-            com.tencent.bugly.crashreport.CrashReport.initCrashReport(
-                this,
-                BuildConfig.BUGLY_APP_ID,
-                BuildConfig.DEBUG,
-            )
-        }
-            .onSuccess { Timber.i("[ArkDO][Startup] Bugly initialized appId=%s", BuildConfig.BUGLY_APP_ID) }
-            .onFailure { Timber.e(it, "[ArkDO][Startup] Bugly init failed") }
+        // 合规闸门：工信部要求个人信息处理须在用户同意隐私政策后进行——未同意首启
+        // 弹窗前这里不装 SDK，MainActivity 拿到同意后回调同一入口（幂等）。
+        initCrashReportIfAllowed()
 
         Timber.i("[ArkDO][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
 
@@ -118,5 +110,34 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
 
     override fun newImageLoader(context: coil3.PlatformContext): ImageLoader {
         return imageLoaderProvider.get()
+    }
+
+    @Volatile
+    private var crashReportInitialized = false
+
+    /**
+     * 初始化 Bugly（幂等）。已同意隐私政策的用户在 onCreate 直接装 SDK；
+     * 未同意的新装用户等 MainActivity 首启弹窗拿到同意后再调这里。
+     * AppId 目前是官方演示值（BuildConfig.BUGLY_APP_ID），正式启用前替换；
+     * isDevEnable 跟 BuildConfig.DEBUG：debug 包崩溃时弹提交确认窗，release 包静默上报。
+     */
+    fun initCrashReportIfAllowed() {
+        if (crashReportInitialized) return
+        if (com.arkdo.android.services.compliance.PrivacyConsentStore.needsConsent(this)) {
+            Timber.i("[ArkDO][Startup] Bugly deferred: privacy consent not given yet")
+            return
+        }
+        runCatching {
+            com.tencent.bugly.crashreport.CrashReport.initCrashReport(
+                this,
+                BuildConfig.BUGLY_APP_ID,
+                BuildConfig.DEBUG,
+            )
+        }
+            .onSuccess {
+                crashReportInitialized = true
+                Timber.i("[ArkDO][Startup] Bugly initialized appId=%s", BuildConfig.BUGLY_APP_ID)
+            }
+            .onFailure { Timber.e(it, "[ArkDO][Startup] Bugly init failed") }
     }
 }
