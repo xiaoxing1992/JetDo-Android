@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式冷启动底色，对齐 ArkdoDarkColors.pageBg -->
+    <color name="window_background">#FF17191D</color>
+</resources>
