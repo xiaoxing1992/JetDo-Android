@@ -9,43 +9,38 @@
 
 ## 一、结论先行
 
-**还剩 10 项 + 4 组死代码 + 2 条微清理。**
+**还剩 8 项 + 1 条微清理。**
 
 ### 1.1 缺口分布
 
 | 分类 | 数量 | 判据 |
 |---|---|---|
-| P0 | 3 | 用户一眼能看出没做 |
+| P0 | 1 | 用户一眼能看出没做 |
 | P1 | 1 | 功能不完整，用起来别扭 |
 | 半截 | 1 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
 | P2 | 5 | 工程化与发布 |
-| **合计** | **10** | 上表逐项相加（3+1+1+0+5）|
-| 死代码 | 4 组 | 看着有实现，其实是死的，会误导判断 |
-| 微清理 | 2 条 | 低危，不阻塞发布 |
+| **合计** | **8** | 上表逐项相加（1+1+1+0+5）|
+| 死代码 | 0 | 4 组已全部清理（逐符号复核后删除）|
+| 微清理 | 1 条 | 仅剩 M2（Boost 本地刷新）|
 
-结构基线（逐文件数出）：服务子域 **25 vs 23**（真缺 `avatar`、`push` 两个子域；`site` 子域在但缺 6 文件）｜页面 **28 vs 30**（真缺 3 页、部分迁移 1 页）｜组件 **47 vs 46 + 约 10 个内联私有 composable**（组件级真缺失 0）。
+结构基线（逐文件数出）：服务子域 **25 vs 23**（真缺 `avatar`、`push` 两个子域；`site` 子域缺 6 文件随**多站点取消**不再补）｜页面 **28 vs 30**（差的 3 页全是多站点页，**不迁**）｜组件 **47 vs 46 + 约 10 个内联私有 composable**（组件级真缺失 0）。
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 100%**（6/6，动态头像开关已补）/ **设置 70%**（通知/网络/DoH/推送入口已接，论坛/我的站点缺）/ **多站点 40%**（6/12 文件，`BASE_URL` 硬编码）/ **系统推送 15%**（本地通知渠道 + 权限就位，投递链路未迁）/ 平板适配 100%（P1-13 已清：桌面姿态媒体分区 + 拍照入口落地）。
+模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 100%**（6/6，动态头像开关已补）/ **多站点：不迁移（用户 2026-10-03 决策）** / **系统推送 15%**（本地通知渠道 + 权限就位，投递链路未迁）/ 平板适配 100%（P1-13 已清：桌面姿态媒体分区 + 拍照入口落地）。
 
-### 1.2 本轮新抓到的隐性缺口（最值钱的两条）
+### 1.2 隐性缺口存量（1 条）
 
-纯目录对比发现不了这两条，都是「看着有、其实没接上」（原第三条 N6 详情已读态回写已在本轮接通）：
+纯目录对比发现不了、属于「看着有、其实没接上」的只剩：
 
-1. **notification 死链路四件套**（§六 组1）——整个类 + API + 死 Provider + 整个模型文件都在编译，但活链路早被 `core/data` 接管，纯误导性遗留
-2. **Boost 本地刷新静默成功**（§七 M2）——服务端操作成功但本地楼层气泡不更新，UI 却提示成功
+1. **Boost 本地刷新静默成功**（§七 M2）——服务端操作成功但本地楼层气泡不更新，UI 却提示成功
 
 ---
 
-## 二、P0 · 一眼能看出没做（3 项）
+## 二、P0 · 一眼能看出没做（1 项）
 
 | # | 要做什么 | 现在是什么样 | 关键证据 |
 |---|---|---|---|
 | 1 | **系统推送 + 本地通知投递链路** | `services/push/` 仍不存在（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushRefreshGate` / `PushNotificationNavigation(EventBus)` / `PushTokenUpdateEventBus` / `HarmonyPushTokenProvider`（→ FCM 对应物）/ `PushNotificationPermissionService` / `PushTokenDebugLog`）。`PushSettingsScreen` 只做了第一块（权限 + 测试通知），推送统计与订阅管理两块缺。**已就位**：通知渠道（`SystemNotifier`）、`POST_NOTIFICATIONS` 三态处理（`NotificationPermission`）、App 活着时点通知的续接（`onNewIntent` + `DeepLinkEventBus`，`MainActivity.kt:228-245`）| `PushSettingsScreen.kt:60-64` 注释自认「那一整套尚未迁移。这里不摆空壳充数」；Android 全库 `PushRelay\|PushSubscription\|PushToken` 仅命中文档与该注释 |
-| 2 | **多站点 / 论坛切换** | `AppConstants.BASE_URL` **硬编码 `https://linux.do`**；Android `services/site/` **6 文件** vs 鸿蒙 **12**，缺 `CurrentSite` / `ForumPrefs` / `SiteCapabilities` / `SiteScope` / `SiteSwitchCoordinator` / `SiteUrl`。缺 **3 页**：`ForumsPage`（RootTabPage.ets:62 引用）、`SitesPage`（RootTabPage.ets:67 引用，站点增删/拖动排序/编辑）、`ForumOnboardingPage`（pages/Index.ets:24 首启真实渲染）。**落地时两个配套钩子必须一起接**：①`EmojiCatalogService.onSiteChanged()` 现全库零调用（`EmojiCatalogService.kt:66`，切站清表情目录缓存）；②`UploadService.mediaUploadEnabled()` 硬写 `true`（`UploadService.kt:229`，注释自认「等多站点落地后改走 CurrentSite 判定」）| `AppConstants.kt`；两侧 `services/site/` 目录实测；`SitePrefs.kt:13` 注释称「数组组装在站点管理页里做」但该页不存在 |
-| 3 | **设置 2 入口未迁移** | 「网络与连接 → DoH」「通知」已落地（`SETTINGS_PUSH` 已注册 `ArkDoNavHost.kt:697` + navigate `:680`）；**论坛 / 我的站点** 仍弹 Toast。两者都卡在 P0-2 的 `CurrentSite` 上——论坛入口要显示当前站点 host，我的站点要列出可选站点 | `SettingsScreen.kt` 两处 `toastNotMigrated`（`NOT_MIGRATED = "尚未迁移"`）|
-
-**依赖关系**：`多站点（P0-2）` 是「论坛 / 我的站点」两个设置子页的前置。做 P0-3 前必须先有 `CurrentSite`。
 
 ---
 
@@ -78,25 +73,19 @@
 
 ---
 
-## 六、死代码与死资源（4 组）
+## 六、死代码与死资源（0 组，已全部清理）
 
-| # | 对象 | 规模 / 证据 | 说明 |
-|---|---|---|---|
-| 组1 | **notification 死链路四件套** | ①`services/notification/NotificationService.kt` 整个类：全库仅定义 + 注释命中（`AppStateEventBus.kt:12` / `NotificationEventBus.kt:7` 是注释）②`services/notification/NotificationApi.kt`：唯一消费者是死类 ③`di/AppModule.kt:113-114` 死 Provider：定义后无任何注入点 ④`data/models/NotificationModels.kt` **整文件**：`RawNotification*` 四类型仅被死链路引用 | 活链路早由 `core/data/DefaultNotificationRepository.kt`（自带私有副本 ：67-93）+ `core/model/NotificationItem.kt` 接管。四件一起删，删 Provider 时注意保留 `AppModule` 里其他注入 |
-| 组2 | 6 个死 Prefs 常量 | `StorageKeys.kt:37,38,39,44,47,52`：`DRAFTS_REFRESH_TICK_KEY` / `DRAFTS_COMPOSER_VISIBLE_KEY` / `DRAFTS_COMPOSER_BACK_TICK_KEY` / `SITES_TICK` / `SETTINGS_DOH_TICK` / `APP_IS_WIDE_STORAGE_KEY`，均仅定义处命中 | `PREFS_ANIMATED_AVATAR` 已随 N1 动态头像落地启用，不再是死键 |
-| 组3 | 2 个悬空路由常量 | `Routes.CF_CHALLENGE`（`ArkDoNavHost.kt:741`）与 `Routes.LOGIN`（`:740`）均零注册零 navigate | **多余路由，删常量即可、页面不要动**：过盾页 `CfChallengeScreen`（313 行活代码）由 `MainActivity.kt:188-205` 内联托管；`LoginScreen` 由 `LoginGate` 弹层托管（`ArkDoNavHost.kt:714-720`）。照「预留位」去补页面就是造重复实现 |
-| 组4 | 解析后零消费的 2 个字段 | `RichBlock.mediaType`（`RichContentTypes.kt:108`，解析 `CookedHtmlParser.kt:732/744`）、`RichBlock.unsupportedKind`（`:100`，解析 `:500`）；ui/ 层零读取 | 先判断是否该有 UI 行为（如音视频块降级提示）——有则补消费，无则连字段带解析一起删 |
-
-> 已清理：`TopicListItem.kt`（378 行）与 `AppRoutes.kt`（163 行）已于本分支删除（逐符号复核零代码引用后编译验证）。
+四组死代码已全部删除（逐符号复核零活引用后编译 + 全量单测验证）：notification 死链路四件套、6 个死 Prefs 常量、2 个悬空路由常量（`Routes.CF_CHALLENGE`/`Routes.LOGIN`，页面未动）、`RichBlock.mediaType`/`unsupportedKind` 两字段（鸿蒙侧零命中，系 Android 自加字段；`unsupportedKind` 在 `hasBlockContent` 的半句判定冗余，UNSUPPORTED 块 text 有兜底恒非空）。连同更早删除的 `TopicListItem.kt`（378 行）与 `AppRoutes.kt`（163 行）。
 
 ---
 
-## 七、微清理（2 条，低危）
+## 七、微清理（1 条，低危）
 
 | # | 问题 | 证据 |
 |---|---|---|
-| M1 | Manifest 声明 `WRITE/READ_EXTERNAL_STORAGE` 但全库无运行时 `checkSelfPermission/request`；实际落盘走应用专属目录 `getExternalFilesDir`（API 29+ 本就不需要） | `AndroidManifest.xml`；`ArkWebNetworkBridge.kt:723,830-860` → 删两条声明即可 |
 | M2 | `createBoost` / `deleteBoost`：`dataSource.findById(post.id)` 为 null 时本地列表不更新，但仍走 `done(true)` → UI 提示「Boost 已发送/已删除」而楼层气泡不变（服务端实际成功，仅本地刷新缺失） | `TopicDetailViewModel.kt:1497-1509` / `:1525-1538` |
+
+> 已清理：M1（Manifest 两条存储权限声明，落盘走应用专属目录无需权限）、M3（设置页「论坛」「我的站点」两个死入口 + `toastNotMigrated`/`NOT_MIGRATED`，随多站点取消）。
 
 ---
 
@@ -112,6 +101,7 @@
 | DoH | 鸿蒙有完整对应物（`DohManager.ets` / `DohSpeedTester.ets` / `DohSettingsPage.ets`），Android 是**追平**不是反超也不是缺口 | 两侧 grep 实测 |
 | `PulsingHalo` | 鸿蒙侧自身死代码（全库仅定义处命中），不移植 | `PulsingHalo.ets:10` |
 | **平台专有，不适用区** | 智感握姿（`@kit.MultimodalAwarenessKit` 传感器）；鸿蒙推送通道 `HarmonyPushTokenProvider`（Android 对应物是 FCM）；`@kit.UIDesignKit`（HdsActionBar）；`LoginKeyboardBridge`。**不要记为缺口，不要试图补** | 各 `@kit.*` import |
+| **多站点 / 论坛切换** | **用户明确取消（2026-10-03）**：不做 `CurrentSite`/站点管理 3 页/`BASE_URL` 可变；`services/site/` 只保留现状 6 文件，`EmojiCatalogService.onSiteChanged()` 永久零调用，`UploadService.mediaUploadEnabled()` 保持硬写 `true`。**不要再报缺口** | 用户原话「就不要多站点功能了」；单站点定位（仅 linux.do） |
 
 ---
 
@@ -136,9 +126,9 @@
 
 ## 十、建议实施顺序
 
-**第 0 步 · 清台面（半天内，全是删除）**
-1. 死代码组1/2/3（notification 四件套、6 个死常量、2 个悬空路由常量）+ 微清理 M1（Manifest 存储权限）——每批删完编译 + 全量单测
-2. 组4（`mediaType`/`unsupportedKind`）先判断该不该有 UI 行为，再决定补消费还是删
+**第 0 步 · 清台面**
+1. ~~死代码组1/2/3 + 微清理 M1~~ **已完成**（notification 四件套 / 6 个死常量 / 2 个悬空路由常量 / Manifest 存储权限，编译 + 全量单测验证）
+2. ~~组4（`mediaType`/`unsupportedKind`）~~ **已完成**（鸿蒙零命中，两字段连解析一并删）
 3. ~~重写或删除 `TODO.md` / `MIGRATION.md` / 修 `README.md` 三处失真（P2-31）~~ **已完成**（TODO 收敛为发布准备清单、MIGRATION 重写为现状+不迁清单、README 修 6 处失真；三份均指向 GAP_ANALYSIS 为唯一权威）
 
 **第 1 步 · 差一次接通（改动小）**
@@ -146,8 +136,7 @@
 5. **S14 过盾快捷入口开关**：`ChallengeShortcutPrefs`（默认关）+ 网络设置页开关项，入口/订阅/reset 均已就位
 
 **第 2 步 · 用户一眼能看到**
-6. **多站点**（P0-2）：`CurrentSite` + `ForumPrefs` 让 `BASE_URL` 可变 + 三页（Forums/Sites/ForumOnboarding）；**顺带接上两个钩子**（`EmojiCatalogService.onSiteChanged()`、`UploadService.mediaUploadEnabled()` 走站点判定）——一并解锁 P0-3 的「论坛 / 我的站点」设置入口
-7. **版本公告定源**（P1-12）：决定 Android 自己的公告帖与账号，`ANNOUNCE_PROMPT_ENABLED` 置 `true`，链路已就绪
+6. **版本公告定源**（P1-12）：决定 Android 自己的公告帖与账号，`ANNOUNCE_PROMPT_ENABLED` 置 `true`，链路已就绪
 
 **第 3 步 · 横向铺开**
 8. **系统推送全链路**（P0-1）：`services/push/` 移植（鸿蒙 12 文件）+ FCM 对应物替代 `HarmonyPushTokenProvider` + Relay 同意流程；**前置已全部就位**（渠道/权限/深链），推送到达直接调 `SystemNotifier` 即可；`PushSettingsScreen` 补推送统计与订阅管理两块
@@ -176,19 +165,19 @@ rg -n "composable\(Routes|Routes\.CF_CHALLENGE|Routes\.LOGIN" -g '*.kt'   # 只�
 
 # ── 判据 A：声明 → 反查调用 ──
 grep -nE "uses-permission|scheme=" app/src/main/AndroidManifest.xml
-rg -n "checkSelfPermission" -g '*.kt'             # 存储两条权限应零命中（M1）
+rg -n "checkSelfPermission" -g '*.kt'             # 存储权限声明已删（M1 完成），应零命中
 
 # ── 判据 B：解析了但没消费 ──
-rg -n "mediaType|unsupportedKind" -g '*.kt' app/src/main/kotlin/com/arkdo/android/ui   # 应 0 命中（组4）
+rg -n "mediaType|unsupportedKind" -g '*.kt' app/src/main/kotlin/com/arkdo/android/ui   # 已全删（组4 完成），应 0 命中
 rg -n "quotePostNumber|quoteTopicId|quoteIsReply" -g '*.kt'  # 应命中 PostRichContent（已消费）
 
 # ── 判据 C：零调用方 ──
-rg -ln "NotificationService|NotificationApi|RawNotification" -g '*.kt'    # 组1，注意排除注释与 core/data 私有副本
+rg -ln "NotificationService|NotificationApi|RawNotification" -g '*.kt'    # 已清空，只剩 core/data 私有副本与注释
 rg -n "DRAFTS_REFRESH_TICK_KEY|APP_IS_WIDE_STORAGE_KEY" -g '*.kt'
 
 # ── 判据 E：有发无收 ──
 rg -rn "EventBus" -g '*.kt' --files-with-matches  # 逐条对账发送方/订阅方
-rg -n "onSiteChanged" -g '*.kt'                   # 应只命中定义处（P0-2 钩子）
+rg -n "onSiteChanged" -g '*.kt'                   # 永久只命中定义处（多站点已取消，勿当缺口）
 
 # ── 工程化 ──
 grep -n "signingConfig" app/build.gradle.kts; ls -a | grep github; ls app/src/main/res/values/

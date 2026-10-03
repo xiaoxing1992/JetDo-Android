@@ -9,11 +9,7 @@
     <!-- 推送权限 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 文件下载权限 -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- 下载/图片保存走应用专属目录 getExternalFilesDir，API 29+ 无需存储权限 -->
 
     <application
         android:name=".ArkDoApplication"

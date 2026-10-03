@@ -32,8 +32,6 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Science
@@ -86,7 +84,6 @@ private val CardRadius = 16.dp
 private val CardPadding = 16.dp
 private val CardGap = 12.dp
 private const val OFFICIAL_SITE_URL = "https://arkdo.app"
-private const val NOT_MIGRATED = "尚未迁移"
 
 private const val DISCLAIMER = "本应用是第三方论坛客户端，不提供、不托管、不审核任何内容。\n\n" +
     "应用内显示的全部内容均来自你自行添加的第三方站点，由该站点及其运营方负责。" +
@@ -111,7 +108,6 @@ fun SettingsScreen(
     var showAbout by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
     val versionLabel = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
-    val forumLabel = Uri.parse(AppConstants.BASE_URL).host ?: AppConstants.APP_NAME
 
     if (showAbout) {
         AboutDialog(
@@ -159,13 +155,6 @@ fun SettingsScreen(
 
             SettingsCard {
                 SettingRow(
-                    icon = Icons.Outlined.Forum,
-                    label = "论坛",
-                    value = forumLabel,
-                    onClick = { toastNotMigrated(context) }
-                )
-                Hairline()
-                SettingRow(
                     icon = Icons.Outlined.Notifications,
                     label = "通知",
                     onClick = onOpenPushSettings
@@ -181,12 +170,6 @@ fun SettingsScreen(
                     icon = Icons.Outlined.Science,
                     label = "实验性功能",
                     onClick = onOpenExperimental
-                )
-                Hairline()
-                SettingRow(
-                    icon = Icons.Outlined.Home,
-                    label = "我的站点",
-                    onClick = { toastNotMigrated(context) }
                 )
             }
 
@@ -498,10 +481,6 @@ private fun AppThemeMode.label(): String = when (this) {
     AppThemeMode.SYSTEM -> "跟随系统"
     AppThemeMode.LIGHT -> "浅色"
     AppThemeMode.DARK -> "深色"
-}
-
-private fun toastNotMigrated(context: android.content.Context) {
-    Toast.makeText(context, NOT_MIGRATED, Toast.LENGTH_SHORT).show()
 }
 
 private fun openOfficialSite(context: android.content.Context) {
