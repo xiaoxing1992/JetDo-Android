@@ -48,3 +48,8 @@
 # Firebase
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
+
+# Bugly 崩溃上报
+-keep class com.tencent.bugly.** { *; }
+-keepclassmembers class com.tencent.bugly.** { *; }
+-dontwarn com.tencent.bugly.**
