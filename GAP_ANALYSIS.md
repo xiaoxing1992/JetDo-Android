@@ -9,7 +9,7 @@
 
 ## 一、结论先行
 
-**还剩 14 项 + 4 组死代码 + 2 条微清理。**
+**还剩 10 项 + 4 组死代码 + 2 条微清理。**
 
 ### 1.1 缺口分布
 
@@ -19,8 +19,8 @@
 | P1 | 1 | 功能不完整，用起来别扭 |
 | 半截 | 1 | 数据 / 组件都在，只差一次接通（用户会当 bug 报）|
 | 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
-| P2 | 9 | 工程化与发布 |
-| **合计** | **14** | 上表逐项相加（3+1+1+0+9）|
+| P2 | 5 | 工程化与发布 |
+| **合计** | **10** | 上表逐项相加（3+1+1+0+5）|
 | 死代码 | 4 组 | 看着有实现，其实是死的，会误导判断 |
 | 微清理 | 2 条 | 低危，不阻塞发布 |
 
@@ -64,22 +64,17 @@
 
 ---
 
-## 五、P2 · 工程化与发布（9 项）
+## 五、P2 · 工程化与发布（5 项）
 
 | # | 问题 | 证据 |
 |---|---|---|
 | 20 | release 无签名配置 | `app/build.gradle.kts` 全文无 `signingConfigs`，所有 `*.kts` 零命中 |
 | 21 | 无 androidTest | `**/src/androidTest/**` 0 文件（仅 build.gradle.kts:173-176 声明了依赖）|
-| 22 | 无 CI | 无 `.github/` / `.gitlab-ci.yml` / `Jenkinsfile` |
-| 23 | `core:datastore` 空模块 | `settings.gradle.kts:32` include，但模块无 `src/main`、无任何 `.kt`；且**全库零模块依赖它**（app 直依赖 `androidx.datastore.preferences`，`app/build.gradle.kts:116`）→ 可直接摘除 |
-| 24 | `core:common` 近空壳 | 仅 `RelativeTime.kt` + `Placeholder.kt` 两文件 |
 | 26 | 无崩溃上报 | Crashlytics / Bugly / Sentry 全库 0 命中，仅本地 `DebugLogScreen` |
-| 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md:163-165` 未勾选 |
-| 28 | 无多语言、无 `values-night` | `values/` 下仅 `strings.xml` + `themes.xml`（深色目前靠 Compose 运行时，无资源级兜底）|
-| 31 | **三份文档严重过期** | ①`TODO.md:171` 末行「下一步：实现 WebViewNetworkBridge」——实际 `ArkWebNetworkBridge.kt` 是全 App 网络层唯一委托（`di/AppModule.kt:90`）；DohManager/登录/ImageViewer/搜索/草稿等 `[ ]` 均已完成，只有签名那条是真缺口。②`MIGRATION.md`「里程碑二+」整章几乎全部完成却仍标待办；但 4 条仍准确：push 15 文件、AvatarImageCache、ChallengeShortcutPrefs、TopicReadStateEventBus 确实未迁。③`README.md`：L65 文件名 `WebViewNetworkBridge`（实际 `ArkWebNetworkBridge`）、L162「只支持回复，不支持发新主题/上传图片」（实际 `NewTopicScreen` + `ComposerUpload` + `VideoTranscoder` 齐全）、L125「SDK 34+」（实际 compileSdk/targetSdk 37）、L98-118 结构图仍是单模块旧布局 |
+| 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md` 发布准备清单未勾选 |
+| 28 | 多语言 strings 抽取与翻译未做 | 资源级部分已就位：`values-night/`（深色 windowBackground + 系统栏图标开关）与 `localeConfig`（zh-CN，`AndroidManifest` + `res/xml/locales_config.xml`）已落地；剩余是 UI 文案从硬编码抽取进 strings.xml 并翻译 |
 
-> **31 单独提请注意**：三份文档都失去跟踪价值，照它们排期会大量重复劳动。**唯一权威是本文。** 建议整体重写或直接删除。
-> **已做对、不是缺口**：R8 已开（`isMinifyEnabled = true` + `isShrinkResources`，`app/build.gradle.kts:45-46`）；明文 HTTP 已关（`networkSecurityConfig`，默认禁 + 仅 localhost 白名单）。
+> **已做对、不是缺口**：R8 已开（`isMinifyEnabled = true` + `isShrinkResources`，`app/build.gradle.kts:45-46`）；明文 HTTP 已关（`networkSecurityConfig`，默认禁 + 仅 localhost 白名单）；CI 已建（`.github/workflows/ci.yml`，push/PR 跑 assembleDebug + 全模块单测）；`core:datastore` 空模块与 `core:common` 空壳已摘除（`RelativeTime` 落位 core:model，8 模块收成 6+feature3）。
 
 ---
 
@@ -144,7 +139,7 @@
 **第 0 步 · 清台面（半天内，全是删除）**
 1. 死代码组1/2/3（notification 四件套、6 个死常量、2 个悬空路由常量）+ 微清理 M1（Manifest 存储权限）——每批删完编译 + 全量单测
 2. 组4（`mediaType`/`unsupportedKind`）先判断该不该有 UI 行为，再决定补消费还是删
-3. 重写或删除 `TODO.md` / `MIGRATION.md` / 修 `README.md` 三处失真（P2-31）
+3. ~~重写或删除 `TODO.md` / `MIGRATION.md` / 修 `README.md` 三处失真（P2-31）~~ **已完成**（TODO 收敛为发布准备清单、MIGRATION 重写为现状+不迁清单、README 修 6 处失真；三份均指向 GAP_ANALYSIS 为唯一权威）
 
 **第 1 步 · 差一次接通（改动小）**
 4. ~~N6 详情已读态回写首页~~ **已完成**（`TopicReadStateSource` 单例：详情页 `onDetailDetach` 结算、首页订阅更新对应行，不搬 bus；feature/home 单测覆盖）
@@ -163,8 +158,8 @@
 11. ~~桌面姿态媒体上下分区~~ **已完成**（`TabletopMedia` 几何 + `VideoPlayer` 分区接线，单测覆盖；真机水平折痕待复验）；~~相机预览方向~~ **已消解**（拍照入口走系统相机 TakePicture，预览由系统自理，App 内无预览可适配）
 
 **第 5 步 · 发布准备**
-12. 签名配置 + CI + androidTest 骨架（P2-20/21/22）
-13. 崩溃上报、隐私政策与商店素材（P2-26/27）；多语言与 `values-night`（P2-28）；`core:datastore` 摘除 + `core:common` 处置（P2-23/24）
+12. 签名配置 + androidTest 骨架（P2-20/21）；CI 已建（P2-22 完成）
+13. 崩溃上报、隐私政策与商店素材（P2-26/27）；多语言 strings 抽取与翻译（P2-28 剩余）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
 
 ---
 

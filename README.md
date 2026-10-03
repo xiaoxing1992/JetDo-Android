@@ -47,14 +47,14 @@ ArkDO Android 是 LINUX DO 社区的**非官方**第三方客户端，基于 Har
 - 图片预览（双击缩放、下拉关闭）、音视频播放、附件下载
 - 站内 Emoji、FontAwesome 徽章图标、标签图标完整还原
 
-**系统推送**（需自建中继，见 `server/`）
-- App 关闭时也能收到回复 / @ / 私信的系统通知，点击直达对应楼层
-- 点推送即标记该条通知已读，角标未读数同步递减
+**系统推送**（开发中，需自建中继，见 `server/`）
+- 计划支持 App 关闭时接收回复 / @ / 私信的系统通知，点击直达对应楼层
+- 当前版本请以 App 内通知中心为准
 
 **适配**
-- Material You 动态主题
-- 三态深色模式：跟随系统 / 强制浅色 / 强制深色
-- 平板/折叠屏横屏双栏、竖屏单栏自适应
+- Material3 主题（蓝灰配色对齐鸿蒙版）
+- 三态深色模式：跟随系统 / 强制浅色 / 强制深色（资源级 values-night 兜底）
+- 平板/折叠屏横屏双栏、竖屏单栏、桌面姿态自适应
 - DoH 自定义 DNS（内置优选服务器，支持增删、切换、测速）
 
 ## 技术实现
@@ -62,7 +62,7 @@ ArkDO Android 是 LINUX DO 社区的**非官方**第三方客户端，基于 Har
 ### WebView 网络桥
 LINUX DO 有 Cloudflare 防护，原生 HTTP 栈发的请求会被拦。使用常驻隐藏 WebView 承载会话，所有接口请求都注入 JS 用浏览器侧的 `fetch` 发出，Cookie（`_t` / `cf_clearance`）由 WebView 自己管，JSON 回传给 Compose 渲染成原生界面。
 
-> 核心文件：`app/src/main/kotlin/services/network/WebViewNetworkBridge.kt`
+> 核心文件：`app/src/main/kotlin/com/arkdo/android/services/network/ArkWebNetworkBridge.kt`
 
 ### Cloudflare 挑战的静默恢复
 遇到挑战时先在后台重载宿主页，让挑战脚本自己跑通，每 2 秒用 `/latest.json` 探测是否放行；~12 秒还不通才弹出可见页面让用户手动点一下。
@@ -75,17 +75,17 @@ LINUX DO 有 Cloudflare 防护，原生 HTTP 栈发的请求会被拦。使用�
 > 核心文件：`app/src/main/kotlin/services/network/DohManager.kt`
 
 ### 头像与静态图
-原生网络栈 TLS 握手阶段可能被按 SNI 阻断，所以头像也统一经 WebView 取字节再解码成 Bitmap，带并发限流和 LRU 缓存。
+头像与正文图片统一走 Coil 加载，配磁盘缓存；失效图床有 host 黑名单兜底——同一域名连续两张图网络层失败即拉黑不再重试，避免刷列表时反复撞死链。
 
-> 核心文件：`app/src/main/kotlin/services/network/AvatarImageCache.kt`
+> 核心文件：`app/src/main/kotlin/com/arkdo/android/services/network/BlockedImageHosts.kt`
 
 ### 数学公式
 Discourse 的裸 LaTeX 交给离屏 WebView 跑 MathJax 出 SVG，转成 Bitmap 供 Compose 使用。
 
 > 核心文件：`app/src/main/kotlin/services/content/MathRenderService.kt`
 
-### 系统推送
-Discourse 的 Web Push 是标准协议（RFC 8291），把 `endpoint` 填成自建中继、密钥用中继生成的，LINUX DO 就会用我们的公钥加密并投递到我们的地址；中继解密后转成 Firebase Cloud Messaging 通知下发。
+### 系统推送（开发中）
+Discourse 的 Web Push 是标准协议（RFC 8291），把 `endpoint` 填成自建中继、密钥用中继生成的，LINUX DO 就会用我们的公钥加密并投递到我们的地址；中继解密后转成 Firebase Cloud Messaging 通知下发。投递链路尚未迁移完成，当前版本以 App 内通知中心为准。
 
 ```
 LINUX DO ──Web Push（加密）──▶ 自建中继 ──解密──▶ FCM ──▶ 设备通知
@@ -96,21 +96,16 @@ LINUX DO ──Web Push（加密）──▶ 自建中继 ──解密──▶ 
 ## 项目结构
 
 ```
-app/src/main/kotlin/
-├── common/          常量、主题管理、响应式断点
-├── data/            数据模型
-├── navigation/      Compose Navigation 路由定义
-├── services/        14 个服务子域
-│   ├── network/     WebView 网桥、DoH、头像缓存
-│   ├── challenge/   Cloudflare 挑战检测与恢复
-│   ├── content/     Cooked HTML 解析、公式、下载、链接路由
-│   ├── topic/       话题分页、回应、投票
-│   ├── session/     登录态与写操作拦截
-│   ├── push/        系统推送：FCM token、中继订阅、通知深链
-│   └── ...          auth / bookmark / connect / draft / logging / notification / reading / site / user / web
-└── ui/
-    ├── screens/     15 个页面
-    └── components/  40 个组件
+app/                 页面（ui/）、服务实现（services/）、导航、DI 组装
+core/
+├── model/           数据模型与纯逻辑（RelativeTime 等）
+├── network/         网络契约
+├── data/            Repository 层（会话 / 读态 / 通知等共享数据源）
+└── designsystem/    主题、通用组件（TopicRow / UserAvatar / FaIcon 等）
+feature/
+├── home/            首页垂直切片（ViewModel + Route）
+├── search/          搜索垂直切片
+└── notification/    通知垂直切片
 
 server/              推送中继（Python，部署在自己的服务器上）
 ├── relay.py         Web Push 解密 → FCM 转发
@@ -122,7 +117,7 @@ server/              推送中继（Python，部署在自己的服务器上）
 **环境要求**
 - Android Studio Ladybug | 2024.2.1+
 - JDK 17+
-- Android SDK 34+
+- Android SDK 37（compileSdk / targetSdk 37）
 - 最低支持 Android 8.0 (API 26)
 
 **步骤**
@@ -159,7 +154,7 @@ server/              推送中继（Python，部署在自己的服务器上）
 正常情况下 App 会在后台静默过盾。若首页空白超过几秒，会浮现「手动验证」按钮，点进去完成验证即可。
 
 **能发新帖吗？**
-目前只支持回复，不支持发新主题、不支持上传图片。私信走内嵌网页。
+能。支持发新主题与回复，正文支持上传图片（相册选图 / 拍照）、视频（上传前自动转码）。私信走内嵌网页。
 
 ## 参与贡献
 
