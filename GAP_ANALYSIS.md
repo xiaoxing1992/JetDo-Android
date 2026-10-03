@@ -55,15 +55,17 @@
 
 ---
 
-## 五、P2 · 工程化与发布（4 项）
+## 五、P2 · 工程化与发布（2 项）
 
 | # | 问题 | 证据 |
 |---|---|---|
 | 20 | release 无签名配置 | `app/build.gradle.kts` 全文无 `signingConfigs`，所有 `*.kts` 零命中 |
-| 21 | 无 androidTest | `**/src/androidTest/**` 0 文件（仅 build.gradle.kts:173-176 声明了依赖）|
 | 26 | 无崩溃上报 | Crashlytics / Bugly / Sentry 全库 0 命中，仅本地 `DebugLogScreen` |
-| 27 | 无隐私政策 / 用户协议 / 商店素材 | `TODO.md` 发布准备清单未勾选 |
 
+>
+> ~~21 无 androidTest~~ **已完成（2026-10-03）**：骨架 3 类 7 用例（设备冒烟=包名+AppContextHolder 真机取串、FaIconSet 资产目录守卫、Compose 测试基建），`connectedDebugAndroidTest` 模拟器 7/7 通过。
+>
+> ~~27 无隐私政策 / 用户协议 / 商店素材~~ **已完成（2026-10-03）**：`docs/publish/` 三份——privacy-policy.md（按实际行为如实编写：权限仅 INTERNET/ACCESS_NETWORK_STATE/POST_NOTIFICATIONS，数据只发 linux.do 与 cdn.ldstatic.com，会话走系统 CookieManager，无任何第三方 SDK）、user-agreement.md、store-listing.md（简介/完整介绍/权限说明表/截图清单/图标规格/上架 checklist）。⚠️ 两份文档的联系方式占位待补，隐私政策需发布为网页链接后商店才可引用。
 > **已做对、不是缺口**：R8 已开（`isMinifyEnabled = true` + `isShrinkResources`，`app/build.gradle.kts:45-46`）；明文 HTTP 已关（`networkSecurityConfig`，默认禁 + 仅 localhost 白名单）；CI 已建（`.github/workflows/ci.yml`，push/PR 跑 assembleDebug + 全模块单测）；`core:datastore` 空模块与 `core:common` 空壳已摘除（`RelativeTime` 落位 core:model，8 模块收成 6+feature3）。
 >
 > ~~28 多语言 strings 抽取与翻译~~ **已完成（2026-10-03）**：679 条 UI 文案抽取进资源（app 607 / feature:home 39 / feature:search 39 / core:designsystem 8），values-en 全量英文对照 + `locales_config` 加 en-US。替换分三路：组合期 `stringResource`、服务层 object 单例走 `AppContextHolder`（core:data，Application.onCreate 初始化）、VM 消息同 holder；36 处插值模板转位置格式参数。刻意不本地化的边界（勿再报）：注释 113 处、Timber/Log 日志 31 处、逻辑位字面量 5 处（`CategoryIndex`/`HomeDrawer` 的 `未分类` 比较、`HolographicTitle` 标题匹配集合、`DebugLogStore.RESTORE_SEPARATOR` 持久化格式标记、`DebugLogScreen` 的 `contains("未捕获异常")`）、异常消息（DohService UnknownHostException）、core:data/core:model 内部错误文案（纯 JVM 语义层）。e2e 已验：en-US 冷启动首页/设置页全英文（含相对时间、公告条、底栏），zh-CN 切回无损；全库 541 单测 0 失败。
@@ -143,8 +145,8 @@
 11. ~~桌面姿态媒体上下分区~~ **已完成**（`TabletopMedia` 几何 + `VideoPlayer` 分区接线，单测覆盖；真机水平折痕待复验）；~~相机预览方向~~ **已消解**（拍照入口走系统相机 TakePicture，预览由系统自理，App 内无预览可适配）
 
 **第 5 步 · 发布准备**
-12. 签名配置 + androidTest 骨架（P2-20/21）；CI 已建（P2-22 完成）
-13. 崩溃上报、隐私政策与商店素材（P2-26/27）；~~多语言 strings 抽取与翻译（P2-28）~~ **已完成**（679 条抽取 + values-en 全量翻译 + AppContextHolder 三路替换，e2e 双语验证）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
+12. ~~签名配置 + androidTest 骨架（P2-20/21）~~ **P2-21 已完成**（2026-10-03）；P2-20 签名待密钥；CI 已建（P2-22 完成）
+13. 崩溃上报（P2-26）；~~隐私政策与商店素材（P2-27）~~ **已完成**（2026-10-03，docs/publish/ 三份，联系方式待补）；~~多语言 strings 抽取与翻译（P2-28）~~ **已完成**（679 条抽取 + values-en 全量翻译 + AppContextHolder 三路替换，e2e 双语验证）；~~`core:datastore` 摘除 + `core:common` 处置（P2-23/24）~~ **已完成**（RelativeTime 落位 core:model，两模块删除，模块数 9→7）
 
 ---
 
