@@ -12,7 +12,7 @@
     <!-- 闪屏深色档：背景引用 @color/window_background 自动落 values-night 深色值。 -->
     <style name="Theme.ArkDO.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/window_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.ArkDO</item>
     </style>
 </resources>

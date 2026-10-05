@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive 图标（Android 8.0+/minSdk 26 全覆盖）：系统闪屏与桌面统一走
-     分层渲染，前景 art 落在 108dp 画布的 72dp 安全区，不再被系统
-     「去透明边距放大」裁切（legacy PNG 在 12+ splash 上会切出直边）。 -->
+<!-- Adaptive 图标（Android 8.0+/minSdk 26 全覆盖）：前景 art 落在
+     108dp 画布的 72dp 安全区（官方规范：无背景图标 288dp 画布 /
+     192dp 圆安全区的同比例几何）。
+     背景层不透明且「颜色 == 闪屏背景色（window_background，日夜各档）」：
+     部分 ROM（MIUI 类）闪屏不做圆形遮罩、把图标铺在方形卡片上，
+     卡片取背景层颜色——同色后方块与闪屏底融为一体不可见；
+     规范设备上系统圆形遮罩内同样只见同色底 + 圆形 art。 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 背景层必须透明：系统闪屏渲染 adaptive 图标不套圆遮罩，
-         不透明白底会铺成白色方块（深色模式下刺眼）。圆形观感由
-         前景 art 自带的白圈承担。 -->
-    <background android:drawable="@android:color/transparent" />
+    <background android:drawable="@color/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>
