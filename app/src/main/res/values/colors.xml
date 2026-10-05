@@ -4,4 +4,9 @@
          取值对齐 ui/theme/ArkdoColors.kt 的 pageBg：亮 #FFFFFF / 暗 #17191D，
          深色变体在 values-night 同名覆盖。没有它，深色模式下冷启动先闪一帧白。 -->
     <color name="window_background">#FFFFFFFF</color>
+
+    <!-- Adaptive 图标背景层：必须与闪屏背景同色（浅 #FFF / 暗 #17191D，
+         values-night 覆盖）。MIUI 类 ROM 闪屏把图标铺在方形卡片上且卡片
+         取本颜色，同色后方块隐形；规范设备圆形遮罩内亦为此色。 -->
+    <color name="ic_launcher_background">#FFFFFFFF</color>
 </resources>

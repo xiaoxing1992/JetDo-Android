@@ -19,10 +19,11 @@
          隐私弹窗（独立窗口）悬浮其上——先同意后进产品的合规形态。 -->
     <style name="Theme.ArkDO.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/window_background</item>
-        <!-- 专用圆形图标（drawable/ic_splash_icon，圆 art 贴边无背景层）。
-             不能指 @mipmap/ic_launcher：adaptive 复合图标的背景层会被
-             部分 OEM 闪屏合成器画成实色方块（透明也画成黑/白底）。 -->
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+        <!-- 必须用 adaptive 复合图标（@mipmap）：其背景层与闪屏底同色
+             （ic_launcher_background == window_background，日夜各档），
+             ROM 的方形图标卡取背景层颜色 → 与底融为一体不可见。
+             不能换纯位图：ROM 对无背景层的图标画默认色卡片（黑块）。 -->
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.ArkDO</item>
     </style>
 </resources>
