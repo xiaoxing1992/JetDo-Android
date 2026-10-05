@@ -259,18 +259,17 @@ class MainActivity : ComponentActivity() {
                                 )
                             ) {
                                 Box(Modifier.fillMaxSize()) {
-                                    // 复刻系统闪屏的居中图标：直接用 adaptive 前景层
-                                    // （art 自带白圈，透明背景层），与系统闪屏、桌面
-                                    // 同一 drawable 同一比例，深浅色模式下都是干净的圆形。
-                                    // 288dp：前景画布 108dp 中 art 占 72dp，288×(72/108)
-                                    // = 192dp，正好是系统闪屏对无背景 adaptive 图标的
-                                    // 规范渲染直径（实测 379px@2px/dp≈190dp），两段无缝。
+                                    // 复刻系统闪屏的居中图标：ic_splash_icon 是圆 art
+                                    // 贴边的专用资源（无 adaptive 背景层），系统闪屏与
+                                    // 这里用同一 drawable，深浅色模式下都是干净的圆形。
+                                    // 192dp = 系统闪屏对 windowSplashScreenAnimatedIcon
+                                    // 的规范渲染直径，两段图标同源同尺寸无缝衔接。
                                     Image(
-                                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                                        painter = painterResource(R.drawable.ic_splash_icon),
                                         contentDescription = null,
                                         modifier = Modifier
                                             .align(Alignment.Center)
-                                            .size(288.dp)
+                                            .size(192.dp)
                                     )
                                     Card(
                                         modifier = Modifier
