@@ -3,6 +3,9 @@
      分层渲染，前景 art 落在 108dp 画布的 72dp 安全区，不再被系统
      「去透明边距放大」裁切（legacy PNG 在 12+ splash 上会切出直边）。 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
+    <!-- 背景层必须透明：系统闪屏渲染 adaptive 图标不套圆遮罩，
+         不透明白底会铺成白色方块（深色模式下刺眼）。圆形观感由
+         前景 art 自带的白圈承担。 -->
+    <background android:drawable="@android:color/transparent" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>
