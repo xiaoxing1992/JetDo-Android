@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,8 +60,22 @@ class MainActivity : ComponentActivity() {
     private var challengeCoordinator: ChallengeRecoveryCoordinator? = null
     private var unsubscribeAppState: (() -> Unit)? = null
 
+    /**
+     * 闪屏保持条件（core-splashscreen keep-on-screen）：
+     * true = 闪屏不收起。冷启动时按落盘的隐私同意状态初始化——
+     * 未同意则闪屏一直停留，隐私弹窗（独立窗口）悬浮其上，
+     * 同意后置 false，闪屏收起、直接进首页。
+     */
+    @Volatile private var splashHeld = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // 未同意（或同意的是旧版政策）→ 闪屏保持；已同意 → 条件立即为 false，
+        // 闪屏在首帧就绪后正常收起，行为与普通启动一致。
+        splashHeld = com.arkdo.android.services.compliance.PrivacyConsentStore.needsConsent(this)
+        splashScreen.setKeepOnScreenCondition { splashHeld }
 
         Timber.i("[ArkDO][MainActivity] onCreate ts=%d", System.currentTimeMillis())
 
@@ -241,6 +256,7 @@ class MainActivity : ComponentActivity() {
                                         (application as ArkDoApplication).initCrashReportIfAllowed()
                                         Timber.i("[ArkDO][MainActivity] privacy consent given, crash report enabled")
                                         privacyConsentNeeded = false
+                                        splashHeld = false
                                     }) { Text(stringResource(R.string.privacy_consent_agree)) }
                                 },
                                 dismissButton = {

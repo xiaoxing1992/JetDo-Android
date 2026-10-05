@@ -11,6 +11,7 @@ ksp = "2.3.6"
 androidx-core = "1.19.0"
 androidx-lifecycle = "2.11.0"
 androidx-activity-compose = "1.13.0"
+androidx-splashscreen = "1.0.1"
 androidx-navigation = "2.9.8"
 androidx-datastore = "1.2.1"
 androidx-room = "2.8.4"
@@ -32,6 +33,7 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "androidx-activity-compose" }
+androidx-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidx-splashscreen" }
 
 # Compose BOM
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }

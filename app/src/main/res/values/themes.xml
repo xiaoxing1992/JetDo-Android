@@ -11,4 +11,15 @@
         <!-- 冷启动窗口底色：对齐 Compose 首帧的 pageBg，防深色模式白闪（见 colors.xml） -->
         <item name="android:windowBackground">@color/window_background</item>
     </style>
+
+    <!-- 首启冷启动闪屏（MainActivity 专用）：core-splashscreen 兼容主题。
+         API 31+ 走系统 splash，26-30 由库自绘同款；背景沿用 window_background
+         （自动日夜切换），图标即 App 图标；收起后无缝切回 Theme.ArkDO。
+         MainActivity 用 setKeepOnScreenCondition 把闪屏保持到「隐私同意落定」，
+         隐私弹窗（独立窗口）悬浮其上——先同意后进产品的合规形态。 -->
+    <style name="Theme.ArkDO.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.ArkDO</item>
+    </style>
 </resources>
