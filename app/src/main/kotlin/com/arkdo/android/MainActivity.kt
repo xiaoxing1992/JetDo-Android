@@ -258,12 +258,15 @@ class MainActivity : ComponentActivity() {
                                 Box(Modifier.fillMaxSize()) {
                                     // 复刻系统闪屏的居中图标：系统闪屏首帧即收，
                                     // 它接棒延续「闪屏停留」的观感，直到用户做出选择。
+                                    // 160dp 是校准值：launcher PNG 画布带 ~26% 透明边距
+                                    //（可见圆只占 74%），160×0.74≈118dp，与系统闪屏
+                                    // 图标的实测可见直径（~122dp）对齐，两段无缝衔接。
                                     Image(
                                         painter = painterResource(R.mipmap.ic_launcher),
                                         contentDescription = null,
                                         modifier = Modifier
                                             .align(Alignment.Center)
-                                            .size(120.dp)
+                                            .size(160.dp)
                                     )
                                     Card(
                                         modifier = Modifier
