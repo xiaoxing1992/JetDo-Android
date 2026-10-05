@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -30,6 +32,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -256,18 +260,23 @@ class MainActivity : ComponentActivity() {
                                 )
                             ) {
                                 Box(Modifier.fillMaxSize()) {
-                                    // 复刻系统闪屏的居中图标：系统闪屏首帧即收，
-                                    // 它接棒延续「闪屏停留」的观感，直到用户做出选择。
-                                    // 160dp 是校准值：launcher PNG 画布带 ~26% 透明边距
-                                    //（可见圆只占 74%），160×0.74≈118dp，与系统闪屏
-                                    // 图标的实测可见直径（~122dp）对齐，两段无缝衔接。
-                                    Image(
-                                        painter = painterResource(R.mipmap.ic_launcher),
-                                        contentDescription = null,
+                                    // 复刻系统闪屏的居中图标（adaptive 同构）：
+                                    // 白圆底（= adaptive 背景层）+ 前景 art（72/108 安全区），
+                                    // 与系统闪屏、桌面图标的渲染方式一致，过渡无缝。
+                                    // 172dp：art 可见 ≈ 172×(72/108) ≈ 115dp，接系统闪屏尺寸。
+                                    Box(
                                         modifier = Modifier
                                             .align(Alignment.Center)
-                                            .size(160.dp)
-                                    )
+                                            .size(172.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.ic_launcher_foreground),
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
                                     Card(
                                         modifier = Modifier
                                             .align(Alignment.BottomCenter)

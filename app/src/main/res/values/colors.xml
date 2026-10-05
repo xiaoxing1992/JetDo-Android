@@ -4,4 +4,8 @@
          取值对齐 ui/theme/ArkdoColors.kt 的 pageBg：亮 #FFFFFF / 暗 #17191D，
          深色变体在 values-night 同名覆盖。没有它，深色模式下冷启动先闪一帧白。 -->
     <color name="window_background">#FFFFFFFF</color>
+
+    <!-- Adaptive 图标背景层：图标 art 自带白圈，白底让圈无缝融入，
+         桌面与系统闪屏统一为「白圆 + 三色环带」的品牌观感。 -->
+    <color name="ic_launcher_background">#FFFFFFFF</color>
 </resources>
