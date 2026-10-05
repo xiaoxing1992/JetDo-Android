@@ -6,22 +6,35 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.lifecycleScope
 import com.arkdo.android.navigation.ArkDoNavHost
 import com.arkdo.android.navigation.DeepLinkEventBus
@@ -60,22 +73,13 @@ class MainActivity : ComponentActivity() {
     private var challengeCoordinator: ChallengeRecoveryCoordinator? = null
     private var unsubscribeAppState: (() -> Unit)? = null
 
-    /**
-     * 闪屏保持条件（core-splashscreen keep-on-screen）：
-     * true = 闪屏不收起。冷启动时按落盘的隐私同意状态初始化——
-     * 未同意则闪屏一直停留，隐私弹窗（独立窗口）悬浮其上，
-     * 同意后置 false，闪屏收起、直接进首页。
-     */
-    @Volatile private var splashHeld = true
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splashScreen = installSplashScreen()
+        // installSplashScreen 只为 pre-31 的主题交接（postSplashScreenTheme）；
+        // 31+ 系统闪屏首帧即收，不做 keep-on-screen 扣留——那套机制在不同 API
+        // 上行为分叉（35 上闪屏提前自撤；部分真机上 starting window 干扰
+        // 弹窗窗口触摸派发，按钮点了没反应）。闪屏停留的视觉由内容层自绘。
+        installSplashScreen()
         super.onCreate(savedInstanceState)
-
-        // 未同意（或同意的是旧版政策）→ 闪屏保持；已同意 → 条件立即为 false，
-        // 闪屏在首帧就绪后正常收起，行为与普通启动一致。
-        splashHeld = com.arkdo.android.services.compliance.PrivacyConsentStore.needsConsent(this)
-        splashScreen.setKeepOnScreenCondition { splashHeld }
 
         Timber.i("[ArkDO][MainActivity] onCreate ts=%d", System.currentTimeMillis())
 
@@ -237,34 +241,70 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // 首启隐私同意弹窗（置顶遮罩，盖过上面所有覆盖层）。
+                        // 首启隐私同意（置顶遮罩，盖过上面所有覆盖层）。
+                        // 自绘全屏层而不是 AlertDialog：图标居中复刻系统闪屏、卡片沉底，
+                        // 「闪屏停留 + 弹窗悬浮」在所有 API 上视觉一致，且触摸派发
+                        // 不经过系统 starting window（真机踩过按钮无响应）。
                         // 模态：onDismissRequest 留空 = 点外部/Back 不关闭，必须二选一。
                         // 同意前 Bugly 未初始化（无远程采集），这是闸门的全部意义。
                         if (privacyConsentNeeded) {
-                            androidx.compose.material3.AlertDialog(
+                            Dialog(
                                 onDismissRequest = { /* 必须明确选择，不接受关闭 */ },
-                                title = { Text(stringResource(R.string.privacy_consent_title)) },
-                                text = {
-                                    Text(
-                                        stringResource(R.string.privacy_consent_body),
-                                        modifier = Modifier.verticalScroll(rememberScrollState())
+                                properties = DialogProperties(
+                                    usePlatformDefaultWidth = false,
+                                    decorFitsSystemWindows = false
+                                )
+                            ) {
+                                Box(Modifier.fillMaxSize()) {
+                                    // 复刻系统闪屏的居中图标：系统闪屏首帧即收，
+                                    // 它接棒延续「闪屏停留」的观感，直到用户做出选择。
+                                    Image(
+                                        painter = painterResource(R.mipmap.ic_launcher),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .size(120.dp)
                                     )
-                                },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        com.arkdo.android.services.compliance.PrivacyConsentStore.agree(this@MainActivity)
-                                        (application as ArkDoApplication).initCrashReportIfAllowed()
-                                        Timber.i("[ArkDO][MainActivity] privacy consent given, crash report enabled")
-                                        privacyConsentNeeded = false
-                                        splashHeld = false
-                                    }) { Text(stringResource(R.string.privacy_consent_agree)) }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showConsentExitConfirm = true }) {
-                                        Text(stringResource(R.string.privacy_consent_decline))
+                                    Card(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .padding(16.dp)
+                                            .navigationBarsPadding()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(24.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.privacy_consent_title),
+                                                style = MaterialTheme.typography.headlineSmall
+                                            )
+                                            Text(
+                                                stringResource(R.string.privacy_consent_body),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier
+                                                    .heightIn(max = 360.dp)
+                                                    .verticalScroll(rememberScrollState())
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End
+                                            ) {
+                                                TextButton(onClick = { showConsentExitConfirm = true }) {
+                                                    Text(stringResource(R.string.privacy_consent_decline))
+                                                }
+                                                TextButton(onClick = {
+                                                    com.arkdo.android.services.compliance.PrivacyConsentStore.agree(this@MainActivity)
+                                                    (application as ArkDoApplication).initCrashReportIfAllowed()
+                                                    Timber.i("[ArkDO][MainActivity] privacy consent given, crash report enabled")
+                                                    privacyConsentNeeded = false
+                                                }) { Text(stringResource(R.string.privacy_consent_agree)) }
+                                            }
+                                        }
                                     }
                                 }
-                            )
+                            }
                         }
 
                         // 拒绝同意的二次确认：不做无声强杀，把后果说清再退。
