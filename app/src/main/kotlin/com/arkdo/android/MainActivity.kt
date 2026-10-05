@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -260,23 +259,19 @@ class MainActivity : ComponentActivity() {
                                 )
                             ) {
                                 Box(Modifier.fillMaxSize()) {
-                                    // 复刻系统闪屏的居中图标（adaptive 同构）：
-                                    // 白圆底（= adaptive 背景层）+ 前景 art（72/108 安全区），
-                                    // 与系统闪屏、桌面图标的渲染方式一致，过渡无缝。
-                                    // 172dp：art 可见 ≈ 172×(72/108) ≈ 115dp，接系统闪屏尺寸。
-                                    Box(
+                                    // 复刻系统闪屏的居中图标：直接用 adaptive 前景层
+                                    // （art 自带白圈，透明背景层），与系统闪屏、桌面
+                                    // 同一 drawable 同一比例，深浅色模式下都是干净的圆形。
+                                    // 288dp：前景画布 108dp 中 art 占 72dp，288×(72/108)
+                                    // = 192dp，正好是系统闪屏对无背景 adaptive 图标的
+                                    // 规范渲染直径（实测 379px@2px/dp≈190dp），两段无缝。
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                                        contentDescription = null,
                                         modifier = Modifier
                                             .align(Alignment.Center)
-                                            .size(172.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.White)
-                                    ) {
-                                        Image(
-                                            painter = painterResource(R.drawable.ic_launcher_foreground),
-                                            contentDescription = null,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
+                                            .size(288.dp)
+                                    )
                                     Card(
                                         modifier = Modifier
                                             .align(Alignment.BottomCenter)
