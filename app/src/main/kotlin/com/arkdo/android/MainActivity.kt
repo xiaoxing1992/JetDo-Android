@@ -181,8 +181,14 @@ class MainActivity : ComponentActivity() {
                                 .alpha(0.01f)          // 几乎透明，用户基本看不见
                         )
 
-                        // 主界面（在上层，完全覆盖 WebView）
-                        ArkDoNavHost(isWebViewReady = isWebViewReady)
+                        // 主界面（在上层，完全覆盖 WebView）。
+                        // 未同意隐私政策前不组合：否则主界面先渲染、弹窗只是浮层，
+                        // 内容从 dialog 周围透出（观感差 + 「先进产品再弹同意」的合规倒置）。
+                        // 此时只有一个纯色底 + 模态弹窗；过盾 WebView 宿主照常引导，
+                        // 同意后 NavHost 首次组合时 isWebViewReady 往往已经就绪。
+                        if (!privacyConsentNeeded) {
+                            ArkDoNavHost(isWebViewReady = isWebViewReady)
+                        }
 
                         // Private DNS 配置引导页面（全屏覆盖）
                         if (showPrivateDnsGuide) {
