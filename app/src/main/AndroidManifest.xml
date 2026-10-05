@@ -44,7 +44,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|density"
-            android:theme="@style/Theme.ArkDO"
+            android:theme="@style/Theme.ArkDO.Splash"
             android:windowSoftInputMode="adjustResize"
             android:hardwareAccelerated="true">
             <intent-filter>
