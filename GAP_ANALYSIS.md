@@ -9,7 +9,7 @@
 
 ## 一、结论先行
 
-**还剩 3 项。**
+**还剩 4 项。**
 
 ### 1.1 缺口分布
 
@@ -17,16 +17,16 @@
 |---|---|---|
 | P0 | 1 | 用户一眼能看出没做 |
 | P1 | 1 | 功能不完整，用起来别扭 |
-| 半截 | 0 | 差一次接通的已清（S14 已落地）|
+| 半截 | 1 | 差一次接通（H1 搜索一镜到底接线）|
 | 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
 | P2 | 1 | 工程化与发布 |
-| **合计** | **3** | 上表逐项相加（1+1+0+0+1）|
+| **合计** | **4** | 上表逐项相加（1+1+1+0+1）|
 | 死代码 | 0 | 4 组已全部清理（逐符号复核后删除）|
 | 微清理 | 0 | M1/M2/M3 已全部清理 |
 
 结构基线（逐文件数出）：服务子域 **25 vs 23**（真缺 `push` 一个子域，`avatar` 已随 N1 追平两侧各 1 文件；`site` 子域缺 6 文件随**多站点取消**不再补）｜页面 **28 vs 30**（差的 3 页全是多站点页，**不迁**）｜组件 **47 vs 46 + 约 10 个内联私有 composable**（组件级真缺失 0）。
 
-模块对齐度：首页 92% / 搜索 98% / 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 100%**（6/6，动态头像开关已补）/ **多站点：不迁移（用户 2026-10-03 决策）** / **系统推送 15%**（本地通知渠道 + 权限就位，投递链路未迁）/ 平板适配 100%（P1-13 已清：桌面姿态媒体分区 + 拍照入口落地）。
+模块对齐度：首页 92% / 搜索 98%（差的 2% = H1 一镜到底接线，功能层全对齐）/ 通知 95% / 详情 85% / 发帖 92% / 回帖 86% / 表情 85% / 音视频 92% / 我的 88% / 用户主页 88% / **实验性功能 100%**（6/6，动态头像开关已补）/ **多站点：不迁移（用户 2026-10-03 决策）** / **系统推送 15%**（本地通知渠道 + 权限就位，投递链路未迁）/ 平板适配 100%（P1-13 已清：桌面姿态媒体分区 + 拍照入口落地）。
 
 ### 1.2 隐性缺口存量（0 条）
 
@@ -39,6 +39,14 @@
 | # | 要做什么 | 现在是什么样 | 关键证据 |
 |---|---|---|---|
 | 1 | **系统推送 + 本地通知投递链路** | `services/push/` 仍不存在（鸿蒙 12 文件：`PushCoordinator` / `PushRelayClient` / `PushRelayConfig` / `PushSubscriptionService` / `PushSubscriptionStore` / `PushRefreshGate` / `PushNotificationNavigation(EventBus)` / `PushTokenUpdateEventBus` / `HarmonyPushTokenProvider`（→ FCM 对应物）/ `PushNotificationPermissionService` / `PushTokenDebugLog`）。`PushSettingsScreen` 只做了第一块（权限 + 测试通知），推送统计与订阅管理两块缺。**已就位**：通知渠道（`SystemNotifier`）、`POST_NOTIFICATIONS` 三态处理（`NotificationPermission`）、App 活着时点通知的续接（`onNewIntent` + `DeepLinkEventBus`，`MainActivity.kt:228-245`）| `PushSettingsScreen.kt:60-64` 注释自认「那一整套尚未迁移。这里不摆空壳充数」；Android 全库 `PushRelay\|PushSubscription\|PushToken` 仅命中文档与该注释 |
+
+---
+
+## 二·半、半截 · 差一次接通（1 项）
+
+| # | 要做什么 | 现在是什么样 | 关键证据 |
+|---|---|---|---|
+| H1 | **搜索「放大镜一镜到底」共享元素转场接线** | 基建已写好未挂载：`SharedSearchTransition.kt`（CompositionLocal + `SEARCH_ICON_SHARED_KEY` + `Modifier.searchIconSharedElement()`，注释连两端路径都写明），但三个关键符号全库零引用。鸿蒙两端已接：首页标题栏放大镜（`HomePage.ets:1276`）与搜索页搜索条放大镜（`SearchOverlay.ets:201`）共用同一 `geometryTransition` id。Android 要接三处：NavHost 包 `SharedTransitionLayout` + `rememberSharedContentState` + 下发 `LocalSharedSearchTransition`；源端 `HomeBarButton` 放大镜、目的端 `SearchScreen` 搜索条放大镜各挂 `Modifier.searchIconSharedElement()`。装饰器空值退化已设计好，未接线不影响功能，纯视觉打磨 | `core/designsystem/SharedSearchTransition.kt` 全文件；反查 `searchIconSharedElement\|SEARCH_ICON_SHARED_KEY\|LocalSharedSearchTransition` 零命中 |
 
 ---
 
