@@ -538,9 +538,9 @@ const INCOMING_INSERT_MS: number = 360;
 ## 附录：鸿蒙源码路径
 
 **核心文件**：
-- `/Users/tongtong/JetDo/entry/src/main/ets/views/pages/HomePage.ets`
-- `/Users/tongtong/JetDo/entry/src/main/ets/views/components/UserAvatar.ets`
-- `/Users/tongtong/JetDo/entry/src/main/ets/views/components/TopicListItem.ets`
-- `/Users/tongtong/JetDo/entry/src/main/ets/models/Topic.ets`
-- `/Users/tongtong/JetDo/entry/src/main/ets/models/User.ets`
-- `/Users/tongtong/JetDo/entry/src/main/ets/services/topic/TopicService.ets`
+- `/Users/tongtong/ArkDO/entry/src/main/ets/views/pages/HomePage.ets`
+- `/Users/tongtong/ArkDO/entry/src/main/ets/views/components/UserAvatar.ets`
+- `/Users/tongtong/ArkDO/entry/src/main/ets/views/components/TopicListItem.ets`
+- `/Users/tongtong/ArkDO/entry/src/main/ets/models/Topic.ets`
+- `/Users/tongtong/ArkDO/entry/src/main/ets/models/User.ets`
+- `/Users/tongtong/ArkDO/entry/src/main/ets/services/topic/TopicService.ets`
