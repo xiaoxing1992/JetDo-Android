@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.arkdo.android.feature.search"
+    namespace = "com.jetdo.android.feature.search"
     compileSdk = 37
 
     defaultConfig { minSdk = 26 }

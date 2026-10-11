@@ -17,7 +17,7 @@ JetDo Android 是 LINUX DO 社区的第三方 Android 原生客户端，基于 H
 ## 目录结构
 
 ```
-app/src/main/kotlin/com/arkdo/android/
+app/src/main/kotlin/com/jetdo/android/
 ├── JetDoApplication.kt          # 应用入口
 ├── MainActivity.kt              # 主 Activity
 │
@@ -234,7 +234,7 @@ UI (Compose)
 ```bash
 # 克隆仓库
 git clone <repo-url>
-cd ArkDO-Android
+cd JetDo-Android
 
 # 配置签名（local.properties）
 # 配置 Firebase（google-services.json）

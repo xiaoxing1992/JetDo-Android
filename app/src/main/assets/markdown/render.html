@@ -44,13 +44,13 @@ if (md) {
 }
 
 function reportError(id, msg) {
-  if (window.ArkDOMd && window.ArkDOMd.onError) {
-    window.ArkDOMd.onError(id, String(msg));
+  if (window.JetDoMd && window.JetDoMd.onError) {
+    window.JetDoMd.onError(id, String(msg));
   }
 }
 function reportResult(id, html) {
-  if (window.ArkDOMd && window.ArkDOMd.onResult) {
-    window.ArkDOMd.onResult(id, html);
+  if (window.JetDoMd && window.JetDoMd.onResult) {
+    window.JetDoMd.onResult(id, html);
   }
 }
 

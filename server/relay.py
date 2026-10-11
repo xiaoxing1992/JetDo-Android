@@ -1,5 +1,5 @@
 """
-ArkDO Android 推送中继服务器
+JetDo Android 推送中继服务器
 
 接收 LINUX DO 的 Web Push 推送，解密后转发到 Firebase Cloud Messaging。
 
@@ -98,7 +98,7 @@ def initialize_firebase():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    logger.info("Starting ArkDO Push Relay Server...")
+    logger.info("Starting JetDo Push Relay Server...")
     load_vapid_keys()
     initialize_firebase()
     yield
@@ -106,8 +106,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ArkDO Push Relay",
-    description="Web Push to FCM relay for ArkDO Android",
+    title="JetDo Push Relay",
+    description="Web Push to FCM relay for JetDo Android",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -199,8 +199,8 @@ async def receive_push(device_id: str, request: Request):
             android=messaging.AndroidConfig(
                 priority="high",
                 notification=messaging.AndroidNotification(
-                    channel_id="arkdo_notifications",
-                    click_action="arkdo://notification"
+                    channel_id="jetdo_notifications",
+                    click_action="jetdo://notification"
                 )
             )
         )

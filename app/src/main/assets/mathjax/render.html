@@ -20,13 +20,13 @@ window.MathJax = {
 var EX_PX = 8.0;
 
 function reportError(id, msg) {
-  if (window.ArkDOMath && window.ArkDOMath.onError) {
-    window.ArkDOMath.onError(id, String(msg));
+  if (window.JetDoMath && window.JetDoMath.onError) {
+    window.JetDoMath.onError(id, String(msg));
   }
 }
 function reportResult(id, png, w, h, depth) {
-  if (window.ArkDOMath && window.ArkDOMath.onResult) {
-    window.ArkDOMath.onResult(id, png, Math.round(w), Math.round(h), Math.round(depth));
+  if (window.JetDoMath && window.JetDoMath.onResult) {
+    window.JetDoMath.onResult(id, png, Math.round(w), Math.round(h), Math.round(depth));
   }
 }
 

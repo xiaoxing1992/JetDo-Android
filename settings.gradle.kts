@@ -23,7 +23,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ArkDO-Android"
+rootProject.name = "JetDo-Android"
 include(":app")
 include(":core:model")
 include(":core:network")

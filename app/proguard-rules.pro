@@ -28,11 +28,11 @@
 }
 
 # Keep data classes for serialization
--keep,includedescriptorclasses class com.arkdo.android.data.**$$serializer { *; }
--keepclassmembers class com.arkdo.android.data.** {
+-keep,includedescriptorclasses class com.jetdo.android.data.**$$serializer { *; }
+-keepclassmembers class com.jetdo.android.data.** {
     *** Companion;
 }
--keepclasseswithmembers class com.arkdo.android.data.** {
+-keepclasseswithmembers class com.jetdo.android.data.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 

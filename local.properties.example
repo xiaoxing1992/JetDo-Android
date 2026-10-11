@@ -5,8 +5,8 @@
 sdk.dir=/path/to/Android/sdk
 
 # Signing configuration (for release builds)
-# Generate keystore with: keytool -genkey -v -keystore arkdo.jks -keyalg RSA -keysize 2048 -validity 10000 -alias arkdo
-KEYSTORE_FILE=/path/to/arkdo.jks
+# Generate keystore with: keytool -genkey -v -keystore jetdo.jks -keyalg RSA -keysize 2048 -validity 10000 -alias jetdo
+KEYSTORE_FILE=/path/to/jetdo.jks
 KEYSTORE_PASSWORD=your_keystore_password
-KEY_ALIAS=arkdo
+KEY_ALIAS=jetdo
 KEY_PASSWORD=your_key_password

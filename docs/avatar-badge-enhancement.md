@@ -171,18 +171,18 @@ data class User(
 ## 文件清单
 
 ### 新增文件
-- `app/src/main/kotlin/com/arkdo/android/ui/components/TagIconRegistry.kt` - 标签图标注册表
+- `app/src/main/kotlin/com/jetdo/android/ui/components/TagIconRegistry.kt` - 标签图标注册表
 - `app/src/main/assets/tag-icons.json` - 图标映射配置（60+ 标签）
 - `docs/avatar-badge-enhancement.md` - 本文档
 
 ### 修改文件
-- `app/src/main/kotlin/com/arkdo/android/ui/components/UserAvatar.kt`
+- `app/src/main/kotlin/com/jetdo/android/ui/components/UserAvatar.kt`
   - 添加形状差异化逻辑
   - 添加 FlairBadge 组件
   - 支持动态头像优先级
-- `app/src/main/kotlin/com/arkdo/android/ui/components/TopicMetadataBadges.kt`
+- `app/src/main/kotlin/com/jetdo/android/ui/components/TopicMetadataBadges.kt`
   - TagBadge 支持图标和颜色
-- `app/src/main/kotlin/com/arkdo/android/data/models/User.kt`
+- `app/src/main/kotlin/com/jetdo/android/data/models/User.kt`
   - 扩展 4 个新字段
 
 ## 使用示例

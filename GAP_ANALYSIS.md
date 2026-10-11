@@ -1,4 +1,4 @@
-# ArkDO-Android 功能缺口分析
+# JetDo-Android 功能缺口分析
 
 > 对标对象：鸿蒙版 JetDo（ArkTS · main@`7680996` · 28 页面 / 47 组件 / 25 服务子域）
 > 本项目：`feat/migrate-vertical-slice` @ `b731be8`（工作区干净，零未提交改动）
@@ -154,7 +154,7 @@
 ```bash
 # ── 结构对比 ──
 ls entry/src/main/ets/services/                    # 鸿蒙 25 子域
-ls app/src/main/kotlin/com/arkdo/android/services/ # Android 20 + core/data 2 + feature/home 1
+ls app/src/main/kotlin/com/jetdo/android/services/ # Android 20 + core/data 2 + feature/home 1
 ls /Users/tongtong/JetDo/entry/src/main/ets/views/pages/ | wc -l   # 28 页
 
 # ── 判据 D：路由常量 vs 注册 ──
@@ -165,7 +165,7 @@ grep -nE "uses-permission|scheme=" app/src/main/AndroidManifest.xml
 rg -n "checkSelfPermission" -g '*.kt'             # 存储权限声明已删（M1 完成），应零命中
 
 # ── 判据 B：解析了但没消费 ──
-rg -n "mediaType|unsupportedKind" -g '*.kt' app/src/main/kotlin/com/arkdo/android/ui   # 已全删（组4 完成），应 0 命中
+rg -n "mediaType|unsupportedKind" -g '*.kt' app/src/main/kotlin/com/jetdo/android/ui   # 已全删（组4 完成），应 0 命中
 rg -n "quotePostNumber|quoteTopicId|quoteIsReply" -g '*.kt'  # 应命中 PostRichContent（已消费）
 
 # ── 判据 C：零调用方 ──

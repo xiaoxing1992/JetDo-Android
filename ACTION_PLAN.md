@@ -25,8 +25,8 @@
 
 ```bash
 # 重启应用
-adb shell am force-stop com.arkdo.android.debug
-adb shell monkey -p com.arkdo.android.debug -c android.intent.category.LAUNCHER 1
+adb shell am force-stop com.jetdo.android.debug
+adb shell monkey -p com.jetdo.android.debug -c android.intent.category.LAUNCHER 1
 
 # 查看日志（等待10秒后执行）
 sleep 10 && adb logcat -d | grep -E "JetDo.*onPageFinished|JetDo.*Bridge ready" | tail -5
@@ -100,7 +100,7 @@ I ArkWebHost: ✅ Bridge ready! Notifying onReady()
 | 项目 | 架构 | DNS 方案 | 用户体验 |
 |------|------|----------|----------|
 | **fluxdo** | Flutter WebView 容器 | 内置本地 DoH 代理 | 开箱即用 |
-| **ArkDO-Android** | 原生 Compose + WebView 桥 | 引导用户配置 Private DNS | 需手动配置 |
+| **JetDo-Android** | 原生 Compose + WebView 桥 | 引导用户配置 Private DNS | 需手动配置 |
 
 **为什么不同？**
 - fluxdo 的首页**就是** WebView，所以值得投入精力实现本地代理

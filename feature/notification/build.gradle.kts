@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.arkdo.android.feature.notification"
+    namespace = "com.jetdo.android.feature.notification"
     compileSdk = 37
 
     defaultConfig { minSdk = 26 }
