@@ -138,13 +138,13 @@ fun formatRelativeTime(timestamp: String): String {
 ## 修改的文件
 
 1. **新增组件**
-   - `app/src/main/kotlin/com/arkdo/android/ui/components/UserAvatar.kt`
-   - `app/src/main/kotlin/com/arkdo/android/ui/components/TopicMetadataBadge.kt`
-   - `app/src/main/kotlin/com/arkdo/android/ui/components/EnhancedTopicListItem.kt`
-   - `app/src/main/kotlin/com/arkdo/android/utils/TimeUtils.kt`
+   - `app/src/main/kotlin/com/jetdo/android/ui/components/UserAvatar.kt`
+   - `app/src/main/kotlin/com/jetdo/android/ui/components/TopicMetadataBadge.kt`
+   - `app/src/main/kotlin/com/jetdo/android/ui/components/EnhancedTopicListItem.kt`
+   - `app/src/main/kotlin/com/jetdo/android/utils/TimeUtils.kt`
 
 2. **修改文件**
-   - `app/src/main/kotlin/com/arkdo/android/ui/home/HomeScreen.kt` - 集成新组件
+   - `app/src/main/kotlin/com/jetdo/android/ui/home/HomeScreen.kt` - 集成新组件
 
 ## 依赖项
 

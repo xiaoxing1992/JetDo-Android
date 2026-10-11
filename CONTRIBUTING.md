@@ -6,8 +6,8 @@
 
 1. **克隆仓库**
    ```bash
-   git clone https://github.com/your-username/ArkDO-Android.git
-   cd ArkDO-Android
+   git clone https://github.com/your-username/JetDo-Android.git
+   cd JetDo-Android
    ```
 
 2. **安装依赖**

@@ -28,7 +28,7 @@
 ## 🚀 快速开始
 
 ```bash
-cd ArkDO-Android
+cd JetDo-Android
 
 # 配置环境
 cp local.properties.example local.properties
@@ -44,7 +44,7 @@ cp local.properties.example local.properties
 ## 📁 项目结构
 
 ```
-ArkDO-Android/
+JetDo-Android/
 ├── app/                      # Android 应用模块
 │   ├── src/main/kotlin/      # Kotlin 源码
 │   │   ├── ui/               # UI 层（Compose）

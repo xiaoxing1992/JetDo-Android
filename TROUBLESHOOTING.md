@@ -75,7 +75,7 @@ E ArkWebHost: ❌ Timeout: canFetch() still false after 30s
 - 应用本身就是一个 WebView 容器
 - 本地运行 DoH 代理服务器，WebView 通过代理访问
 
-### ArkDO-Android（原生 Kotlin）
+### JetDo-Android（原生 Kotlin）
 - 使用隐藏的 1x1 WebView 作为网络桥接
 - 所有网络请求通过 WebView 执行 JS fetch
 - 主界面是原生 Jetpack Compose UI

@@ -88,10 +88,10 @@
 ## 目录结构
 
 ```
-ArkDO-Android/
+JetDo-Android/
 ├── app/
 │   ├── src/main/
-│   │   ├── kotlin/com/arkdo/android/
+│   │   ├── kotlin/com/jetdo/android/
 │   │   │   ├── JetDoApplication.kt              # 应用入口
 │   │   │   ├── MainActivity.kt                  # 主 Activity
 │   │   │   ├── common/                          # 通用工具（待扩展）
@@ -263,7 +263,7 @@ LINUX DO ──Web Push（加密）──▶ 自建中继 ──解密──▶ 
 ```bash
 # 克隆仓库
 git clone <repo-url>
-cd ArkDO-Android
+cd JetDo-Android
 
 # 配置本地环境
 cp local.properties.example local.properties

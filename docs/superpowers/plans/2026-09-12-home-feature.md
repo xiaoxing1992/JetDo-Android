@@ -13,15 +13,15 @@
 ## Global Constraints
 
 - 不改变现有 `/latest.json`、`/hot.json`、`/unread.json` 请求和分页语义。
-- feature 模块不得引用 `com.arkdo.android.services`、`ui`、`data.models` 或 `app` 包。
+- feature 模块不得引用 `com.jetdo.android.services`、`ui`、`data.models` 或 `app` 包。
 - 本轮不迁移分类抽屉、实时新话题和 TopicDetail。
 - 新行为先写失败测试，再写生产实现。
 
 ### Task 1: 提取首页稳定模型
 
 **Files:**
-- Create: `core/model/src/main/kotlin/com/arkdo/android/core/model/HomeModels.kt`
-- Create: `core/model/src/test/kotlin/com/arkdo/android/core/model/HomeModelsTest.kt`
+- Create: `core/model/src/main/kotlin/com/jetdo/android/core/model/HomeModels.kt`
+- Create: `core/model/src/test/kotlin/com/jetdo/android/core/model/HomeModelsTest.kt`
 
 - [x] Write tests for query feed values, `copy`, and topic page model.
 - [x] Run `./gradlew :core:model:testDebugUnitTest` and verify the new type failure.
@@ -31,8 +31,8 @@
 ### Task 2: Add Repository contract and app adapter
 
 **Files:**
-- Create: `core/data/src/main/kotlin/com/arkdo/android/core/data/home/HomeRepository.kt`
-- Create: `app/src/main/kotlin/com/arkdo/android/di/HomeModule.kt`
+- Create: `core/data/src/main/kotlin/com/jetdo/android/core/data/home/HomeRepository.kt`
+- Create: `app/src/main/kotlin/com/jetdo/android/di/HomeModule.kt`
 
 - [x] Write repository contract tests with a fake client boundary.
 - [x] Run the focused data test and verify failure before implementation.
@@ -44,10 +44,10 @@
 
 **Files:**
 - Create: `feature/home/build.gradle.kts`
-- Create: `feature/home/src/main/kotlin/com/arkdo/android/feature/home/HomeViewModel.kt`
-- Create: `feature/home/src/main/kotlin/com/arkdo/android/feature/home/HomeRoute.kt`
-- Create: `feature/home/src/main/kotlin/com/arkdo/android/feature/home/HomeScreen.kt`
-- Create: `feature/home/src/test/kotlin/com/arkdo/android/feature/home/HomeViewModelTest.kt`
+- Create: `feature/home/src/main/kotlin/com/jetdo/android/feature/home/HomeViewModel.kt`
+- Create: `feature/home/src/main/kotlin/com/jetdo/android/feature/home/HomeRoute.kt`
+- Create: `feature/home/src/main/kotlin/com/jetdo/android/feature/home/HomeScreen.kt`
+- Create: `feature/home/src/test/kotlin/com/jetdo/android/feature/home/HomeViewModelTest.kt`
 - Modify: `settings.gradle.kts`, `app/build.gradle.kts`
 
 - [x] Write failing ViewModel tests for load, refresh, append and deduplication.
@@ -59,8 +59,8 @@
 ### Task 4: Wire RootTab compatibility entry
 
 **Files:**
-- Create: `app/src/main/kotlin/com/arkdo/android/ui/home/HomeFeatureScreen.kt`
-- Modify: `app/src/main/kotlin/com/arkdo/android/ui/screens/RootTabScreen.kt`
+- Create: `app/src/main/kotlin/com/jetdo/android/ui/home/HomeFeatureScreen.kt`
+- Modify: `app/src/main/kotlin/com/jetdo/android/ui/screens/RootTabScreen.kt`
 
 - [x] Keep app navigation callbacks and login/profile actions in the compatibility entry.
 - [ ] Route the core home list through `HomeRoute` after visual parity verification.

@@ -311,14 +311,14 @@ UserAvatar(
 ## 修改的文件
 
 **增强**
-- `app/src/main/kotlin/com/arkdo/android/ui/components/UserAvatar.kt`
+- `app/src/main/kotlin/com/jetdo/android/ui/components/UserAvatar.kt`
   - 新增 `isSquare` 参数（形状控制）
   - 新增 `showFlair` 参数（徽章显示）
   - 新增 `FlairBadge` 组件（徽章渲染）
   - 优先使用 `animatedAvatar`（动态头像）
   - 新增 `parseColor()` 辅助函数
 
-- `app/src/main/kotlin/com/arkdo/android/ui/components/TopicListItem.kt`
+- `app/src/main/kotlin/com/jetdo/android/ui/components/TopicListItem.kt`
   - 新增 `shouldUseSquareAvatar()` 判断逻辑
   - UserAvatar 调用传递 `isSquare` 和 `showFlair`
 

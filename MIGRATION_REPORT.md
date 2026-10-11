@@ -1,4 +1,4 @@
-# ArkDO-Android 垂直切片迁移报告
+# JetDo-Android 垂直切片迁移报告
 
 ## 迁移概览
 从 HarmonyOS (ArkTS) 到 Android (Kotlin + Jetpack Compose) 的核心功能垂直切片迁移已完成。

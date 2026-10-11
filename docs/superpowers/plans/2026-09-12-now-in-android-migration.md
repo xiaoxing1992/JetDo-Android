@@ -77,19 +77,19 @@ Expected: all seven modules are listed and configuration exits with code 0.
 ### Task 2: Extract stable model and network contracts
 
 **Files:**
-- Create: `core/model/src/main/kotlin/com/arkdo/android/core/model/NotificationItem.kt`
-- Create: `core/network/src/main/kotlin/com/arkdo/android/core/network/NetworkTypes.kt`
-- Modify: `app/src/main/kotlin/com/arkdo/android/services/network/NetworkTypes.kt`
+- Create: `core/model/src/main/kotlin/com/jetdo/android/core/model/NotificationItem.kt`
+- Create: `core/network/src/main/kotlin/com/jetdo/android/core/network/NetworkTypes.kt`
+- Modify: `app/src/main/kotlin/com/jetdo/android/services/network/NetworkTypes.kt`
 - Modify: `gradle/libs.versions.toml` only if the module test dependency aliases are missing
 
 **Interfaces:**
-- Produces `com.arkdo.android.core.model.NotificationItem` with the existing notification display fields.
-- Produces `com.arkdo.android.core.network.JsonNetworkClient` with the existing request methods and `NetworkResult`/`NetworkError` types.
+- Produces `com.jetdo.android.core.model.NotificationItem` with the existing notification display fields.
+- Produces `com.jetdo.android.core.network.JsonNetworkClient` with the existing request methods and `NetworkResult`/`NetworkError` types.
 - The app's old `services.network` package remains source-compatible as a parallel legacy contract; the new notification slice uses the canonical `core:network` contract through an app-local adapter.
 
 - [x] **Step 1: Write model compatibility tests**
 
-Add `core/model/src/test/kotlin/com/arkdo/android/core/model/NotificationItemTest.kt` with a test that constructs a notification item and verifies `copy(read = true)` changes only the read field.
+Add `core/model/src/test/kotlin/com/jetdo/android/core/model/NotificationItemTest.kt` with a test that constructs a notification item and verifies `copy(read = true)` changes only the read field.
 
 - [x] **Step 2: Run the model test to verify the missing module fails**
 
@@ -112,10 +112,10 @@ Expected: the model test passes and all existing app services compile through th
 ### Task 3: Add the notification Repository contract and implementation
 
 **Files:**
-- Create: `core/data/src/main/kotlin/com/arkdo/android/core/data/notification/NotificationRepository.kt`
-- Create: `core/data/src/main/kotlin/com/arkdo/android/core/data/notification/DefaultNotificationRepository.kt`
-- Create: `core/data/src/test/kotlin/com/arkdo/android/core/data/notification/DefaultNotificationRepositoryTest.kt`
-- Create: `core/data/src/test/kotlin/com/arkdo/android/core/data/notification/FakeJsonNetworkClient.kt`
+- Create: `core/data/src/main/kotlin/com/jetdo/android/core/data/notification/NotificationRepository.kt`
+- Create: `core/data/src/main/kotlin/com/jetdo/android/core/data/notification/DefaultNotificationRepository.kt`
+- Create: `core/data/src/test/kotlin/com/jetdo/android/core/data/notification/DefaultNotificationRepositoryTest.kt`
+- Create: `core/data/src/test/kotlin/com/jetdo/android/core/data/notification/FakeJsonNetworkClient.kt`
 
 **Interfaces:**
 
@@ -170,10 +170,10 @@ Expected: all repository tests pass.
 ### Task 4: Move notification state and ViewModel to `feature:notification`
 
 **Files:**
-- Create: `feature/notification/src/main/kotlin/com/arkdo/android/feature/notification/NotificationViewModel.kt`
-- Create: `feature/notification/src/test/kotlin/com/arkdo/android/feature/notification/NotificationViewModelTest.kt`
-- Create: `feature/notification/src/test/kotlin/com/arkdo/android/feature/notification/FakeNotificationRepository.kt`
-- Delete: `app/src/main/kotlin/com/arkdo/android/ui/notification/NotificationViewModel.kt`
+- Create: `feature/notification/src/main/kotlin/com/jetdo/android/feature/notification/NotificationViewModel.kt`
+- Create: `feature/notification/src/test/kotlin/com/jetdo/android/feature/notification/NotificationViewModelTest.kt`
+- Create: `feature/notification/src/test/kotlin/com/jetdo/android/feature/notification/FakeNotificationRepository.kt`
+- Delete: `app/src/main/kotlin/com/jetdo/android/ui/notification/NotificationViewModel.kt`
 
 **Interfaces:**
 
@@ -220,12 +220,12 @@ Expected: all ViewModel tests pass.
 ### Task 5: Move notification Compose UI and expose an app adapter
 
 **Files:**
-- Create: `core/common/src/main/kotlin/com/arkdo/android/core/common/RelativeTime.kt`
-- Create: `core/designsystem/src/main/kotlin/com/arkdo/android/core/designsystem/FaIcon.kt`
-- Create: `core/designsystem/src/main/kotlin/com/arkdo/android/core/designsystem/NotificationAvatar.kt`
-- Create: `feature/notification/src/main/kotlin/com/arkdo/android/feature/notification/NotificationScreen.kt`
-- Create: `feature/notification/src/main/kotlin/com/arkdo/android/feature/notification/NotificationRoute.kt`
-- Replace: `app/src/main/kotlin/com/arkdo/android/ui/notification/NotificationScreen.kt` with a thin compatibility wrapper
+- Create: `core/common/src/main/kotlin/com/jetdo/android/core/common/RelativeTime.kt`
+- Create: `core/designsystem/src/main/kotlin/com/jetdo/android/core/designsystem/FaIcon.kt`
+- Create: `core/designsystem/src/main/kotlin/com/jetdo/android/core/designsystem/NotificationAvatar.kt`
+- Create: `feature/notification/src/main/kotlin/com/jetdo/android/feature/notification/NotificationScreen.kt`
+- Create: `feature/notification/src/main/kotlin/com/jetdo/android/feature/notification/NotificationRoute.kt`
+- Replace: `app/src/main/kotlin/com/jetdo/android/ui/notification/NotificationScreen.kt` with a thin compatibility wrapper
 
 **Interfaces:**
 
@@ -267,10 +267,10 @@ Expected: tests pass and the feature compiles without an `app` dependency.
 ### Task 6: Wire Hilt, app navigation, and compatibility boundaries
 
 **Files:**
-- Modify: `app/src/main/kotlin/com/arkdo/android/di/AppModule.kt`
-- Create: `app/src/main/kotlin/com/arkdo/android/di/NotificationModule.kt`
-- Modify: `app/src/main/kotlin/com/arkdo/android/ui/screens/RootTabScreen.kt` only if the compatibility wrapper signature requires it
-- Modify: `app/src/main/kotlin/com/arkdo/android/ui/notification/NotificationScreen.kt`
+- Modify: `app/src/main/kotlin/com/jetdo/android/di/AppModule.kt`
+- Create: `app/src/main/kotlin/com/jetdo/android/di/NotificationModule.kt`
+- Modify: `app/src/main/kotlin/com/jetdo/android/ui/screens/RootTabScreen.kt` only if the compatibility wrapper signature requires it
+- Modify: `app/src/main/kotlin/com/jetdo/android/ui/notification/NotificationScreen.kt`
 - Modify: `app/build.gradle.kts`
 
 **Interfaces:**
@@ -331,7 +331,7 @@ Expected: exit code 0 and a debug APK is produced.
 
 - [x] **Step 4: Verify the diff and architecture constraints**
 
-Run: `git diff --check`; `rg -n "com\.arkdo\.android\.(services|ui|data)" feature/notification core/data core/model core/network core/designsystem core/common`; `git status --short`.
+Run: `git diff --check`; `rg -n "com\.jetdo\.android\.(services|ui|data)" feature/notification core/data core/model core/network core/designsystem core/common`; `git status --short`.
 
 Expected: no whitespace errors; feature/core modules contain no imports from the old app-only packages; existing unrelated modifications remain present.
 
@@ -340,6 +340,6 @@ Expected: no whitespace errors; feature/core modules contain no imports from the
 Stage the new modules, migrated notification files, docs, and Gradle changes. Do not stage pre-existing modified files unless they are explicitly part of the migration diff. Commit with:
 
 ```bash
-git add settings.gradle.kts build.gradle.kts gradle/libs.versions.toml core feature app/build.gradle.kts app/src/main/kotlin/com/arkdo/android/di app/src/main/kotlin/com/arkdo/android/ui/notification ARCHITECTURE.md MIGRATION_REPORT.md docs/superpowers
+git add settings.gradle.kts build.gradle.kts gradle/libs.versions.toml core feature app/build.gradle.kts app/src/main/kotlin/com/jetdo/android/di app/src/main/kotlin/com/jetdo/android/ui/notification ARCHITECTURE.md MIGRATION_REPORT.md docs/superpowers
 git commit -m "refactor: migrate notification to modular architecture"
 ```

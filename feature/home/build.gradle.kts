@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.arkdo.android.feature.home"
+    namespace = "com.jetdo.android.feature.home"
     compileSdk = 37
 
     defaultConfig { minSdk = 26 }

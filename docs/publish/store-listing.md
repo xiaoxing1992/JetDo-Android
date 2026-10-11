@@ -7,7 +7,7 @@
 | 项 | 内容 |
 |---|---|
 | 应用名 | JetDo |
-| 包名 | com.arkdo.android |
+| 包名 | com.jetdo.android |
 | 当前版本 | 1.0.1 (versionCode 2) |
 | 分类 | 社交 / 通讯类（论坛阅读）或「阅读」 |
 | 标签 | LINUX DO、论坛、社区、Discourse |

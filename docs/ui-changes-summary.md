@@ -14,7 +14,7 @@
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 或者清除数据重装
-adb uninstall com.arkdo.android
+adb uninstall com.jetdo.android
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -132,7 +132,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 1. **缓存问题**: 清除应用数据重装
    ```bash
-   adb shell pm clear com.arkdo.android
+   adb shell pm clear com.jetdo.android
    adb install app/build/outputs/apk/debug/app-debug.apk
    ```
 

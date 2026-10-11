@@ -62,7 +62,7 @@ JetDo Android 是 LINUX DO 社区的**非官方**第三方客户端，基于 Har
 ### WebView 网络桥
 LINUX DO 有 Cloudflare 防护，原生 HTTP 栈发的请求会被拦。使用常驻隐藏 WebView 承载会话，所有接口请求都注入 JS 用浏览器侧的 `fetch` 发出，Cookie（`_t` / `cf_clearance`）由 WebView 自己管，JSON 回传给 Compose 渲染成原生界面。
 
-> 核心文件：`app/src/main/kotlin/com/arkdo/android/services/network/ArkWebNetworkBridge.kt`
+> 核心文件：`app/src/main/kotlin/com/jetdo/android/services/network/ArkWebNetworkBridge.kt`
 
 ### Cloudflare 挑战的静默恢复
 遇到挑战时先在后台重载宿主页，让挑战脚本自己跑通，每 2 秒用 `/latest.json` 探测是否放行；~12 秒还不通才弹出可见页面让用户手动点一下。
@@ -77,7 +77,7 @@ LINUX DO 有 Cloudflare 防护，原生 HTTP 栈发的请求会被拦。使用�
 ### 头像与静态图
 头像与正文图片统一走 Coil 加载，配磁盘缓存；失效图床有 host 黑名单兜底——同一域名连续两张图网络层失败即拉黑不再重试，避免刷列表时反复撞死链。
 
-> 核心文件：`app/src/main/kotlin/com/arkdo/android/services/network/BlockedImageHosts.kt`
+> 核心文件：`app/src/main/kotlin/com/jetdo/android/services/network/BlockedImageHosts.kt`
 
 ### 数学公式
 Discourse 的裸 LaTeX 交给离屏 WebView 跑 MathJax 出 SVG，转成 Bitmap 供 Compose 使用。

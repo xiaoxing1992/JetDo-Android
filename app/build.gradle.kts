@@ -22,11 +22,11 @@ kotlin {
 }
 
 android {
-    namespace = "com.arkdo.android"
+    namespace = "com.jetdo.android"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.arkdo.android"
+        applicationId = "com.jetdo.android"
         minSdk = 26
         targetSdk = 37
         versionCode = 2

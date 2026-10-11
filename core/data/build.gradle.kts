@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.arkdo.android.core.data"
+    namespace = "com.jetdo.android.core.data"
     compileSdk = 37
 
     defaultConfig { minSdk = 26 }

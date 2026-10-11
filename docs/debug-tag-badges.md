@@ -150,7 +150,7 @@ if (iconStyle != null) {
 
 ## 相关文件
 
-- `/app/src/main/kotlin/com/arkdo/android/services/topic/TopicService.kt:439-445` - 数据层日志
-- `/app/src/main/kotlin/com/arkdo/android/ui/home/components/TopicMetadataBadges.kt:47-52` - 组件层日志
-- `/app/src/main/kotlin/com/arkdo/android/ui/home/components/TopicMetadataBadges.kt:147` - 渲染层日志
+- `/app/src/main/kotlin/com/jetdo/android/services/topic/TopicService.kt:439-445` - 数据层日志
+- `/app/src/main/kotlin/com/jetdo/android/ui/home/components/TopicMetadataBadges.kt:47-52` - 组件层日志
+- `/app/src/main/kotlin/com/jetdo/android/ui/home/components/TopicMetadataBadges.kt:147` - 渲染层日志
 - `/app/src/main/res/raw/linuxdo_tag_icons.json` - 图标配置文件
