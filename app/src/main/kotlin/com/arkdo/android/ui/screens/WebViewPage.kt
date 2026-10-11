@@ -87,7 +87,7 @@ import timber.log.Timber
 //  · 返回:网页可回退时先退一级,无历史才退出本页。
 // ==========================================================================
 
-private const val LOG_TAG = "[ArkDO][WebViewPage]"
+private const val LOG_TAG = "[JetDo][WebViewPage]"
 
 /**
  * Box 内叠层的淡入淡出容器。

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme（浅色档；深色档资源级覆盖见 values-night/themes.xml） -->
-    <style name="Theme.ArkDO" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.JetDo" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Enable edge-to-edge -->
         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
@@ -14,16 +14,16 @@
 
     <!-- 首启冷启动闪屏（MainActivity 专用）：core-splashscreen 兼容主题。
          API 31+ 走系统 splash，26-30 由库自绘同款；背景沿用 window_background
-         （自动日夜切换），图标即 App 图标；收起后无缝切回 Theme.ArkDO。
+         （自动日夜切换），图标即 App 图标；收起后无缝切回 Theme.JetDo。
          MainActivity 用 setKeepOnScreenCondition 把闪屏保持到「隐私同意落定」，
          隐私弹窗（独立窗口）悬浮其上——先同意后进产品的合规形态。 -->
-    <style name="Theme.ArkDO.Splash" parent="Theme.SplashScreen">
+    <style name="Theme.JetDo.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/window_background</item>
         <!-- 必须用 adaptive 复合图标（@mipmap）：其背景层与闪屏底同色
              （ic_launcher_background == window_background，日夜各档），
              ROM 的方形图标卡取背景层颜色 → 与底融为一体不可见。
              不能换纯位图：ROM 对无背景层的图标画默认色卡片（黑块）。 -->
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-        <item name="postSplashScreenTheme">@style/Theme.ArkDO</item>
+        <item name="postSplashScreenTheme">@style/Theme.JetDo</item>
     </style>
 </resources>

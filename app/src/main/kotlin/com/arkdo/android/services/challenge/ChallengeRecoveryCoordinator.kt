@@ -54,14 +54,14 @@ class ChallengeRecoveryCoordinator(
     /** 收到挑战信号：仅 IDLE 开始一轮恢复；其余状态一律吞掉。 */
     fun handleChallengeSignal(source: String) {
         if (state != ChallengeRecoveryState.IDLE) {
-            Timber.i("[ArkDO][Challenge] handleChallengeSignal ignored state=%s source=%s", state, source)
+            Timber.i("[JetDo][Challenge] handleChallengeSignal ignored state=%s source=%s", state, source)
             return
         }
         startRecovery(source)
     }
 
     private fun startRecovery(source: String) {
-        Timber.i("[ArkDO][Challenge] startRecovery source=%s", source)
+        Timber.i("[JetDo][Challenge] startRecovery source=%s", source)
         setState(ChallengeRecoveryState.RESOLVING)
         pollCount = 0
         beginWindow()
@@ -93,9 +93,9 @@ class ChallengeRecoveryCoordinator(
                 return
             }
             pollCount++
-            Timber.i("[ArkDO][Challenge] probe pollCount=%d not resolved", pollCount)
+            Timber.i("[JetDo][Challenge] probe pollCount=%d not resolved", pollCount)
             if (pollCount == RELOAD_RETRY_AT_POLL) {
-                Timber.i("[ArkDO][Challenge] reloadHost attempt2")
+                Timber.i("[JetDo][Challenge] reloadHost attempt2")
                 ArkWebNetworkBridge.reloadHost()
             } else if (pollCount >= MAX_POLL) {
                 escalate()
@@ -106,7 +106,7 @@ class ChallengeRecoveryCoordinator(
     }
 
     private fun resolvedSilently() {
-        Timber.i("[ArkDO][Challenge] resolved silently")
+        Timber.i("[JetDo][Challenge] resolved silently")
         pollJob?.cancel()
         pollJob = null
         onRecovered()
@@ -115,7 +115,7 @@ class ChallengeRecoveryCoordinator(
 
     /** 升级到交互弹窗。 */
     private fun escalate() {
-        Timber.i("[ArkDO][Challenge] escalate")
+        Timber.i("[JetDo][Challenge] escalate")
         pollJob?.cancel()
         pollJob = null
         cooldownJob?.cancel()
@@ -152,7 +152,7 @@ class ChallengeRecoveryCoordinator(
     /** 弹窗验证成功：onRecovered + enterCooldown。 */
     fun notifySheetResolved() {
         if (state != ChallengeRecoveryState.AWAITING_SHEET) return
-        Timber.i("[ArkDO][Challenge] sheet resolved")
+        Timber.i("[JetDo][Challenge] sheet resolved")
         onRecovered()
         enterCooldown()
     }
@@ -163,7 +163,7 @@ class ChallengeRecoveryCoordinator(
      */
     fun notifySheetDismissed() {
         if (state != ChallengeRecoveryState.AWAITING_SHEET) return
-        Timber.i("[ArkDO][Challenge] sheet dismissed")
+        Timber.i("[JetDo][Challenge] sheet dismissed")
         endWindow()
         pollJob?.cancel()
         pollJob = null
@@ -179,7 +179,7 @@ class ChallengeRecoveryCoordinator(
     /** 首页手动验证：停后台轮询直接升级弹窗。COOLDOWN/AWAITING_SHEET 拒绝。 */
     fun forceEscalate(): Boolean {
         if (state == ChallengeRecoveryState.COOLDOWN || state == ChallengeRecoveryState.AWAITING_SHEET) {
-            Timber.i("[ArkDO][Challenge] forceEscalate rejected state=%s", state)
+            Timber.i("[JetDo][Challenge] forceEscalate rejected state=%s", state)
             return false
         }
         escalate()
@@ -188,7 +188,7 @@ class ChallengeRecoveryCoordinator(
 
     /** 放弃/销毁也算窗口结束，防窗口泄漏。 */
     fun dispose() {
-        Timber.i("[ArkDO][Challenge] dispose")
+        Timber.i("[JetDo][Challenge] dispose")
         pollJob?.cancel()
         pollJob = null
         cooldownJob?.cancel()

@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.sp
 /**
  * 布局度量 token —— 与 HarmonyOS 版 common/theme/Metrics.ets 对齐。
  */
-object ArkDoMetrics {
+object JetDoMetrics {
     // 卡片四件套
     val PageMargin = 12.dp
     val CardRadius = 16.dp
@@ -17,7 +17,7 @@ object ArkDoMetrics {
 /**
  * 字号 token（全项目 392 处 fontSize 归纳出的九档标准）
  */
-object ArkDoFontSizes {
+object JetDoFontSizes {
     val Title = 20.sp          // 大标题
     val Subtitle = 18.sp       // 小节标题
     val BodyLarge = 17.sp      // 强调正文

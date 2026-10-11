@@ -167,7 +167,7 @@ private fun BoxCenter(content: @Composable () -> Unit) {
 @Composable
 private fun BadgeGroup(group: UserBadgeGroup, onTap: (UserBadgeItem) -> Unit) {
     // 分组标题:等级色圆点 8 + 「金牌 · N」15 Bold。
-    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isJetDoInDarkTheme()
     val dot = when (group.typeId) {
         1 -> if (isDark) Color(0xFFE0B84C) else Color(0xFFD4A017)
         2 -> if (isDark) Color(0xFF9AA6B8) else Color(0xFF9EA7AD)
@@ -214,7 +214,7 @@ private fun androidx.compose.foundation.layout.RowScope.BadgeTileInRow(
     badge: UserBadgeItem,
     onClick: () -> Unit
 ) {
-    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isJetDoInDarkTheme()
     val gold = if (isDark) Color(0xFFE0B84C) else Color(0xFFD4A017)
     val silver = if (isDark) Color(0xFF9AA6B8) else Color(0xFF9EA7AD)
     val bronze = if (isDark) Color(0xFFC89066) else Color(0xFFB87333)
@@ -257,7 +257,7 @@ private fun androidx.compose.foundation.layout.RowScope.BadgeTileInRow(
 
 @Composable
 private fun BadgeLarge(badge: UserBadgeItem) {
-    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isJetDoInDarkTheme()
     val c = when (badge.badgeTypeId) { 1 -> if (isDark) Color(0xFFE0B84C) else Color(0xFFD4A017); 2 -> if (isDark) Color(0xFF9AA6B8) else Color(0xFF9EA7AD); else -> if (isDark) Color(0xFFC89066) else Color(0xFFB87333) }
     Box(modifier = Modifier.height(48.dp), contentAlignment = Alignment.Center) {
         if (!badge.imageUrl.isNullOrEmpty()) {

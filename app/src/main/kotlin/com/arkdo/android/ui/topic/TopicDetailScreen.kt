@@ -133,7 +133,7 @@ import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.TopicPostItem
 import com.arkdo.android.ui.components.ViewerImage
 import com.arkdo.android.ui.drafts.DraftResume
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import timber.log.Timber
 
@@ -212,7 +212,7 @@ fun TopicDetailScreen(
                 }
             }
             is LinkRoute.Download -> {
-                Timber.i("[ArkDO][LinkRouter] download url=%s", route.url)
+                Timber.i("[JetDo][LinkRouter] download url=%s", route.url)
                 // 附件下载交 host WebView 的下载委托：带 _t / cf_clearance 且跟随重定向。
                 // 宿主未就绪时退回内置 WebView，总之不进系统浏览器丢登录态。
                 if (ArkWebNetworkBridge.startDownload(route.url)) {
@@ -223,11 +223,11 @@ fun TopicDetailScreen(
                 }
             }
             is LinkRoute.User -> {
-                Timber.i("[ArkDO][LinkRouter] user=%s url=%s", route.username, route.url)
+                Timber.i("[JetDo][LinkRouter] user=%s url=%s", route.username, route.url)
                 onOpenUserProfile(route.username)
             }
             is LinkRoute.Web -> {
-                Timber.i("[ArkDO][LinkRouter] web url=%s", route.url)
+                Timber.i("[JetDo][LinkRouter] web url=%s", route.url)
                 // 站内外一律内置：站内页靠共享 Cookie 保住登录态；外站也与鸿蒙一致留在站内。
                 onOpenWeb(route.url, null)
             }
@@ -268,7 +268,7 @@ fun TopicDetailScreen(
     // contentTop 必须大于 barBottom，默认位置的内容才可能落在栏下方。
     remember(headerHeight) {
         Timber.i(
-            "[ArkDO][DetailHeader] statusBar=%s barBottom=%s contentTop=%s",
+            "[JetDo][DetailHeader] statusBar=%s barBottom=%s contentTop=%s",
             statusBarHeight, headerHeight, headerHeight + contentTopGap
         )
     }
@@ -717,7 +717,7 @@ fun TopicDetailScreen(
                     .border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape)
                     .clickable(onClick = viewModel::openComposerForTopic)
             ) {
-                FaIcon("comment", ArkdoFixedColors.BrandBlue, 22.dp)
+                FaIcon("comment", JetDoFixedColors.BrandBlue, 22.dp)
             }
         }
     }

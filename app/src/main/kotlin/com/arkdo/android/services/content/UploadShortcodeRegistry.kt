@@ -58,10 +58,10 @@ object UploadShortcodeRegistry {
                     }
                 }
                 loaded = true
-                Timber.i("[ArkDO][Upload] 短码映射载入 size=%d", map.size)
+                Timber.i("[JetDo][Upload] 短码映射载入 size=%d", map.size)
             }.onFailure {
                 loaded = true
-                Timber.i("[ArkDO][Upload] 短码映射载入失败 msg=%s", it.message)
+                Timber.i("[JetDo][Upload] 短码映射载入失败 msg=%s", it.message)
             }
         }
     }
@@ -107,7 +107,7 @@ object UploadShortcodeRegistry {
             val blob = map.entries.joinToString(SEP_ENTRY.toString()) { "${it.key}$SEP_PAIR${it.value}" }
             p.edit().putString(KEY_ENTRIES, blob).apply()
         }.onFailure {
-            Timber.i("[ArkDO][Upload] 短码映射落盘失败 msg=%s", it.message)
+            Timber.i("[JetDo][Upload] 短码映射落盘失败 msg=%s", it.message)
         }
     }
 }

@@ -5,15 +5,15 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * 鸿蒙版语义色 token，逐条对齐 /Users/tongtong/ArkDO 的 resources/{base,dark}/element/color.json。
+ * 鸿蒙版语义色 token，逐条对齐 /Users/tongtong/JetDo 的 resources/{base,dark}/element/color.json。
  *
  * 为什么不直接塞进 Material 的 ColorScheme：鸿蒙这套是语义命名（text_body / surface_muted /
  * border / ld_accent…），和 M3 的 onSurface / surfaceVariant / outline 不是一一对应关系。
  * 硬套过去会在某几个 token 上撞车，取色也会被 M3 的角色推导规则改写。
- * 所以单独走一条 CompositionLocal，需要像素级对齐的地方用 ArkdoColors，其余仍走 MaterialTheme。
+ * 所以单独走一条 CompositionLocal，需要像素级对齐的地方用 JetDoColors，其余仍走 MaterialTheme。
  */
 @Immutable
-data class ArkdoColorTokens(
+data class JetDoColorTokens(
     val pageBg: Color,
     val textPrimary: Color,
     val textSecondary: Color,
@@ -74,7 +74,7 @@ data class ArkdoColorTokens(
 }
 
 /** 亮色。对应鸿蒙 resources/base/element/color.json。 */
-val ArkdoLightColors = ArkdoColorTokens(
+val JetDoLightColors = JetDoColorTokens(
     pageBg = Color(0xFFFFFFFF),
     textPrimary = Color(0xFF111827),
     textSecondary = Color(0xFF6B7280),
@@ -123,7 +123,7 @@ val ArkdoLightColors = ArkdoColorTokens(
 )
 
 /** 暗色。对应鸿蒙 resources/dark/element/color.json。 */
-val ArkdoDarkColors = ArkdoColorTokens(
+val JetDoDarkColors = JetDoColorTokens(
     pageBg = Color(0xFF17191D),
     textPrimary = Color(0xFFE7E9EE),
     textSecondary = Color(0xFF9AA0AB),
@@ -170,7 +170,7 @@ val ArkdoDarkColors = ArkdoColorTokens(
 /**
  * 不随明暗翻转的字面色。鸿蒙侧同样是写死的，不走 color.json。
  */
-object ArkdoFixedColors {
+object JetDoFixedColors {
     /** 抽屉遮罩，20% 黑。 */
     val Scrim = Color(0x33000000)
 
@@ -199,10 +199,10 @@ object ArkdoFixedColors {
     val ShadowSoft = Color(0x22000000)
 }
 
-val LocalArkdoColors = staticCompositionLocalOf { ArkdoLightColors }
+val LocalJetDoColors = staticCompositionLocalOf { JetDoLightColors }
 
 /** 取当前明暗下的鸿蒙语义色。 */
-val arkdoColors: ArkdoColorTokens
+val arkdoColors: JetDoColorTokens
     @androidx.compose.runtime.Composable
     @androidx.compose.runtime.ReadOnlyComposable
-    get() = LocalArkdoColors.current
+    get() = LocalJetDoColors.current

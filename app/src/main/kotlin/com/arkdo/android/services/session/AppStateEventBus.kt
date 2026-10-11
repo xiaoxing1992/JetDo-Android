@@ -12,7 +12,7 @@ import timber.log.Timber
 // 详情页订阅用于暂停/恢复阅读计时，NotificationService 订阅用于停/起轮询表。
 // ==========================================================================
 
-const val APP_STATE_LOG_TAG = "[ArkDO][AppState]"
+const val APP_STATE_LOG_TAG = "[JetDo][AppState]"
 
 typealias AppForegroundListener = (isForeground: Boolean) -> Unit
 

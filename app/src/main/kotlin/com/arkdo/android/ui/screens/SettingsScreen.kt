@@ -193,7 +193,7 @@ fun SettingsScreen(
                 Hairline()
                 SettingRow(
                     icon = Icons.Outlined.Info,
-                    label = stringResource(R.string.about_arkdo),
+                    label = stringResource(R.string.about_jetdo),
                     value = versionLabel,
                     onClick = { showAbout = true }
                 )
@@ -406,7 +406,7 @@ private fun AboutDialog(
         containerColor = arkdoColors.surfaceCard,
         title = {
             Text(
-                "ArkDO",
+                "JetDo",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = arkdoColors.textPrimary,

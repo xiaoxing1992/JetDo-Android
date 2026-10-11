@@ -67,7 +67,7 @@ import com.arkdo.android.services.content.RichBlockType
 import com.arkdo.android.services.content.RichInlineNode
 import com.arkdo.android.services.content.RichInlineType
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.theme.isArkdoInDarkTheme
+import com.arkdo.android.ui.theme.isJetDoInDarkTheme
 import com.arkdo.android.core.designsystem.FaIcon
 import kotlinx.coroutines.launch
 
@@ -335,7 +335,7 @@ private fun QuoteBlock(
 @androidx.compose.runtime.ReadOnlyComposable
 @androidx.compose.runtime.Composable
 private fun QuoteAccent(bar: Boolean): Color {
-    val dark = isArkdoInDarkTheme()
+    val dark = isJetDoInDarkTheme()
     return if (bar) {
         if (dark) Color(0xFF454B54) else Color(0xFFC7CDD5)
     } else {
@@ -871,7 +871,7 @@ internal fun InlineText(
 ) {
     val colors = arkdoColors
     val uriHandler = LocalUriHandler.current
-    val isDark = isArkdoInDarkTheme()
+    val isDark = isJetDoInDarkTheme()
     // 行内代码：咖色字 #B45309 + 14sp 等宽，无背景色（以用户实机鸿蒙观感为准）。
     val codeColor = Color(0xFFB45309)
     val iconMutedColor = if (isDark) Color(0xFF5C626B) else Color(0xFFBDBDBD)

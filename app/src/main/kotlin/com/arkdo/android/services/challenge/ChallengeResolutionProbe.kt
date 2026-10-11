@@ -26,7 +26,7 @@ class ChallengeResolutionProbe(
      */
     suspend fun canAccessLatestJson(): Boolean {
         if (hostDocumentChallenged()) {
-            Timber.i("[ArkDO][Challenge] probe host document still challenged")
+            Timber.i("[JetDo][Challenge] probe host document still challenged")
             return false
         }
         val response = client.getJson("/latest.json", JsonRequestOptions(notifyChallenge = false))
@@ -44,7 +44,7 @@ class ChallengeResolutionProbe(
     private suspend fun hostDocumentChallenged(): Boolean = suspendCancellableCoroutine { cont ->
         val web = ArkWebNetworkBridge.peekWebView()
         if (web == null) {
-            Timber.i("[ArkDO][Challenge] probe host webview missing, treat as challenged")
+            Timber.i("[JetDo][Challenge] probe host webview missing, treat as challenged")
             cont.resume(true)
             return@suspendCancellableCoroutine
         }

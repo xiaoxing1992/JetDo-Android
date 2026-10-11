@@ -127,7 +127,7 @@ fun AudioPlayer(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            Timber.i("[ArkDO][AudioPlayer] player error code=%d msg=%s", error.errorCode, error.message)
+            Timber.i("[JetDo][AudioPlayer] player error code=%d msg=%s", error.errorCode, error.message)
             status = AudioState.ERROR
         }
     }
@@ -147,7 +147,7 @@ fun AudioPlayer(
         if (src.isEmpty()) return
         status = AudioState.LOADING
         val direct = !MediaSource.needsDownloadBridge(src)
-        Timber.i("[ArkDO][AudioPlayer] startPlayback direct=%b src=%s", direct, src)
+        Timber.i("[JetDo][AudioPlayer] startPlayback direct=%b src=%s", direct, src)
         if (direct) {
             prepareAndPlay(src, local = false)
             return
@@ -158,7 +158,7 @@ fun AudioPlayer(
                 val path = onResolveMedia(src.trim())
                 prepareAndPlay(path, local = true)
             } catch (t: Throwable) {
-                Timber.i("[ArkDO][AudioPlayer] resolve media failed msg=%s", t.message)
+                Timber.i("[JetDo][AudioPlayer] resolve media failed msg=%s", t.message)
                 status = AudioState.ERROR
             }
         }

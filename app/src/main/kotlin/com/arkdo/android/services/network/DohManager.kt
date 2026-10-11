@@ -209,5 +209,5 @@ object DohManager {
     private fun ListSerializer(): kotlinx.serialization.KSerializer<List<DohServer>> =
         kotlinx.serialization.builtins.ListSerializer(DohServer.serializer())
 
-    private const val LOG_TAG = "[ArkDO][Doh]"
+    private const val LOG_TAG = "[JetDo][Doh]"
 }

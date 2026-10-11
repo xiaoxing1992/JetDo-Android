@@ -265,7 +265,7 @@ Tier 2 的 do / don't（直接抄）：
 **已解决三项的落地要点**（细节见代码注释，这里只留判据）：
 
 - **H 展开态兜底**：`isWideLayout` 现在**不含折叠参数**，判定完全由「宽 ≥ 840 且横着」或「宽 ≥ 600 且近方形」两条尺寸路径给出。原因是实测发现系统在完全展开时可能报空特征列表（§5.2），把分栏挂在折叠信号上会让 838×945 的内屏退化成单栏。
-- **C 铰链对齐**：`FoldPosture.verticalSplitHinge()` 挑出「竖直 + 分隔 + 带位置」的铰链，`WindowBreakpoints.splitGeometry()` 把分栏线压到铰链左缘，并把铰链自身宽度作为留白返回，由 `ArkDoNavHost` 插 `Spacer` 落实。位置不合适（左栏 < 320 或右栏 < 360）时退回对半。**三折叠只取最靠左那条铰链**，第二条目前无第三栏承接。
+- **C 铰链对齐**：`FoldPosture.verticalSplitHinge()` 挑出「竖直 + 分隔 + 带位置」的铰链，`WindowBreakpoints.splitGeometry()` 把分栏线压到铰链左缘，并把铰链自身宽度作为留白返回，由 `JetDoNavHost` 插 `Spacer` 落实。位置不合适（左栏 < 320 或右栏 < 360）时退回对半。**三折叠只取最靠左那条铰链**，第二条目前无第三栏承接。
 - **E 5 档分组**：档位判定与左栏上限挂钩，`widthSizeClassOf` 与 `WIDE_THRESHOLD_DP` 共用 840 这个断点，避免出现「判成双栏但档位还是 MEDIUM」。
 
 ---
@@ -309,7 +309,7 @@ Tier 2 的 do / don't（直接抄）：
 **C**：`FoldPosture.verticalSplitHinge()` 从特征列表里挑出「竖直 + `isSeparating` + 带 `bounds`」的铰链
 （多条时取最靠左的一条），交给 `WindowBreakpoints.splitGeometry()`：
 分栏线压到**铰链左缘**而不是几何中线，并把铰链自身宽度作为 `hingeGapWidthDp` 返回，
-`ArkDoNavHost` 在左右两栏之间插一个同宽的 `Spacer`。位置不合适（左栏 < 320dp 或右栏 < 360dp）时退回对半。
+`JetDoNavHost` 在左右两栏之间插一个同宽的 `Spacer`。位置不合适（左栏 < 320dp 或右栏 < 360dp）时退回对半。
 可折叠屏的折痕只有 1px，留白换算后约 0.4dp，肉眼等同无缝。
 
 **为什么不能用「对半」代替**：折痕在设备坐标系里**不保证落在中线**。折叠 AVD 的铰链在 1148/2200 = 52.2%，
@@ -384,7 +384,7 @@ Tier 2 的 do / don't（直接抄）：
 
 横向 push 表达的是「一层压一层」的空间关系，前提是**页面占满整个可视区**。切成双栏后前提不成立：左栏原地不动，位移只发生在右栏内部 —— 读到的不是层级变化，而是「右边自己抽走一块再塞回来」。加上右栏只有半屏宽，滑入距离减半，观感更跳。
 
-做法：`ArkDoNavHost` 的四个转场按 `isWide` 切换（`noneEnterTransition` / `noneExitTransition` / `slide*`），宽屏走 `EnterTransition.None`。这也是 list-detail 规范布局的惯例 —— 右侧详情区切换不做位移，层级由左栏选中态体现。
+做法：`JetDoNavHost` 的四个转场按 `isWide` 切换（`noneEnterTransition` / `noneExitTransition` / `slide*`），宽屏走 `EnterTransition.None`。这也是 list-detail 规范布局的惯例 —— 右侧详情区切换不做位移，层级由左栏选中态体现。
 
 两个实现要点：
 

@@ -38,7 +38,7 @@ object FileLoggerDaemon {
     @Volatile
     private var verbose = false
 
-    /** 应用启动时调用（ArkDoApplication.onCreate）。重复调用是幂等的。 */
+    /** 应用启动时调用（JetDoApplication.onCreate）。重复调用是幂等的。 */
     fun init(context: Context) {
         if (logger != null) return
         val app = context.applicationContext
@@ -63,7 +63,7 @@ object FileLoggerDaemon {
         }
 
         startScheduler(created)
-        Timber.i("[ArkDO][FileLogger] init ok dir=%s enabled=%s", FileLogger.LOG_DIR_NAME, enabled)
+        Timber.i("[JetDo][FileLogger] init ok dir=%s enabled=%s", FileLogger.LOG_DIR_NAME, enabled)
     }
 
     /** 在 Application 里 plant，与 DebugLogStore 的 RecordingTree、DebugTree 并存。 */

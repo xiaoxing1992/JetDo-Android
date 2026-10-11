@@ -32,7 +32,7 @@ object MessageBusScriptTemplate {
             };
             const emit = (event) => {
               try {
-                window.ArkDOBridge.onBusEvent(JSON.stringify(event));
+                window.JetDoBridge.onBusEvent(JSON.stringify(event));
               } catch (_) {
               }
             };

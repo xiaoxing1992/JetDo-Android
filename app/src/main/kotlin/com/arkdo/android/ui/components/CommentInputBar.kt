@@ -79,7 +79,7 @@ import com.arkdo.android.services.content.getEmojiUrl
 import com.arkdo.android.services.content.isKnownEmoji
 import com.arkdo.android.services.content.normalizeEmojiDeletion
 import com.arkdo.android.services.content.renderEmojiInput
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.delay
 
@@ -430,7 +430,7 @@ fun CommentInputOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(ArkdoFixedColors.Scrim)
+                    .background(JetDoFixedColors.Scrim)
                     .clickable(onClick = onClose)
             )
         }
@@ -577,21 +577,21 @@ fun CommentInputOverlay(
                         modifier = Modifier
                             .size(SUBMIT_BUTTON_SIZE)
                             .alpha(if (canSubmit || submitting) 1f else 0.5f)
-                            .background(ArkdoFixedColors.BrandBlue, CircleShape)
+                            .background(JetDoFixedColors.BrandBlue, CircleShape)
                             .clickable(onClick = { submit() }),
                         contentAlignment = Alignment.Center
                     ) {
                         if (submitting) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(22.dp),
-                                color = ArkdoFixedColors.OnDarkFg,
+                                color = JetDoFixedColors.OnDarkFg,
                                 strokeWidth = 2.dp
                             )
                         } else if (editMode) {
                             // 编辑态提交 = 保存：对勾图标（FaIcon 字体图标，语义清晰）。
                             FaIcon(
                                 "check",
-                                ArkdoFixedColors.OnDarkFg,
+                                JetDoFixedColors.OnDarkFg,
                                 18.dp,
                                 Modifier.size(18.dp)
                             )
@@ -599,7 +599,7 @@ fun CommentInputOverlay(
                             Icon(
                                 painter = painterResource(R.drawable.ic_fa_reply),
                                 contentDescription = stringResource(R.string.detail_send_reply),
-                                tint = ArkdoFixedColors.OnDarkFg,
+                                tint = JetDoFixedColors.OnDarkFg,
                                 modifier = Modifier.size(18.dp)
                             )
                         }

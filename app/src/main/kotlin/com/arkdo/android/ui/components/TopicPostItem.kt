@@ -65,7 +65,7 @@ import com.arkdo.android.data.models.SharedIssueResult
 import com.arkdo.android.data.models.TopicPost
 import com.arkdo.android.data.models.User
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.theme.isArkdoInDarkTheme
+import com.arkdo.android.ui.theme.isJetDoInDarkTheme
 import com.arkdo.android.core.model.RelativeTime
 import com.arkdo.android.core.designsystem.FaIcon
 

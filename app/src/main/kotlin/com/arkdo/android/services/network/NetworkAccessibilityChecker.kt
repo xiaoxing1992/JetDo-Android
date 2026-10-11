@@ -13,7 +13,7 @@ import java.net.URL
  */
 object NetworkAccessibilityChecker {
 
-    private const val TAG = "[ArkDO][NetworkChecker]"
+    private const val TAG = "[JetDo][NetworkChecker]"
     private const val TEST_URL = "https://linux.do/srv/status"
     private const val TIMEOUT_MS = 5000
 

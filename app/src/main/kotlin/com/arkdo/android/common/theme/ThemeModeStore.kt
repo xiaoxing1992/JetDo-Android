@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 主题三态(对齐鸿蒙 ThemeMode):跟随系统 / 浅色 / 深色。
- * 持久化在 app_settings,内存镜像走 StateFlow。ArkDoTheme 订阅后整棵界面跟着变,
+ * 持久化在 app_settings,内存镜像走 StateFlow。JetDoTheme 订阅后整棵界面跟着变,
  * 设置页写入即生效,无需重启。
  */
 enum class AppThemeMode(val storage: String) {

@@ -22,14 +22,14 @@ import timber.log.Timber
 //     linux.do            : 图片 4096 KB / 附件 4096 KB，白名单含 zip/7z/xz 但无 mp4
 //     meta.discourse.org  : 图片 10240 KB / 附件 30000 KB
 //
-// ArkDO 是通用 Discourse 客户端，任何写死的数字都会在某个站上是错的。
+// JetDo 是通用 Discourse 客户端，任何写死的数字都会在某个站上是错的。
 //
 // ## 拿不到时的策略
 // 回落到 Discourse 出厂默认值而不是「禁用上传」。设置拉失败多半是网络抖动，直接封掉
 // 入口对用户来说是莫名其妙的功能消失；按默认值放行，真超限了服务端会拒，我们再把错误显示出来。
 // ==========================================================================
 
-private const val LOG_TAG = "[ArkDO][SiteSettings]"
+private const val LOG_TAG = "[JetDo][SiteSettings]"
 
 /**
  * Discourse 认定为「图片」的扩展名，抄自 lib/file_helper.rb 的 supported_images。

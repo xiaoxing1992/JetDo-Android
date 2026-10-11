@@ -67,8 +67,8 @@ import com.arkdo.android.services.announce.ANNOUNCE_TOPIC_ID
 import com.arkdo.android.services.announce.VersionAnnouncementService
 import com.arkdo.android.services.announce.VersionAnnouncePrefs
 import com.arkdo.android.services.session.LoginGate
-import com.arkdo.android.ui.components.ArkDoBottomBar
-import com.arkdo.android.ui.components.ArkDoBottomBarItem
+import com.arkdo.android.ui.components.JetDoBottomBar
+import com.arkdo.android.ui.components.JetDoBottomBarItem
 import com.arkdo.android.ui.components.AvatarTabIcon
 import com.arkdo.android.ui.components.TabVectorIcon
 import com.arkdo.android.ui.components.UserAvatar
@@ -96,7 +96,7 @@ fun RootTabScreen(
     /**
      * 通知深链切 tab 的信号，自增即触发一次切到「通知」。
      *
-     * 由 [com.arkdo.android.navigation.ArkDoNavHost] 下发：宿主先把 ROOT 之上的页面
+     * 由 [com.arkdo.android.navigation.JetDoNavHost] 下发：宿主先把 ROOT 之上的页面
      * pop 掉，再把这个数加一。两者配合才能保证冷启动、热启动、从详情页点通知
      * 三种情况下都停在通知页 —— 单靠 state 传递在「刚 pop 回来、本组件还没组合」
      * 的那一帧会丢事件，自增计数则会在它组合时立刻生效。
@@ -307,7 +307,7 @@ fun RootTabScreen(
         // 「我的」灰页永远够不到状态栏区。关掉后由 HomeTitleBar/ProfileScreen 自己垫 inset。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            // 自定义标签栏(ui/components/ArkDoBottomBar),不用 M3 NavigationBar:
+            // 自定义标签栏(ui/components/JetDoBottomBar),不用 M3 NavigationBar:
             // 固定 80dp 容器高度和内置 ripple 都与这套视觉冲突;选中胶囊由容器统一画,
             // 切换时整枚平移过去(doer 截图实测的系统行为)。
             // tab 切换统一入口:点击与胶囊拖拽换页都走这里(导航参数与原实现一致)。
@@ -324,7 +324,7 @@ fun RootTabScreen(
                 }
             }
 
-            ArkDoBottomBar(
+            JetDoBottomBar(
                 tabCount = rootTabDestinations.size,
                 selectedIndex = selectedTabIndex,
                 backdrop = bottomBarBackdrop,
@@ -332,7 +332,7 @@ fun RootTabScreen(
             ) { index, selected, iconVisible ->
                 val tab = rootTabDestinations[index]
 
-                ArkDoBottomBarItem(
+                JetDoBottomBarItem(
                     selected = selected,
                     semanticSelected = index == selectedTabIndex,
                     label = tab.label,

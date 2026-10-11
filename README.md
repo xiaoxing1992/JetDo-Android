@@ -1,4 +1,4 @@
-# ArkDO Android
+# JetDo Android
 
 **[LINUX DO](https://linux.do) 社区的第三方 Android 原生客户端**
 
@@ -16,7 +16,7 @@
 > **[LINUX DO](https://linux.do) —— 新的理想型社区。**
 > Where possible begins. 一个真诚、友善、团结、专业的技术社区。
 
-ArkDO Android 是 LINUX DO 社区的**非官方**第三方客户端，基于 HarmonyOS 版本移植，由社区成员开发，仅为方便 Android 用户浏览社区内容，与官方无隶属关系。
+JetDo Android 是 LINUX DO 社区的**非官方**第三方客户端，基于 HarmonyOS 版本移植，由社区成员开发，仅为方便 Android 用户浏览社区内容，与官方无隶属关系。
 
 社区主站：**https://linux.do**
 
@@ -162,7 +162,7 @@ server/              推送中继（Python，部署在自己的服务器上）
 
 ## 免责声明
 
-ArkDO Android 是个人开发的第三方客户端，与 LINUX DO 官方无关，不代表社区立场。所有内容版权归 LINUX DO 社区及原作者所有。本项目仅供学习交流，请遵守 [LINUX DO](https://linux.do) 社区规则。
+JetDo Android 是个人开发的第三方客户端，与 LINUX DO 官方无关，不代表社区立场。所有内容版权归 LINUX DO 社区及原作者所有。本项目仅供学习交流，请遵守 [LINUX DO](https://linux.do) 社区规则。
 
 ## 开源协议
 

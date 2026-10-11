@@ -56,12 +56,12 @@ private const val BODY_LOG_MAX_CHARS = 1500
 // ==========================================================================
 // 与 HarmonyOS 版 services/network/ArkWebNetworkBridge.ets 逐字段对齐。
 // 注入式 fetch 桥：所有网络请求改为在 host WebView（linux.do 同源文档）内执行 JS fetch，
-// 结果经 window.ArkDOBridge.onJsonResult(requestId, envelopeJson) 回传原生，
+// 结果经 window.JetDoBridge.onJsonResult(requestId, envelopeJson) 回传原生，
 // 由 requestId → PendingJsonRequest 关联 Promise 兑现。
 //
 // Android 映射：
 //   runJavaScript  → WebView.evaluateJavascript（主线程）
-//   javaScriptProxy → WebView.addJavascriptInterface("ArkDOBridge")
+//   javaScriptProxy → WebView.addJavascriptInterface("JetDoBridge")
 //   WebDownloadDelegate → DownloadListener
 //   WebviewController.startDownload(url) → webView.loadUrl(url) 触发下载导航
 // ==========================================================================
@@ -100,9 +100,9 @@ data class DownloadIntent(
 
 /**
  * JS 桥代理。@JavascriptInterface 方法由 JS 线程调用，切回主线程后交 executor。
- * 方法名与 HarmonyOS 版 ArkDOBridge 完全一致（window.ArkDOBridge.onJsonResult/onBusEvent）。
+ * 方法名与 HarmonyOS 版 JetDoBridge 完全一致（window.JetDoBridge.onJsonResult/onBusEvent）。
  */
-class ArkDoBridgeProxy(
+class JetDoBridgeProxy(
     private val receiver: ArkWebResultReceiver,
     private val mainHandler: Handler
 ) {
@@ -126,15 +126,15 @@ class WebviewJsonExecutor(
     private val mainHandler: Handler = Handler(Looper.getMainLooper())
 ) : ArkWebJsonExecutor, ArkWebResultReceiver {
 
-    private val callbackProxy = ArkDoBridgeProxy(this, mainHandler)
+    private val callbackProxy = JetDoBridgeProxy(this, mainHandler)
     private val pendingRequests = mutableMapOf<String, PendingJsonRequest>()
     private var requestSequence = 0L
 
-    fun getCallbackProxy(): ArkDoBridgeProxy = callbackProxy
+    fun getCallbackProxy(): JetDoBridgeProxy = callbackProxy
 
     override suspend fun run(script: String, timeoutMs: Long): String {
         val requestId = "arkdo_${requestSequence++}"
-        Timber.i("[ArkDO][Network] executor start requestId=%s", requestId)
+        Timber.i("[JetDo][Network] executor start requestId=%s", requestId)
 
         val deferred = CompletableDeferred<String>()
         pendingRequests[requestId] = PendingJsonRequest(deferred)
@@ -181,21 +181,21 @@ class WebviewJsonExecutor(
     override fun onJsonResult(requestId: String, payload: String) {
         val pending = pendingRequests.remove(requestId)
         if (pending == null) {
-            Timber.i("[ArkDO][Network] callback ignored requestId=%s", requestId)
+            Timber.i("[JetDo][Network] callback ignored requestId=%s", requestId)
             return
         }
-        Timber.i("[ArkDO][Network] callback received requestId=%s payloadLength=%d", requestId, payload.length)
+        Timber.i("[JetDo][Network] callback received requestId=%s payloadLength=%d", requestId, payload.length)
         pending.deferred.complete(payload)
     }
 
     override fun onBusEvent(payload: String) {
-        Timber.i("[ArkDO][MessageBus] event len=%d head=%s", payload.length, payload.take(160))
+        Timber.i("[JetDo][MessageBus] event len=%d head=%s", payload.length, payload.take(160))
         MessageBusEventBus.publishPayload(payload)
     }
 
     private fun rejectRequest(requestId: String, message: String) {
         val pending = pendingRequests.remove(requestId) ?: return
-        Timber.i("[ArkDO][Network] executor reject requestId=%s reason=%s", requestId, message)
+        Timber.i("[JetDo][Network] executor reject requestId=%s reason=%s", requestId, message)
         pending.deferred.completeExceptionally(IllegalStateException(message))
     }
 }
@@ -252,16 +252,16 @@ object ArkWebNetworkBridge : JsonNetworkClient {
      */
     fun preloadHostInBackground(context: Context) {
         if (webView != null) {
-            Timber.i("[ArkDO][Network] preloadHostInBackground: WebView already exists, skipping")
+            Timber.i("[JetDo][Network] preloadHostInBackground: WebView already exists, skipping")
             return
         }
 
-        Timber.i("[ArkDO][Network] ========== Preloading WebView in Background ==========")
-        Timber.i("[ArkDO][Network] preloadHostInBackground: start ts=%d", System.currentTimeMillis())
+        Timber.i("[JetDo][Network] ========== Preloading WebView in Background ==========")
+        Timber.i("[JetDo][Network] preloadHostInBackground: start ts=%d", System.currentTimeMillis())
 
         // 检查是否在主线程
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            Timber.e("[ArkDO][Network] preloadHostInBackground: NOT on main thread, posting to main thread")
+            Timber.e("[JetDo][Network] preloadHostInBackground: NOT on main thread, posting to main thread")
             mainHandler.post { preloadHostInBackground(context) }
             return
         }
@@ -277,8 +277,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         )
         web.layout(0, 0, 400, 300)
 
-        Timber.i("[ArkDO][Network] preloadHostInBackground: WebView created, will load when attached to window")
-        Timber.i("[ArkDO][Network] preloadHostInBackground: isAttachedToWindow=%s", web.isAttachedToWindow)
+        Timber.i("[JetDo][Network] preloadHostInBackground: WebView created, will load when attached to window")
+        Timber.i("[JetDo][Network] preloadHostInBackground: isAttachedToWindow=%s", web.isAttachedToWindow)
     }
 
     /**
@@ -286,7 +286,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
      * 加载 HOST_BOOTSTRAP_URL 定 origin；onPageFinished → attachController + markHostReady。
      */
     fun attachHost(context: Context): WebView {
-        Timber.i("[ArkDO][Network] attachHost: creating WebView")
+        Timber.i("[JetDo][Network] attachHost: creating WebView")
         val web = WebView(context.applicationContext)
 
         // 基础设置
@@ -305,7 +305,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         // Cloudflare 的 cf_clearance cookie 与 User-Agent 绑定
         // (applyUserAgent 同时统一 UA Client Hints / X-Requested-With,全 app 一份)
         com.arkdo.android.services.web.WebSessionManager.applyUserAgent(web, "ArkWebHost")
-        Timber.i("[ArkDO][Network] attachHost: User-Agent set to %s", web.settings.userAgentString)
+        Timber.i("[JetDo][Network] attachHost: User-Agent set to %s", web.settings.userAgentString)
 
         // 启用现代网络特性
         web.settings.setSupportMultipleWindows(false)
@@ -315,14 +315,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         // 关键：禁用阻塞网络请求（某些 WebView 版本默认开启）
         web.settings.blockNetworkLoads = false
         web.settings.blockNetworkImage = false
-        Timber.i("[ArkDO][Network] attachHost: network blocking disabled")
+        Timber.i("[JetDo][Network] attachHost: network blocking disabled")
 
         web.alpha = 0.01f
         web.setBackgroundColor(0x00000000)
-        Timber.i("[ArkDO][Network] attachHost: WebView settings configured")
+        Timber.i("[JetDo][Network] attachHost: WebView settings configured")
 
         WebSessionManagerInternal.configure(web, "host")
-        Timber.i("[ArkDO][Network] attachHost: WebSessionManager configured")
+        Timber.i("[JetDo][Network] attachHost: WebSessionManager configured")
 
         web.webViewClient = object : WebViewClient() {
             /**
@@ -336,7 +336,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 WebViewDohInterceptor.intercept(request) ?: super.shouldInterceptRequest(view, request)
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                Timber.i("[ArkDO][Network] attachHost: onPageStarted url=%s", url)
+                Timber.i("[JetDo][Network] attachHost: onPageStarted url=%s", url)
 
                 // 检查当前 Cookie - 测试多个 URL
                 val cookieManager = android.webkit.CookieManager.getInstance()
@@ -349,25 +349,25 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 for (testUrl in urlsToTest) {
                     val cookies = cookieManager.getCookie(testUrl)
                     val hasCfClearance = cookies?.contains("cf_clearance=") == true
-                    Timber.i("[ArkDO][Network] Cookie for '%s': hasCf=%b length=%d",
+                    Timber.i("[JetDo][Network] Cookie for '%s': hasCf=%b length=%d",
                         testUrl, hasCfClearance, cookies?.length ?: 0)
                 }
-                Timber.i("[ArkDO][Network] attachHost: onPageStarted User-Agent=%s", view?.settings?.userAgentString)
+                Timber.i("[JetDo][Network] attachHost: onPageStarted User-Agent=%s", view?.settings?.userAgentString)
 
                 markHostReloading()
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                Timber.i("[ArkDO][Network] attachHost: onPageFinished url=%s", url)
+                Timber.i("[JetDo][Network] attachHost: onPageFinished url=%s", url)
 
                 // 检查页面是否有有效的 origin（避免 CORS 错误）
                 view?.evaluateJavascript("window.location.origin") { origin ->
-                    Timber.i("[ArkDO][Network] attachHost: page origin=%s", origin)
+                    Timber.i("[JetDo][Network] attachHost: page origin=%s", origin)
 
                     if (origin == "\"null\"" || origin == "null" || origin.isNullOrEmpty()) {
-                        Timber.w("[ArkDO][Network] attachHost: invalid origin, retrying bootstrap load in 2s")
+                        Timber.w("[JetDo][Network] attachHost: invalid origin, retrying bootstrap load in 2s")
                         Handler(Looper.getMainLooper()).postDelayed({
-                            Timber.i("[ArkDO][Network] attachHost: retrying bootstrap load")
+                            Timber.i("[JetDo][Network] attachHost: retrying bootstrap load")
                             markHostReloading()
                             web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
                         }, 2000)
@@ -379,7 +379,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                     markHostReady()
                     // 宿主页就绪后才注入长轮询。脚本自己幂等，重复 onPageFinished 不会再开一条。
                     startMessageBus()
-                    Timber.i("[ArkDO][Network] attachHost: controller attached, host ready with origin=%s", origin)
+                    Timber.i("[JetDo][Network] attachHost: controller attached, host ready with origin=%s", origin)
 
                     // 检测页面是否是 Cloudflare 挑战页面
                     view.evaluateJavascript(
@@ -402,7 +402,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                         })();
                         """.trimIndent()
                     ) { result ->
-                        Timber.i("[ArkDO][Network] attachHost: challenge detection raw result=%s", result)
+                        Timber.i("[JetDo][Network] attachHost: challenge detection raw result=%s", result)
                         // evaluateJavascript 回传的是 JS 值的 JSON 编码：内层 {"hasChallenge":true}
                         // 到这里变成字符串 "{\"hasChallenge\":true}"。直接 contains 字面 true 永远匹配不上，
                         // 挑战页会被当成干净页，过盾流程根本不启动。
@@ -412,10 +412,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                         // 额外检查：如果标题是"请稍候…"也认为是挑战页面
                         val hasPendingTitle = result?.contains("请稍候") == true
 
-                        Timber.i("[ArkDO][Network] attachHost: isChallengePage=%s hasPendingTitle=%s", isChallengePage, hasPendingTitle)
+                        Timber.i("[JetDo][Network] attachHost: isChallengePage=%s hasPendingTitle=%s", isChallengePage, hasPendingTitle)
 
                         if ((isChallengePage || hasPendingTitle) && url?.contains("linux.do") == true) {
-                            Timber.w("[ArkDO][Network] attachHost: Cloudflare challenge page detected, notifying ChallengeEventBus")
+                            Timber.w("[JetDo][Network] attachHost: Cloudflare challenge page detected, notifying ChallengeEventBus")
                             ChallengeEventBus.notifyChallengeRequired("bootstrap", 403, ChallengeState.REQUIRED)
                         } else if (url?.contains("linux.do") == true) {
                             // 页面干净(已过盾或本就无盾):立即把 cookie(含静默过盾拿到的
@@ -434,13 +434,13 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 request: android.webkit.WebResourceRequest?,
                 error: android.webkit.WebResourceError?
             ) {
-                Timber.e("[ArkDO][Network] attachHost: onReceivedError url=%s code=%d msg=%s",
+                Timber.e("[JetDo][Network] attachHost: onReceivedError url=%s code=%d msg=%s",
                     request?.url, error?.errorCode, error?.description)
 
                 // 如果是主页面加载失败（ERR_CONNECTION_CLOSED 等），尝试重新加载
                 // 这避免了 origin='null' 导致的 CORS 错误
                 if (request?.isForMainFrame == true && error?.errorCode == -6) {
-                    Timber.w("[ArkDO][Network] attachHost: main frame load failed, will retry on next fetch")
+                    Timber.w("[JetDo][Network] attachHost: main frame load failed, will retry on next fetch")
                     // 标记需要重新加载，但不立即重载（避免循环）
                     // onPageFinished 会设置 executor，但首次 fetch 失败后会触发 reloadHost
                 }
@@ -451,7 +451,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 handler: android.webkit.SslErrorHandler?,
                 error: android.net.http.SslError?
             ) {
-                Timber.e("[ArkDO][Network] attachHost: onReceivedSslError primaryError=%d url=%s",
+                Timber.e("[JetDo][Network] attachHost: onReceivedSslError primaryError=%d url=%s",
                     error?.primaryError, error?.url)
                 // SSL 错误：取消加载
                 handler?.cancel()
@@ -464,12 +464,12 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             ) {
                 val url = request?.url?.toString()
                 val statusCode = errorResponse?.statusCode ?: 0
-                Timber.e("[ArkDO][Network] attachHost: onReceivedHttpError url=%s statusCode=%d",
+                Timber.e("[JetDo][Network] attachHost: onReceivedHttpError url=%s statusCode=%d",
                     url, statusCode)
 
                 // 如果是主页面的 403 错误，很可能是 Cloudflare 挑战
                 if (request?.isForMainFrame == true && statusCode == 403 && url?.contains("linux.do") == true) {
-                    Timber.w("[ArkDO][Network] attachHost: 403 on main frame, likely Cloudflare challenge")
+                    Timber.w("[JetDo][Network] attachHost: 403 on main frame, likely Cloudflare challenge")
                     Handler(Looper.getMainLooper()).postDelayed({
                         // 延迟检测，给挑战页面时间渲染
                         view?.evaluateJavascript(
@@ -492,12 +492,12 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                             })();
                             """.trimIndent()
                         ) { result ->
-                            Timber.i("[ArkDO][Network] attachHost: 403 challenge check result=%s", result)
+                            Timber.i("[JetDo][Network] attachHost: 403 challenge check result=%s", result)
                             // 同 onPageFinished：回调值是二次 JSON 编码，\"hasChallenge\":true 才是真实形态。
                             if (result?.contains("\\\"hasChallenge\\\":true") == true ||
                                 result?.contains("\"hasChallenge\":true") == true
                             ) {
-                                Timber.w("[ArkDO][Network] attachHost: Cloudflare challenge confirmed on 403, notifying")
+                                Timber.w("[JetDo][Network] attachHost: Cloudflare challenge confirmed on 403, notifying")
                                 ChallengeEventBus.notifyChallengeRequired("bootstrap", 403, ChallengeState.REQUIRED)
                             }
                         }
@@ -510,7 +510,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         web.webChromeClient = object : android.webkit.WebChromeClient() {
             override fun onConsoleMessage(message: android.webkit.ConsoleMessage?): Boolean {
                 message?.let {
-                    Timber.d("[ArkDO][WebView Console] [%s] %s:%d - %s",
+                    Timber.d("[JetDo][WebView Console] [%s] %s:%d - %s",
                         it.messageLevel(), it.sourceId(), it.lineNumber(), it.message())
                 }
                 return true
@@ -518,13 +518,13 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 if (newProgress % 25 == 0) {  // 每 25% 记录一次
-                    Timber.i("[ArkDO][Network] attachHost: page loading progress=%d%%", newProgress)
+                    Timber.i("[JetDo][Network] attachHost: page loading progress=%d%%", newProgress)
                 }
             }
         }
 
-        web.addJavascriptInterface(ensureWebviewExecutor(web).getCallbackProxy(), "ArkDOBridge")
-        Timber.i("[ArkDO][Network] attachHost: JavascriptInterface added")
+        web.addJavascriptInterface(ensureWebviewExecutor(web).getCallbackProxy(), "JetDoBridge")
+        Timber.i("[JetDo][Network] attachHost: JavascriptInterface added")
 
         this.webView = web
 
@@ -537,8 +537,8 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         fun tryLoadUrl() {
             if (!hasLoaded) {
                 hasLoaded = true
-                Timber.i("[ArkDO][Network] attachHost: loading URL=%s", AppConstants.HOST_BOOTSTRAP_URL)
-                Timber.i("[ArkDO][Network] attachHost: isAttachedToWindow=%s width=%d height=%d",
+                Timber.i("[JetDo][Network] attachHost: loading URL=%s", AppConstants.HOST_BOOTSTRAP_URL)
+                Timber.i("[JetDo][Network] attachHost: isAttachedToWindow=%s width=%d height=%d",
                     web.isAttachedToWindow, web.width, web.height)
                 web.loadUrl(AppConstants.HOST_BOOTSTRAP_URL)
             }
@@ -546,7 +546,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
         web.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: android.view.View) {
-                Timber.i("[ArkDO][Network] attachHost: onViewAttachedToWindow callback fired")
+                Timber.i("[JetDo][Network] attachHost: onViewAttachedToWindow callback fired")
                 tryLoadUrl()
             }
 
@@ -558,7 +558,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         // 如果 WebView 已经附着到窗口（AndroidView factory 执行时可能已附着），
         // 直接在下一帧加载，因为 onViewAttachedToWindow 不会再触发
         if (web.isAttachedToWindow) {
-            Timber.i("[ArkDO][Network] attachHost: WebView already attached, loading in next frame")
+            Timber.i("[JetDo][Network] attachHost: WebView already attached, loading in next frame")
             web.post { tryLoadUrl() }
         }
 
@@ -573,17 +573,17 @@ object ArkWebNetworkBridge : JsonNetworkClient {
     }
 
     private fun attachController(webView: WebView) {
-        Timber.i("[ArkDO][Network] attachController: before setExecutor, executor=%s", executor)
+        Timber.i("[JetDo][Network] attachController: before setExecutor, executor=%s", executor)
         this.webView = webView
         setExecutor(ensureWebviewExecutor(webView))
-        Timber.i("[ArkDO][Network] attachController: after setExecutor, executor=%s", executor)
+        Timber.i("[JetDo][Network] attachController: after setExecutor, executor=%s", executor)
         configureDownloadDelegate()
     }
 
     /** host webview 是否已真正就绪到可发请求。 */
     fun canFetch(): Boolean {
         val result = executor != null
-        Timber.v("[ArkDO][Network] canFetch: executor=%s result=%s", executor, result)
+        Timber.v("[JetDo][Network] canFetch: executor=%s result=%s", executor, result)
         return result
     }
 
@@ -600,10 +600,10 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         runCatching {
             if (dir.exists()) {
                 dir.deleteRecursively()
-                Timber.i("[ArkDO][Network] media cache cleared dir=%s", dir.absolutePath)
+                Timber.i("[JetDo][Network] media cache cleared dir=%s", dir.absolutePath)
             }
         }.onFailure {
-            Timber.i("[ArkDO][Network] media cache clear failed error=%s", it.message)
+            Timber.i("[JetDo][Network] media cache clear failed error=%s", it.message)
         }
     }
 
@@ -620,7 +620,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             true
         }.onFailure {
             downloadIntents.removeLastOrNull()
-            Timber.i("[ArkDO][Network] startDownload failed msg=%s", it.message)
+            Timber.i("[JetDo][Network] startDownload failed msg=%s", it.message)
         }.getOrDefault(false)
     }
 
@@ -716,7 +716,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             val awaited = intent?.awaited == true
             val dir = if (isMedia) mediaDir else attachmentDir
             runCatching { if (!dir.exists()) dir.mkdirs() }.onFailure {
-                Timber.i("[ArkDO][Network] download dir failed msg=%s", it.message)
+                Timber.i("[JetDo][Network] download dir failed msg=%s", it.message)
             }
             val suggested = suggestedFileName(contentDisposition, url)
             val fileName = if (suggested.isNotEmpty()) suggested else "download_${System.currentTimeMillis()}"
@@ -727,7 +727,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         })
         registerMediaDownloadReceiver(context)
         downloadDelegateReady = true
-        Timber.i("[ArkDO][Network] download delegate configured")
+        Timber.i("[JetDo][Network] download delegate configured")
     }
 
     /** 注册系统下载完成广播:媒体与附件下载的统一结算出口(settleFileSuccess 的唯一触发点)。 */
@@ -740,7 +740,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 val job = synchronized(downloadJobs) { downloadJobs.remove(id) }
                 // 「结算表命中与否」是区分两类故障的分界点（下载没完成 vs 广播/派发对不上），
                 // 出问题时这行是唯一能一眼定性的证据，保留。
-                Timber.i("[ArkDO][Network] download-complete id=%s jobFound=%s", id, job != null)
+                Timber.i("[JetDo][Network] download-complete id=%s jobFound=%s", id, job != null)
                 job ?: return
                 val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 runCatching {
@@ -753,15 +753,15 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                             // （`x.zip` → `x-1.zip`），我们预推的路径就对不上了。预推路径仍在
                             // 且存在时优先用它（媒体热路径，行为与本轮之前完全一致）。
                             val resolved = resolveLocalPath(cursor, job.localPath)
-                            Timber.i("[ArkDO][Network] download complete url=%s path=%s", job.url, resolved)
+                            Timber.i("[JetDo][Network] download complete url=%s path=%s", job.url, resolved)
                             settleFileSuccess(job.url, resolved)
                         } else {
-                            Timber.i("[ArkDO][Network] download failed url=%s", job.url)
+                            Timber.i("[JetDo][Network] download failed url=%s", job.url)
                             settleFileFailure(job.url, IllegalStateException(AppContextHolder.getString(R.string.common_download_failed)))
                         }
                     }
                 }.onFailure {
-                    Timber.i("[ArkDO][Network] download query failed msg=%s", it.message)
+                    Timber.i("[JetDo][Network] download query failed msg=%s", it.message)
                     settleFileFailure(job.url, it)
                 }
             }
@@ -779,9 +779,9 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 Context.RECEIVER_EXPORTED
             )
             downloadReceiverRegistered = true
-            Timber.i("[ArkDO][Network] media download receiver registered")
+            Timber.i("[JetDo][Network] media download receiver registered")
         }.onFailure {
-            Timber.i("[ArkDO][Network] media download receiver register failed msg=%s", it.message)
+            Timber.i("[JetDo][Network] media download receiver register failed msg=%s", it.message)
         }
     }
 
@@ -873,7 +873,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         }
         try {
             val id = dm.enqueue(req)
-            Timber.i("[ArkDO][Network] download enqueued id=%s isMedia=%s awaited=%s url=%s", id, isMedia, awaited, requestUrl)
+            Timber.i("[JetDo][Network] download enqueued id=%s isMedia=%s awaited=%s url=%s", id, isMedia, awaited, requestUrl)
             if (requestUrl != null && (isMedia || awaited)) {
                 synchronized(downloadJobs) {
                     downloadJobs[id] = FileDownloadJob(requestUrl, localFile.absolutePath)
@@ -910,7 +910,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             // 重新加载前检查 cookie 状态
             val cfClearance = WebSessionManager.getCfClearanceValue()
             val hasCfClearance = WebSessionManager.hasCfClearance()
-            Timber.i("[ArkDO][Network] reloadHost: BEFORE reload cf_clearance=%s hasCfClearance=%b",
+            Timber.i("[JetDo][Network] reloadHost: BEFORE reload cf_clearance=%s hasCfClearance=%b",
                 cfClearance.take(20), hasCfClearance)
 
             markHostReloading()
@@ -921,7 +921,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             true
         }.onFailure {
             markHostReady()
-            Timber.i("[ArkDO][Network] reloadHost failed msg=%s", it.message)
+            Timber.i("[JetDo][Network] reloadHost failed msg=%s", it.message)
         }.getOrDefault(false)
     }
 
@@ -963,17 +963,17 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     fun startMessageBus() {
         val web = webView ?: run {
-            Timber.i("[ArkDO][Network] MessageBus start skipped: controller not ready")
+            Timber.i("[JetDo][Network] MessageBus start skipped: controller not ready")
             return
         }
         runCatching { web.evaluateJavascript(MessageBusScriptTemplate.buildMessageBusScript(), null) }.onFailure {
-            Timber.i("[ArkDO][Network] MessageBus script injection failed")
+            Timber.i("[JetDo][Network] MessageBus script injection failed")
         }
     }
 
     fun stopMessageBus() {
         val web = webView ?: run {
-            Timber.i("[ArkDO][Network] MessageBus stop skipped: controller not ready")
+            Timber.i("[JetDo][Network] MessageBus stop skipped: controller not ready")
             return
         }
         runCatching {
@@ -983,7 +983,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 null
             )
         }.onFailure {
-            Timber.i("[ArkDO][Network] MessageBus stop injection failed")
+            Timber.i("[JetDo][Network] MessageBus stop injection failed")
         }
     }
 
@@ -997,7 +997,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     fun subscribeChannel(channelName: String, position: Long) {
         val web = webView ?: run {
-            Timber.i("[ArkDO][Network] MessageBus subscribeChannel skipped: controller not ready")
+            Timber.i("[JetDo][Network] MessageBus subscribeChannel skipped: controller not ready")
             return
         }
         val channel = jsonString(channelName)
@@ -1008,15 +1008,15 @@ object ArkWebNetworkBridge : JsonNetworkClient {
                 "if (!($channel in window.__arkdoMessageBusChannels)) { window.__arkdoMessageBusChannels[$channel] = $pos; } }"
         runCatching {
             web.evaluateJavascript(script, null)
-            Timber.i("[ArkDO][Network] MessageBus subscribeChannel channel=%s pos=%d", channelName, pos)
+            Timber.i("[JetDo][Network] MessageBus subscribeChannel channel=%s pos=%d", channelName, pos)
         }.onFailure {
-            Timber.i("[ArkDO][Network] MessageBus subscribeChannel injection failed")
+            Timber.i("[JetDo][Network] MessageBus subscribeChannel injection failed")
         }
     }
 
     fun unsubscribeChannel(channelName: String) {
         val web = webView ?: run {
-            Timber.i("[ArkDO][Network] MessageBus unsubscribeChannel skipped: controller not ready")
+            Timber.i("[JetDo][Network] MessageBus unsubscribeChannel skipped: controller not ready")
             return
         }
         val channel = jsonString(channelName)
@@ -1024,7 +1024,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             "if (window.__arkdoMessageBusRemoveChannel) { window.__arkdoMessageBusRemoveChannel($channel); } " +
                 "else if (window.__arkdoMessageBusChannels) { delete window.__arkdoMessageBusChannels[$channel]; }"
         runCatching { web.evaluateJavascript(script, null) }.onFailure {
-            Timber.i("[ArkDO][Network] MessageBus unsubscribeChannel injection failed")
+            Timber.i("[JetDo][Network] MessageBus unsubscribeChannel injection failed")
         }
     }
 
@@ -1036,14 +1036,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     override suspend fun getJson(path: String, options: JsonRequestOptions?): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[ArkDO][Network] GET %s start", requestPath)
+        Timber.i("[JetDo][Network] GET %s start", requestPath)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
             val raw = executor!!.run(WebFetchScriptFactory.createFetchScript(requestPath))
             convertEnvelope(requestPath, parseEnvelope(raw), "GET", options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] GET %s failed before response envelope", requestPath)
+            Timber.i("[JetDo][Network] GET %s failed before response envelope", requestPath)
             networkFailed()
         }
     }
@@ -1055,14 +1055,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         options: JsonRequestOptions?
     ): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[ArkDO][Network] GET(headered) %s start headerCount=%d", requestPath, headers.size)
+        Timber.i("[JetDo][Network] GET(headered) %s start headerCount=%d", requestPath, headers.size)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
             val raw = executor!!.run(WebFetchScriptFactory.createHeaderedFetchScript(requestPath, headers, referrer))
             convertEnvelope(requestPath, parseEnvelope(raw), "GET", options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] GET(headered) %s failed before response envelope", requestPath)
+            Timber.i("[JetDo][Network] GET(headered) %s failed before response envelope", requestPath)
             networkFailed()
         }
     }
@@ -1086,7 +1086,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
 
     override suspend fun postForm(path: String, body: String, options: JsonRequestOptions?): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[ArkDO][Network] POST %s start bodyLength=%d", requestPath, body.length)
+        Timber.i("[JetDo][Network] POST %s start bodyLength=%d", requestPath, body.length)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
@@ -1094,14 +1094,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             val raw = executor!!.run(WebFetchScriptFactory.createFormScript("POST", requestPath, body, referrer))
             convertEnvelope(requestPath, parseEnvelope(raw), "POST", options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] POST %s failed before response envelope", requestPath)
+            Timber.i("[JetDo][Network] POST %s failed before response envelope", requestPath)
             networkFailed()
         }
     }
 
     override suspend fun postJson(path: String, body: String, options: JsonRequestOptions?): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[ArkDO][Network] POST(json) %s start bodyLength=%d", requestPath, body.length)
+        Timber.i("[JetDo][Network] POST(json) %s start bodyLength=%d", requestPath, body.length)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
@@ -1109,7 +1109,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             val raw = executor!!.run(WebFetchScriptFactory.createPostJsonScript(requestPath, body, referrer))
             convertEnvelope(requestPath, parseEnvelope(raw), "POST", options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] POST(json) %s failed before response envelope", requestPath)
+            Timber.i("[JetDo][Network] POST(json) %s failed before response envelope", requestPath)
             networkFailed()
         }
     }
@@ -1121,7 +1121,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         options: JsonRequestOptions?
     ): NetworkResult<String> {
         val requestPath = "/uploads.json"
-        Timber.i("[ArkDO][Network] UPLOAD %s start fileName=%s base64Length=%d", requestPath, fileName, base64.length)
+        Timber.i("[JetDo][Network] UPLOAD %s start fileName=%s base64Length=%d", requestPath, fileName, base64.length)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
@@ -1132,14 +1132,14 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             )
             convertEnvelope(requestPath, parseEnvelope(raw), "POST", options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] UPLOAD %s failed before response envelope", requestPath)
+            Timber.i("[JetDo][Network] UPLOAD %s failed before response envelope", requestPath)
             networkFailed()
         }
     }
 
     override suspend fun putJson(path: String, options: JsonRequestOptions?): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[ArkDO][Network] PUT %s start", requestPath)
+        Timber.i("[JetDo][Network] PUT %s start", requestPath)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
@@ -1147,7 +1147,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             val raw = executor!!.run(WebFetchScriptFactory.createPutScript(requestPath, referrer))
             convertEnvelope(requestPath, parseEnvelope(raw), "PUT", options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] PUT %s failed before response envelope", requestPath)
+            Timber.i("[JetDo][Network] PUT %s failed before response envelope", requestPath)
             networkFailed()
         }
     }
@@ -1165,7 +1165,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         options: JsonRequestOptions?
     ): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[ArkDO][Network] %s %s start bodyLength=%d", method, requestPath, body.length)
+        Timber.i("[JetDo][Network] %s %s start bodyLength=%d", method, requestPath, body.length)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
@@ -1173,7 +1173,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             val raw = executor!!.run(WebFetchScriptFactory.createFormScript(method, requestPath, body, referrer))
             convertEnvelope(requestPath, parseEnvelope(raw), method, options)
         }.getOrElse {
-            Timber.i("[ArkDO][Network] %s %s failed before response envelope", method, requestPath)
+            Timber.i("[JetDo][Network] %s %s failed before response envelope", method, requestPath)
             networkFailed()
         }
     }
@@ -1205,12 +1205,12 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         options: JsonRequestOptions?
     ): NetworkResult<String> {
         if (envelope.csrfSource != null || envelope.csrfLength != null) {
-            Timber.i("[ArkDO][Network] %s %s csrf source=%s length=%d",
+            Timber.i("[JetDo][Network] %s %s csrf source=%s length=%d",
                 method, path, envelope.csrfSource ?: "unknown", envelope.csrfLength ?: 0)
         }
 
         if (!envelope.errorMessage.isNullOrEmpty()) {
-            Timber.i("[ArkDO][Network] %s %s envelope error=%s", method, path, envelope.errorMessage)
+            Timber.i("[JetDo][Network] %s %s envelope error=%s", method, path, envelope.errorMessage)
             // 写请求在宿主挑战页上读不到 token。空 token 发出去只会换来 Discourse 的
             // "BAD CSRF"（纯文本，ChallengeDetector 认不出），这里直接当成需要过盾。
             if (envelope.errorMessage == "csrf token missing" && options?.notifyChallenge != false) {
@@ -1239,7 +1239,7 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         val cfMitigated = envelope.cfMitigated ?: ""
         val body = envelope.body ?: ""
         val challengeState = ChallengeDetector.detectChallenge(statusCode, contentType, body, cfMitigated)
-        Timber.i("[ArkDO][Network] %s %s response status=%d contentType=%s bodyLength=%d challenge=%s",
+        Timber.i("[JetDo][Network] %s %s response status=%d contentType=%s bodyLength=%d challenge=%s",
             method, path, statusCode, contentType, body.length, challengeState)
         logResponseBody(path, contentType, body, method, statusCode, challengeState)
 
@@ -1296,12 +1296,12 @@ object ArkWebNetworkBridge : JsonNetworkClient {
             "${formattedBody.substring(0, BODY_LOG_MAX_CHARS)}...(truncated ${formattedBody.length - BODY_LOG_MAX_CHARS} chars)"
         }
         val chunkCount = maxOf(1, (loggedBody.length + BODY_LOG_CHUNK_SIZE - 1) / BODY_LOG_CHUNK_SIZE)
-        Timber.i("[ArkDO][Network][Body] %s %s body begin contentType=%s rawLength=%d chunks=%d",
+        Timber.i("[JetDo][Network][Body] %s %s body begin contentType=%s rawLength=%d chunks=%d",
             method, path, contentType, body.length, chunkCount)
         for (start in loggedBody.indices step BODY_LOG_CHUNK_SIZE) {
             val chunkIndex = start / BODY_LOG_CHUNK_SIZE + 1
             val chunk = loggedBody.substring(start, minOf(start + BODY_LOG_CHUNK_SIZE, loggedBody.length))
-            Timber.i("[ArkDO][Network][Body] %s %s body chunk %d/%d: %s", method, path, chunkIndex, chunkCount, chunk)
+            Timber.i("[JetDo][Network][Body] %s %s body chunk %d/%d: %s", method, path, chunkIndex, chunkCount, chunk)
         }
     }
 

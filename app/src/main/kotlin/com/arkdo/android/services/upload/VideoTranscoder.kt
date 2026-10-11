@@ -129,7 +129,7 @@ class VideoTranscoder(private val context: Context) {
                 "$TRANSCODE_FILE_PREFIX${System.currentTimeMillis()}_$pass.mp4"
             ).absolutePath
             Timber.i(
-                "[ArkDO][Transcode] pass=%d target=%dx(sourceShort=%d) videoBps=%d",
+                "[JetDo][Transcode] pass=%d target=%dx(sourceShort=%d) videoBps=%d",
                 pass, targetShort, sourceShort, videoBps.roundToInt()
             )
 
@@ -138,20 +138,20 @@ class VideoTranscoder(private val context: Context) {
             } catch (e: Exception) {
                 discard(outputPath)
                 if (cancelled.get()) return VideoTranscodeResult(error = "")
-                Timber.i(e, "[ArkDO][Transcode] pass=%d failed", pass)
+                Timber.i(e, "[JetDo][Transcode] pass=%d failed", pass)
                 lastError = AppContextHolder.getString(R.string.composer_video_compress_failed)
                 break
             }
 
             if (produced <= targetBytes) {
-                Timber.i("[ArkDO][Transcode] pass=%d ok size=%d", pass, produced)
+                Timber.i("[JetDo][Transcode] pass=%d ok size=%d", pass, produced)
                 return VideoTranscodeResult(path = outputPath, shortSide = targetShort)
             }
 
             // 超了：按实测比例回推码率，再多压一点，同时降一档分辨率。
             // 只降码率不降分辨率的话，下一遍会在同样的像素上摊更少的比特，糊得更难看。
             discard(outputPath)
-            Timber.i("[ArkDO][Transcode] pass=%d overshoot size=%d > %d", pass, produced, targetBytes)
+            Timber.i("[JetDo][Transcode] pass=%d overshoot size=%d > %d", pass, produced, targetBytes)
             videoBps = videoBps * (targetBytes.toDouble() / produced.toDouble()) * RETRY_SHRINK
             if (tierIndex < LADDER.size - 1) tierIndex++
             if (videoBps < floorBps) break
@@ -172,7 +172,7 @@ class VideoTranscoder(private val context: Context) {
         // active/abort 两处状态一起打：取消「没反应」时，一眼能看出是没在压、
         // 还是压着但叫不停（后者才是真 bug）。
         Timber.i(
-            "[ArkDO][Transcode] cancel requested active=%s abort=%s",
+            "[JetDo][Transcode] cancel requested active=%s abort=%s",
             active != null, abortPass != null
         )
         cancelled.set(true)
@@ -449,8 +449,8 @@ class VideoTranscoder(private val context: Context) {
                 val stale = context.cacheDir.listFiles { file -> file.name.startsWith(TRANSCODE_FILE_PREFIX) }
                 if (stale.isNullOrEmpty()) return@runCatching
                 stale.forEach { it.delete() }
-                Timber.i("[ArkDO][Transcode] cleared %d stale transcode output(s)", stale.size)
-            }.onFailure { Timber.i(it, "[ArkDO][Transcode] clear stale outputs failed") }
+                Timber.i("[JetDo][Transcode] cleared %d stale transcode output(s)", stale.size)
+            }.onFailure { Timber.i(it, "[JetDo][Transcode] clear stale outputs failed") }
         }
     }
 }

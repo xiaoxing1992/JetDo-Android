@@ -69,7 +69,7 @@ import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import com.arkdo.android.ui.components.liquidglass.DampedDragAnimation
 import com.arkdo.android.ui.components.liquidglass.InteractiveHighlight
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -211,10 +211,10 @@ private fun DampedDragAnimation.jellyScaleY(): Float {
  * [item] 按 (index, selected, iconVisible) 回调:可见行以 selected=false 调用,隐藏采样行
  * 以 selected=true 调用(胶囊折射它得到选中色);直绘方案下胶囊所在槽位 iconVisible=false
  * (图标文字改画在胶囊内);兜底路径以真实选中态调用。
- * 无障碍的选中态请用 [ArkDoBottomBarItem.semanticSelected] 单独表达。
+ * 无障碍的选中态请用 [JetDoBottomBarItem.semanticSelected] 单独表达。
  */
 @Composable
-fun ArkDoBottomBar(
+fun JetDoBottomBar(
     tabCount: Int,
     selectedIndex: Int,
     backdrop: Backdrop,
@@ -409,8 +409,8 @@ fun ArkDoBottomBar(
                 .shadow(
                     elevation = 8.dp,
                     shape = ContinuousCapsule,
-                    ambientColor = ArkdoFixedColors.ShadowSoft,
-                    spotColor = ArkdoFixedColors.ShadowSoft
+                    ambientColor = JetDoFixedColors.ShadowSoft,
+                    spotColor = JetDoFixedColors.ShadowSoft
                 )
                 .drawBackdrop(
                     backdrop = backdrop,
@@ -646,8 +646,8 @@ private fun SolidFallbackBottomBar(
                 .shadow(
                     elevation = 8.dp,
                     shape = capsuleShape,
-                    ambientColor = ArkdoFixedColors.ShadowSoft,
-                    spotColor = ArkdoFixedColors.ShadowSoft
+                    ambientColor = JetDoFixedColors.ShadowSoft,
+                    spotColor = JetDoFixedColors.ShadowSoft
                 )
                 .clip(capsuleShape)
                 .background(colors.surfaceCard.copy(alpha = 0.92f))
@@ -681,7 +681,7 @@ private fun SolidFallbackBottomBar(
  * [icon] 收到的是**已按选中态动画好的颜色**,调用方直接拿去染色即可。
  */
 @Composable
-fun RowScope.ArkDoBottomBarItem(
+fun RowScope.JetDoBottomBarItem(
     selected: Boolean,
     label: String,
     onClick: () -> Unit,
@@ -796,7 +796,7 @@ private fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
             .clip(CircleShape)
-            .background(ArkdoFixedColors.BadgeRed)
+            .background(JetDoFixedColors.BadgeRed)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -804,7 +804,7 @@ private fun UnreadBadge(count: Int, modifier: Modifier = Modifier) {
             text = text,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
-            color = ArkdoFixedColors.OnDarkFg,
+            color = JetDoFixedColors.OnDarkFg,
             maxLines = 1
         )
     }

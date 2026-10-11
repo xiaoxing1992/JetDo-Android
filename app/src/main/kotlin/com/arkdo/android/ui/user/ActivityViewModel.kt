@@ -121,7 +121,7 @@ class ActivityViewModel @Inject constructor(
                 bridge = ArkWebNetworkBridge,
                 ready = true,
                 alreadyLoaded = _uiState.value.categories.isNotEmpty(),
-                logTag = "[ArkDO][Activity]"
+                logTag = "[JetDo][Activity]"
             )?.let { loaded ->
                 _uiState.update { it.copy(categories = loaded) }
             }

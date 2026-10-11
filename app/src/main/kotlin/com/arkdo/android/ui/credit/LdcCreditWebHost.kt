@@ -81,10 +81,10 @@ private class LdcWebHolder(context: android.content.Context) {
         WebSessionManager.applyUserAgent(web, "LdcCredit")
         web.setBackgroundColor(0x00000000)
         executor = WebviewJsonExecutor(web)
-        web.addJavascriptInterface(executor.getCallbackProxy(), "ArkDOBridge")
+        web.addJavascriptInterface(executor.getCallbackProxy(), "JetDoBridge")
         web.webViewClient = object : android.webkit.WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                Timber.i("[ArkDO][Ldc] pageEnd url=%s", url)
+                Timber.i("[JetDo][Ldc] pageEnd url=%s", url)
                 if (!mainFrameFailed && url != null && url.startsWith(AppConstants.CREDIT_BASE_URL)) {
                     if (!readyNotified) {
                         readyNotified = true
@@ -101,7 +101,7 @@ private class LdcWebHolder(context: android.content.Context) {
             ) {
                 if (request?.isForMainFrame == true) {
                     mainFrameFailed = true
-                    Timber.i("[ArkDO][Ldc] main frame error code=%s", error?.errorCode)
+                    Timber.i("[JetDo][Ldc] main frame error code=%s", error?.errorCode)
                     callbacks.onLoadFailed()
                 }
             }
@@ -113,7 +113,7 @@ private class LdcWebHolder(context: android.content.Context) {
         loadedUrl = url
         mainFrameFailed = false
         val load = {
-            Timber.i("[ArkDO][Ldc] load %s", url)
+            Timber.i("[JetDo][Ldc] load %s", url)
             webView.loadUrl(url)
         }
         if (Looper.myLooper() == Looper.getMainLooper()) load() else webView.post(load)

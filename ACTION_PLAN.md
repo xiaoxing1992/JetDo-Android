@@ -1,4 +1,4 @@
-# ArkDO Android - 立即行动清单
+# JetDo Android - 立即行动清单
 
 ## 🚨 当前状态
 
@@ -29,7 +29,7 @@ adb shell am force-stop com.arkdo.android.debug
 adb shell monkey -p com.arkdo.android.debug -c android.intent.category.LAUNCHER 1
 
 # 查看日志（等待10秒后执行）
-sleep 10 && adb logcat -d | grep -E "ArkDO.*onPageFinished|ArkDO.*Bridge ready" | tail -5
+sleep 10 && adb logcat -d | grep -E "JetDo.*onPageFinished|JetDo.*Bridge ready" | tail -5
 ```
 
 **期望结果**：
@@ -159,7 +159,7 @@ suspend fun checkNetworkAndGuide() {
 **当前最佳方案**：
 - 引导用户配置 Private DNS
 - 简单、可靠、无副作用
-- 所有应用都受益（不只是 ArkDO）
+- 所有应用都受益（不只是 JetDo）
 
 **适用场景**：
 - ✅ MVP 快速上线

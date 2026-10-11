@@ -12,7 +12,7 @@ import androidx.compose.animation.fadeOut
 /**
  * 页面级转场时长（push/pop 滑动）。
  *
- * internal 而非 private：共享元素的 bounds 补间要用**同一个值**（见 ArkDoNavHost
+ * internal 而非 private：共享元素的 bounds 补间要用**同一个值**（见 JetDoNavHost
  * 下发 SharedSearchTransition.boundsDurationMillis）。两边一旦不同步，页面停稳后
  * 图标还会自己动一段，看起来像多了一次回弹。
  */
@@ -93,7 +93,7 @@ val noneExitTransition: AnimatedContentTransitionScope<*>.() -> ExitTransition =
 // 用户点站内链接时读到的是「方向不对」，而不是「这是浏览器」。轴向用来表达层级，
 // 前提是这种区分本身对用户有意义 —— 这里没有，一致性优先。
 //
-// 现在 WEBVIEW 路由不声明任何 enter/exit/pop 参数（见 ArkDoNavHost），
+// 现在 WEBVIEW 路由不声明任何 enter/exit/pop 参数（见 JetDoNavHost），
 // 自动落到 NavHost 级的横向 push（slideEnterTransition / slideExitTransition），
 // 与进入帖子详情、他人主页完全同向同时长。
 //

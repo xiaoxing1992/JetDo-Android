@@ -1,6 +1,6 @@
 # API 适配文档
 
-ArkDO Android 与 Discourse API 的对接文档。
+JetDo Android 与 Discourse API 的对接文档。
 
 ## 基础信息
 
@@ -268,7 +268,7 @@ Content-Type: application/json
 **响应：**
 - Cookie: `_t={session_token}`
 
-**注意：** ArkDO 使用 WebView OAuth 登录，不直接调用此端点。
+**注意：** JetDo 使用 WebView OAuth 登录，不直接调用此端点。
 
 ---
 

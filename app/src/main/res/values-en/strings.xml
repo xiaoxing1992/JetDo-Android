@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="about_arkdo">About ArkDO</string>
+    <string name="about_jetdo">About JetDo</string>
     <string name="about_browser_failed">Couldn\'t open a browser; the website URL was copied</string>
     <string name="about_build">Build %1$s (v%2$s) · %3$s</string>
     <string name="about_data_from">Data from </string>
@@ -387,7 +387,7 @@
     <string name="home_realtime_desc">Get notified of new replies while reading</string>
     <string name="home_realtime_topics_desc">Show a bar at the top when new topics arrive; tap to insert</string>
     <string name="home_title">Home</string>
-    <string name="login_account_note">Accounts belong to the forum itself; sign in there to join the discussion. Login happens on the forum\'s own page — ArkDO never touches your password.</string>
+    <string name="login_account_note">Accounts belong to the forum itself; sign in there to join the discussion. Login happens on the forum\'s own page — JetDo never touches your password.</string>
     <string name="login_action">Sign in</string>
     <string name="login_benefit_engage">Reply, like and vote</string>
     <string name="login_benefit_pm">PMs and realtime notifications</string>
@@ -588,7 +588,7 @@
     <string name="weight_semibold">Semibold</string>
 
     <!-- 原有条目（P2-28 前已存在）的英文 -->
-    <string name="app_name" translatable="false">ArkDO</string>
+    <string name="app_name" translatable="false">JetDo</string>
     <string name="tab_home">Home</string>
     <string name="tab_notification">Notifications</string>
     <string name="tab_profile">Me</string>
@@ -610,7 +610,7 @@
     <string name="push_channel_name">LINUX DO notifications</string>
     <string name="push_channel_desc">Replies, mentions, likes and other community notifications</string>
     <string name="poll_named">Poll · %1$s</string>
-    <string name="privacy_consent_title">Welcome to ArkDO</string>
+    <string name="privacy_consent_title">Welcome to JetDo</string>
     <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· When the app crashes, crash stacks and device environment info are reported via Tencent Bugly (no account or browsing data) for bug fixing only — this is enabled only after you agree.\n· Uninstalling the app deletes all local data.</string>
     <string name="privacy_consent_agree">Agree and continue</string>
     <string name="privacy_consent_decline">Decline</string>

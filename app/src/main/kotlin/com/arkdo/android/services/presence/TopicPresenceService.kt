@@ -29,7 +29,7 @@ import timber.log.Timber
 /** 展示上限：对齐 Discourse `presence_max_users_shown` 默认值 5。 */
 internal const val PRESENCE_MAX_SHOWN = 5
 
-private const val LOG_TAG = "[ArkDO][Presence]"
+private const val LOG_TAG = "[JetDo][Presence]"
 
 /** GET /presence/get 单个频道的状态（Discourse presence.js:170-183）。 */
 @Serializable
@@ -208,12 +208,12 @@ class TopicPresenceService(
                     lastId = snapshot.lastMessageId
                 }
             } else {
-                Timber.i("[ArkDO][Presence] /presence/get failed status=%s", response.statusCode)
+                Timber.i("[JetDo][Presence] /presence/get failed status=%s", response.statusCode)
             }
             // 订阅增量频道（挂进运行中的长轮询循环）。起点 = last_message_id（缺则 -1 只收新）。
             bridgeProvider().subscribeChannel(bus, lastId)
             Timber.i(
-                "[ArkDO][Presence] synced topicId=%s initialUsers=%d lastId=%d",
+                "[JetDo][Presence] synced topicId=%s initialUsers=%d lastId=%d",
                 topicId, users.size, lastId
             )
             emit()

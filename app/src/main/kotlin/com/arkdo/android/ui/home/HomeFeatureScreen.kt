@@ -22,7 +22,7 @@ import com.arkdo.android.services.message.MessageBusEvent
 import com.arkdo.android.services.message.MessageBusEventBus
 import com.arkdo.android.services.message.NEW_TOPICS_CHANNEL
 import com.arkdo.android.services.message.extractIncomingHomeTopicId
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 
 /**
@@ -128,13 +128,13 @@ fun arkdoHomeVisualTokens(): HomeVisualTokens {
         fillSubtle = colors.fillSubtle,
         infoSoftBg = colors.infoSoftBg,
         avatarFg = colors.avatarFg,
-        avatarBorder = ArkdoFixedColors.AvatarBorder,
+        avatarBorder = JetDoFixedColors.AvatarBorder,
         fabComposeBg = colors.fabComposeBg,
         fabTopFg = colors.fabTopFg,
         fabGlassTint = colors.floatingActionBg,
         incomingHighlight = colors.incomingHighlight,
-        unread = ArkdoFixedColors.Unread,
-        amber = ArkdoFixedColors.Amber,
-        scrim = ArkdoFixedColors.Scrim
+        unread = JetDoFixedColors.Unread,
+        amber = JetDoFixedColors.Amber,
+        scrim = JetDoFixedColors.Scrim
     )
 }

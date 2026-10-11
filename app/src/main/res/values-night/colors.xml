@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 深色模式冷启动底色，对齐 ArkdoDarkColors.pageBg -->
+    <!-- 深色模式冷启动底色，对齐 JetDoDarkColors.pageBg -->
     <color name="window_background">#FF17191D</color>
 
     <!-- Adaptive 图标背景层深色档：与深色闪屏底同值，MIUI 方形卡片隐形。 -->

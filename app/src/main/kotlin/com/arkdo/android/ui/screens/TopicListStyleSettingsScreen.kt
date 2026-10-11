@@ -350,7 +350,7 @@ private fun previewTopics(): List<HomeTopic> {
             bookmarked = true,
             hasAcceptedAnswer = true,
             unseen = true,
-            author = HomeUser(id = 10001, username = "arkdo", name = "ArkDO")
+            author = HomeUser(id = 10001, username = "arkdo", name = "JetDo")
         )
     )
 }

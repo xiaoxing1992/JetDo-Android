@@ -10,7 +10,7 @@ import com.arkdo.android.core.model.HomeQuery
 internal fun homeTitle(query: HomeQuery, categoryName: String? = query.categoryName): String = when {
     !categoryName.isNullOrBlank() -> categoryName
     !query.tag.isNullOrBlank() -> query.tag!!
-    query.feed == HomeFeed.LATEST -> "ArkDO"
+    query.feed == HomeFeed.LATEST -> "JetDo"
     else -> query.feed.label
 }
 

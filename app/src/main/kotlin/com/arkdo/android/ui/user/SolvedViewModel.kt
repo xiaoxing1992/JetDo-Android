@@ -119,7 +119,7 @@ class SolvedViewModel @Inject constructor(
                 bridge = ArkWebNetworkBridge,
                 ready = true,
                 alreadyLoaded = _uiState.value.categories.isNotEmpty(),
-                logTag = "[ArkDO][Solved]"
+                logTag = "[JetDo][Solved]"
             )?.let { loaded ->
                 _uiState.update { it.copy(categories = loaded) }
             }

@@ -7,7 +7,7 @@ import java.net.URLDecoder
 /**
  * 推送通知深链解析出来的目标。
  *
- * 目前只有通知中心一条链路（Manifest 里注册的是 `arkdo://notification`），
+ * 目前只有通知中心一条链路（Manifest 里注册的是 `jetdo://notification`），
  * 但通知点进来往往要直达某个话题的某一楼，所以话题是独立的目标类型而不是
  * 「通知中心 + 参数」。
  */
@@ -23,7 +23,7 @@ sealed interface DeepLinkTarget {
 /**
  * 深链事件通道：把「收到一个 intent」这件事从 Activity 送到 NavHost。
  *
- * 为什么需要它 —— MainActivity 拿得到 intent，但导航权在 ArkDoNavHost 手里的
+ * 为什么需要它 —— MainActivity 拿得到 intent，但导航权在 JetDoNavHost 手里的
  * navController 上，两者之间隔着一整个 Compose 树，没有直接的引用路径。
  * 项目里已有的 ChallengeEventBus / SessionEventBus / AppStateEventBus 都是
  * 同一类结构，这里沿用（而不是往 MainActivity 里塞一个 navController 引用：
@@ -36,7 +36,7 @@ sealed interface DeepLinkTarget {
 object DeepLinkEventBus {
 
     /** Manifest 中 intent-filter 注册的 scheme。 */
-    const val SCHEME = "arkdo"
+    const val SCHEME = "jetdo"
 
     /** 通知深链的 host。 */
     const val HOST_NOTIFICATION = "notification"
@@ -52,17 +52,17 @@ object DeepLinkEventBus {
         pending?.let { queued ->
             pending = null
             runCatching { listener(queued) }.onFailure {
-                Timber.e(it, "[ArkDO][DeepLink] 补发积压目标失败")
+                Timber.e(it, "[JetDo][DeepLink] 补发积压目标失败")
             }
         }
         return { listeners.remove(id) }
     }
 
     fun dispatch(target: DeepLinkTarget) {
-        Timber.i("[ArkDO][DeepLink] dispatch target=%s", target.toString())
+        Timber.i("[JetDo][DeepLink] dispatch target=%s", target.toString())
         if (listeners.isEmpty()) {
             pending = target
-            Timber.i("[ArkDO][DeepLink] 暂无订阅者，积压一份等 NavHost 就绪")
+            Timber.i("[JetDo][DeepLink] 暂无订阅者，积压一份等 NavHost 就绪")
             return
         }
         notifyListeners(target)
@@ -79,7 +79,7 @@ object DeepLinkEventBus {
         if (raw.isEmpty()) return null
         val uri = runCatching { URI(raw) }.getOrNull() ?: return null
         if (!SCHEME.equals(uri.scheme, ignoreCase = true)) return null
-        // 自定义 scheme 的 `arkdo://notification` 里，authority 就是 host。
+        // 自定义 scheme 的 `jetdo://notification` 里，authority 就是 host。
         if (!HOST_NOTIFICATION.equals(uri.host, ignoreCase = true)) return null
 
         val params = parseQuery(uri.rawQuery)
@@ -93,7 +93,7 @@ object DeepLinkEventBus {
     private fun notifyListeners(target: DeepLinkTarget) {
         listeners.values.toList().forEach { listener ->
             runCatching { listener(target) }.onFailure {
-                Timber.e(it, "[ArkDO][DeepLink] 订阅者抛出异常")
+                Timber.e(it, "[JetDo][DeepLink] 订阅者抛出异常")
             }
         }
     }

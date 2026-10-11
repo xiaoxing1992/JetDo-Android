@@ -1,4 +1,4 @@
-# ArkDO Android 商店上架素材
+# JetDo Android 商店上架素材
 
 > 各应用商店字段长短不一，按需裁剪。隐私政策与用户协议见同目录 [privacy-policy.md](privacy-policy.md) / [user-agreement.md](user-agreement.md)，发布前须补齐两份文档中的联系方式，并把隐私政策挂到可达的网页链接（商店「隐私政策」栏必填）。
 
@@ -6,7 +6,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 应用名 | ArkDO |
+| 应用名 | JetDo |
 | 包名 | com.arkdo.android |
 | 当前版本 | 1.0.1 (versionCode 2) |
 | 分类 | 社交 / 通讯类（论坛阅读）或「阅读」 |
@@ -24,7 +24,7 @@
 
 ## 三、完整介绍（约 400 字，可直接粘贴）
 
-> ArkDO 是 LINUX DO 社区的非官方第三方 Android 客户端，基于 Material 3 与 Jetpack Compose 全新构建。
+> JetDo 是 LINUX DO 社区的非官方第三方 Android 客户端，基于 Material 3 与 Jetpack Compose 全新构建。
 >
 > 【浏览与阅读】首页多标签（热门/最新/顶置）流式浏览；话题详情支持 Markdown 完整渲染、代码高亮、楼层跳转与 Scrubber 快速拖动定位；内嵌音视频播放。
 >
@@ -38,11 +38,11 @@
 >
 > 本应用无广告、无埋点统计；崩溃信息经腾讯 Bugly 上报用于稳定性改进（不包含社区账号与浏览记录）。登录通过官方页面完成，隐私政策见应用发布页。
 >
-> ArkDO 与 LINUX DO 官方无隶属关系，社区内容版权归社区及原作者所有。
+> JetDo 与 LINUX DO 官方无隶属关系，社区内容版权归社区及原作者所有。
 
 英文版（英文商店可用，与 values-en 文案口径一致）：
 
-> ArkDO is an unofficial Android client for the LINUX DO community, built with Material 3 and Jetpack Compose: full Markdown rendering with code highlight, a floor scrubber for quick navigation in long topics, built-in media playback, local drafts, bookmarks, read-state sync, DoH support, dark mode, and adaptive layouts for tablets and foldables. No ads, no analytics SDK. ArkDO is not affiliated with LINUX DO.
+> JetDo is an unofficial Android client for the LINUX DO community, built with Material 3 and Jetpack Compose: full Markdown rendering with code highlight, a floor scrubber for quick navigation in long topics, built-in media playback, local drafts, bookmarks, read-state sync, DoH support, dark mode, and adaptive layouts for tablets and foldables. No ads, no analytics SDK. JetDo is not affiliated with LINUX DO.
 
 ## 四、更新说明模板（1.0.1）
 

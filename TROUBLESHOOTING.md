@@ -1,4 +1,4 @@
-# ArkDO Android 故障排查指南
+# JetDo Android 故障排查指南
 
 ## 问题：首页加载失败
 
@@ -49,7 +49,7 @@ adb reboot
 配置完成后，打开应用并查看日志：
 
 ```bash
-adb logcat -s "ArkDO:*" | grep -E "onPageFinished|canFetch=true|Bridge ready"
+adb logcat -s "JetDo:*" | grep -E "onPageFinished|canFetch=true|Bridge ready"
 ```
 
 **成功的日志**应该包含：

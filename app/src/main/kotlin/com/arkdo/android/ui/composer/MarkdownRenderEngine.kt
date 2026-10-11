@@ -25,8 +25,8 @@ import kotlin.coroutines.resume
 class MarkdownRenderEngine(context: android.content.Context) {
 
     companion object {
-        private const val LOG_TAG = "[ArkDO][MarkdownRender]"
-        private const val BRIDGE_NAME = "ArkDOMd"
+        private const val LOG_TAG = "[JetDo][MarkdownRender]"
+        private const val BRIDGE_NAME = "JetDoMd"
         private const val RENDER_TIMEOUT_MS = 5_000L
     }
 

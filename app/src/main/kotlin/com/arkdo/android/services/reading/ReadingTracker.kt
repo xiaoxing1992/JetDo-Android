@@ -26,7 +26,7 @@ import timber.log.Timber
  */
 class ReadingTracker(private val scope: CoroutineScope) {
 
-    private val tag = "[ArkDO][ReadingTracker]"
+    private val tag = "[JetDo][ReadingTracker]"
 
     companion object {
         const val TICK_INTERVAL_MS = 1000L

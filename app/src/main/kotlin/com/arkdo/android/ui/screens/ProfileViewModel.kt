@@ -61,7 +61,7 @@ class ProfileViewModel @Inject constructor(
                 bridge = ArkWebNetworkBridge,
                 ready = true,
                 alreadyLoaded = _uiState.value.categories.isNotEmpty(),
-                logTag = "[ArkDO][Profile]"
+                logTag = "[JetDo][Profile]"
             ) ?: return@launch
             _uiState.update { it.copy(categories = loaded) }
         }

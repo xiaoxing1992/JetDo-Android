@@ -1,6 +1,6 @@
 # 项目创建完成！🎉
 
-已成功基于 HarmonyOS 版本 ArkDO 创建 Android Compose 项目骨架。
+已成功基于 HarmonyOS 版本 JetDo 创建 Android Compose 项目骨架。
 
 ## 📦 已完成内容
 
@@ -81,4 +81,4 @@ MIT License
 
 ---
 
-基于 [ArkDO](https://github.com/JoeyYin/ArkDO) HarmonyOS 版本移植
+基于 [JetDo](https://github.com/JoeyYin/JetDo) HarmonyOS 版本移植

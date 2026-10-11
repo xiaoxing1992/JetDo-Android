@@ -23,7 +23,7 @@ import timber.log.Timber
 
 object DraftCountStore {
 
-    private const val LOG_TAG = "[ArkDO][DraftCount]"
+    private const val LOG_TAG = "[JetDo][DraftCount]"
 
     private val _count = MutableStateFlow<Int?>(null)
     val count: StateFlow<Int?> = _count.asStateFlow()

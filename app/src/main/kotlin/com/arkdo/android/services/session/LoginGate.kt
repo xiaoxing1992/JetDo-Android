@@ -12,7 +12,7 @@ import timber.log.Timber
 // 登录态真源仍是 RootTabPage 的会话检查，这里只做一份可全局读取的镜像。
 // ==========================================================================
 
-const val LOGIN_GATE_LOG_TAG = "[ArkDO][LoginGate]"
+const val LOGIN_GATE_LOG_TAG = "[JetDo][LoginGate]"
 const val STORAGE_KEY_LOGGED_IN = "arkdoIsLoggedIn"
 const val STORAGE_KEY_CURRENT_USER_ID = "arkdoCurrentUserId"
 

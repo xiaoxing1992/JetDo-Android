@@ -50,10 +50,10 @@ fun buildCsrfScript(
             const requestUrl = new URL($urlExpr, baseUrl);
             let csrfSource = 'none';
             let csrfLength = 0;
-            console.log('[ArkDO][CsrfScript] document.cookie=', document.cookie.substring(0, 200));
-            console.log('[ArkDO][CsrfScript] document.location.href=', document.location.href);
+            console.log('[JetDo][CsrfScript] document.cookie=', document.cookie.substring(0, 200));
+            console.log('[JetDo][CsrfScript] document.location.href=', document.location.href);
             const fail = (error) => {
-              window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+              window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0,
                 contentType: '',
                 body: '',
@@ -101,7 +101,7 @@ $headers
               return fetch(requestUrl.toString(), fetchOptions);
             }).then((response) => {
               response.text().then((body) => {
-                window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                   statusCode: response.status,
                   contentType: response.headers.get('content-type') || '',
                   cfMitigated: response.headers.get('cf-mitigated') || '',

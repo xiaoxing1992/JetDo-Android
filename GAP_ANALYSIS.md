@@ -1,6 +1,6 @@
 # ArkDO-Android 功能缺口分析
 
-> 对标对象：鸿蒙版 ArkDO（ArkTS · main@`7680996` · 28 页面 / 47 组件 / 25 服务子域）
+> 对标对象：鸿蒙版 JetDo（ArkTS · main@`7680996` · 28 页面 / 47 组件 / 25 服务子域）
 > 本项目：`feat/migrate-vertical-slice` @ `b731be8`（工作区干净，零未提交改动）
 > 复核日期：2026-10-02（全量重扫：目录级逐文件对比 + 隐性缺口五判据 + 工程化 + 文档债，三路独立扫描后逐条交叉复核）
 > 规则：只记「现在还没做的」。做完删一条 —— 不记版本号、不记修复历史、不做已修项记账。
@@ -111,7 +111,7 @@
 6. **单元测试 73 个测试类 / 541 用例零失败**（app 54 + core/data 7 + core/model 3 + designsystem 3 + home 4 + notification 1 + search 1，鸿蒙无对应 JVM 单测）
 7. **通知列表分页**——`loadMore` + hasMore（`NotificationViewModel.kt:46,105-111`）
 8. **表情目录可观察刷新**——`emojiCatalogRevision: StateFlow<Int>`（`EmojiCatalogRegistry.kt:70`），表一到选择器自动刷新；鸿蒙 `aboutToAppear` 读一次、拉到晚就一直空白
-9. **视频播放走 TextureView**——`arkdo_player_view.xml` + `VideoPlayer.kt:158`，避开 SurfaceView 与 Compose 合成的黑帧交替（实测黑帧率 46% → 0%）
+9. **视频播放走 TextureView**——`jetdo_player_view.xml` + `VideoPlayer.kt:158`，避开 SurfaceView 与 Compose 合成的黑帧交替（实测黑帧率 46% → 0%）
 10. **上传前视频转码** `VideoTranscoder`（media3-transformer）——鸿蒙上传链路无对应转码实现
 11. **LdcCredit 拆分更细**——credit 子域 6 文件 vs 鸿蒙 4
 12. **composer 拍照入口** `ComposerCamera`（TakePicture + 既有 FileProvider，成图走图片上传通道）——鸿蒙 `camera` 0 命中，选图只走 photoAccessHelper
@@ -155,7 +155,7 @@
 # ── 结构对比 ──
 ls entry/src/main/ets/services/                    # 鸿蒙 25 子域
 ls app/src/main/kotlin/com/arkdo/android/services/ # Android 20 + core/data 2 + feature/home 1
-ls /Users/tongtong/ArkDO/entry/src/main/ets/views/pages/ | wc -l   # 28 页
+ls /Users/tongtong/JetDo/entry/src/main/ets/views/pages/ | wc -l   # 28 页
 
 # ── 判据 D：路由常量 vs 注册 ──
 rg -n "composable\(Routes|Routes\.CF_CHALLENGE|Routes\.LOGIN" -g '*.kt'   # 只命中定义处 = 悬空

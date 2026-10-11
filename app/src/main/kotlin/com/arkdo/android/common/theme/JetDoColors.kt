@@ -2,13 +2,13 @@
 //
 //
 ///**
-// * ArkDO 调色板 —— 与 HarmonyOS 版 entry/src/main/resources/*/element/color.json 逐色对齐。
+// * JetDo 调色板 —— 与 HarmonyOS 版 entry/src/main/resources/*/element/color.json 逐色对齐。
 // *
 // * 约定：8 位 hex 为 ARGB（与原项目一致）。
 // * 深色/浅色两套同名资源色，按 appIsDark 手动切换（见 ThemeManager），
 // * 不可翻转的颜色（遮罩/语义色）见 [SemanticColors]。
 // */
-//object ArkDoColors {
+//object JetDoColors {
 //
 //    // 浅色 (base)
 //    object Light {

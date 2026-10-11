@@ -144,7 +144,7 @@ class BookmarksViewModel @Inject constructor(
                 bridge = ArkWebNetworkBridge,
                 ready = true,
                 alreadyLoaded = _uiState.value.categories.isNotEmpty(),
-                logTag = "[ArkDO][Bookmarks]"
+                logTag = "[JetDo][Bookmarks]"
             )?.let { loaded -> _uiState.update { it.copy(categories = loaded) } }
         }
     }

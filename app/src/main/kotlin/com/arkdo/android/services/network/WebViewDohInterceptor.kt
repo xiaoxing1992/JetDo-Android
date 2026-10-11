@@ -30,7 +30,7 @@ import timber.log.Timber
  */
 object WebViewDohInterceptor {
 
-    private const val TAG = "[ArkDO][DohIntercept]"
+    private const val TAG = "[JetDo][DohIntercept]"
     private const val ROOT_HOST = "linux.do"
 
     /** OkHttp 会自己加 Accept-Encoding 并透明解压，转发 WebView 那份会让解压逻辑对不上。 */

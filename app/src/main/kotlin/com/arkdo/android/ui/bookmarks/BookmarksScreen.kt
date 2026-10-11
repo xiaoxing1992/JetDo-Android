@@ -62,7 +62,7 @@ import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.components.UserAvatar
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.theme.isArkdoInDarkTheme
+import com.arkdo.android.ui.theme.isJetDoInDarkTheme
 
 private val PagePadding = 16.dp
 
@@ -194,8 +194,8 @@ private fun BookmarkRow(
     onDelete: () -> Unit
 ) {
     val colors = arkdoColors
-    val pinnedBg = if (isArkdoInDarkTheme()) Color(0xFF101114) else Color(0xFFF6F6F6)
-    val gold = if (isArkdoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
+    val pinnedBg = if (isJetDoInDarkTheme()) Color(0xFF101114) else Color(0xFFF6F6F6)
+    val gold = if (isJetDoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
     var menuOpen by remember(item.id, item.pinned) { mutableStateOf(false) }
     val category = CategoryIndex.find(categories, item.categoryId)
     val parent = CategoryIndex.findParent(categories, item.categoryId)

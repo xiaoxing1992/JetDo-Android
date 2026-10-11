@@ -184,7 +184,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 data = tags
             )
         }.getOrElse {
-            Timber.e(it, "[ArkDO][Topic] 标签联想解析失败")
+            Timber.e(it, "[JetDo][Topic] 标签联想解析失败")
             NetworkResult(
                 success = false,
                 statusCode = response.statusCode,
@@ -233,9 +233,9 @@ class TopicService(private val bridge: JsonNetworkClient) {
      * 话题列表通用解析
      */
     private suspend fun getTopicListPage(path: String, page: Int): NetworkResult<TopicPage> {
-        timber.log.Timber.i("[ArkDO][TopicService] getTopicListPage: path=%s", path)
+        timber.log.Timber.i("[JetDo][TopicService] getTopicListPage: path=%s", path)
         val response = bridge.getJson(path)
-        timber.log.Timber.i("[ArkDO][TopicService] getTopicListPage: response success=%s statusCode=%d dataLength=%d",
+        timber.log.Timber.i("[JetDo][TopicService] getTopicListPage: response success=%s statusCode=%d dataLength=%d",
             response.success, response.statusCode, response.data?.length ?: 0)
 
         if (!response.success) {
@@ -244,7 +244,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
 
         val data = response.data
         if (data == null) {
-            timber.log.Timber.e("[ArkDO][TopicService] getTopicListPage: response data is null")
+            timber.log.Timber.e("[JetDo][TopicService] getTopicListPage: response data is null")
             return NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -253,12 +253,12 @@ class TopicService(private val bridge: JsonNetworkClient) {
         }
 
         return try {
-            timber.log.Timber.d("[ArkDO][TopicService] getTopicListPage: parsing JSON, length=%d", data.length)
+            timber.log.Timber.d("[JetDo][TopicService] getTopicListPage: parsing JSON, length=%d", data.length)
             val payload = json.decodeFromString<DiscourseLatestResponse>(data)
             val topicList = payload.topic_list
 
             if (topicList == null || topicList.topics == null) {
-                timber.log.Timber.e("[ArkDO][TopicService] getTopicListPage: topicList=%s topics=%s",
+                timber.log.Timber.e("[JetDo][TopicService] getTopicListPage: topicList=%s topics=%s",
                     topicList, topicList?.topics)
                 return NetworkResults.unexpectedResponse(
                     response.statusCode,
@@ -268,7 +268,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             }
 
             val mappedTopics = mapTopics(topicList.topics, payload.users)
-            timber.log.Timber.i("[ArkDO][TopicService] getTopicListPage: parsed %d topics", mappedTopics.size)
+            timber.log.Timber.i("[JetDo][TopicService] getTopicListPage: parsed %d topics", mappedTopics.size)
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
@@ -282,9 +282,9 @@ class TopicService(private val bridge: JsonNetworkClient) {
         } catch (e: Exception) {
             // e.message 含 kotlinx 的字段路径与 offset;单独一行输出并附响应体开头,
             // 避免堆栈首行被 logcat 环形缓冲冲掉后丢失定位信息(2026-08-14 曾发生)。
-            timber.log.Timber.e("[ArkDO][TopicService] getTopicListPage: JSON parse failed: %s | bodyHead=%s",
+            timber.log.Timber.e("[JetDo][TopicService] getTopicListPage: JSON parse failed: %s | bodyHead=%s",
                 e.message, data.take(400))
-            timber.log.Timber.e(e, "[ArkDO][TopicService] getTopicListPage: JSON parse failed")
+            timber.log.Timber.e(e, "[JetDo][TopicService] getTopicListPage: JSON parse failed")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -344,7 +344,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             )
         } catch (e: Exception) {
             // 别让异常静默：日志页/adb 都靠它定位是字段类型不符还是响应被盾页顶掉。
-            Timber.e(e, "[ArkDO][TopicService] getTopicDetail parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] getTopicDetail parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -375,7 +375,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 data = mapPosts(payload)
             )
         } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][TopicService] getPostReplies parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] getPostReplies parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -423,7 +423,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 data = mapPosts(payload.post_stream?.posts ?: emptyList())
             )
         } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][TopicService] loadMorePosts parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] loadMorePosts parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -580,7 +580,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             )
         } catch (e: SerializationException) {
             Timber.i(
-                "[ArkDO][TopicService] reaction users parse failed: %s",
+                "[JetDo][TopicService] reaction users parse failed: %s",
                 data.take(600)
             )
             NetworkResults.unexpectedResponse(
@@ -746,7 +746,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 )
             )
         } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][TopicService] poll vote parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] poll vote parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -825,7 +825,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 )
             }
         } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][TopicService] getPostByNumber parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] getPostByNumber parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -869,7 +869,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 )
             }
         } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][TopicService] getPostRaw parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] getPostRaw parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -933,7 +933,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
                 )
             }
         } catch (e: Exception) {
-            Timber.e(e, "[ArkDO][TopicService] updatePost parse failed length=${data.length}")
+            Timber.e(e, "[JetDo][TopicService] updatePost parse failed length=${data.length}")
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,
@@ -1002,7 +1002,7 @@ class TopicService(private val bridge: JsonNetworkClient) {
             val source = wrapped ?: json.decodeFromString<DiscoursePost>(data)
             mapPosts(listOf(source)).firstOrNull()
         } catch (e: Exception) {
-            Timber.i(e, "[ArkDO][TopicService] post mutation body not a post length=${data.length}")
+            Timber.i(e, "[JetDo][TopicService] post mutation body not a post length=${data.length}")
             null
         }
     }

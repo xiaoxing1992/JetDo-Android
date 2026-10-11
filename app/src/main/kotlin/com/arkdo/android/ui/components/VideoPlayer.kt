@@ -100,7 +100,7 @@ fun VideoPlayer(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            Timber.i("[ArkDO][VideoPlayer] player error code=%d msg=%s", error.errorCode, error.message)
+            Timber.i("[JetDo][VideoPlayer] player error code=%d msg=%s", error.errorCode, error.message)
             // 回到占位错误态,点一下重试(对齐鸿蒙 onError → localUri='' + status=error)。
             status = VideoState.ERROR
             playerView?.player = null
@@ -144,7 +144,7 @@ fun VideoPlayer(
                 val path = onResolveMedia(src.trim())
                 attachAndPlay(path, local = true)
             } catch (t: Throwable) {
-                Timber.i("[ArkDO][VideoPlayer] resolve media failed msg=%s", t.message)
+                Timber.i("[JetDo][VideoPlayer] resolve media failed msg=%s", t.message)
                 status = VideoState.ERROR
             }
         }
@@ -255,14 +255,14 @@ private enum class VideoState { IDLE, LOADING, READY, ERROR }
 /**
  * 构建帖子内联视频的 [PlayerView]。必须走 XML inflate：`surface_type=texture_view` 只能由
  * 布局 attr 指定（media3 无代码 setter）—— 用 SurfaceView 时画面会与纯黑高速交替闪，
- * 成因见 `arkdo_player_view.xml` 里的说明。是否启用内置控制条由调用点决定（桌面姿态
+ * 成因见 `jetdo_player_view.xml` 里的说明。是否启用内置控制条由调用点决定（桌面姿态
  * 分区布局必须关掉，控制条换到铰链下方的 [TabletopControlBar]）。
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun createPostPlayerView(ctx: android.content.Context, player: ExoPlayer): PlayerView {
     @Suppress("InflateParams")
     val view = android.view.LayoutInflater.from(ctx)
-        .inflate(R.layout.arkdo_player_view, null) as PlayerView
+        .inflate(R.layout.jetdo_player_view, null) as PlayerView
     // 首帧前黑底,避免 Surface 初始化的白闪。
     view.setShutterBackgroundColor(android.graphics.Color.BLACK)
     view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT

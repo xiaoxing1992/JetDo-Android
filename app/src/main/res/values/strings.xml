@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ArkDO</string>
+    <string name="app_name">JetDo</string>
     <string name="tab_home">首页</string>
     <string name="tab_notification">通知</string>
     <string name="tab_profile">我的</string>
@@ -22,7 +22,7 @@
     <string name="push_channel_desc">回复、@、点赞等社区通知</string>
 
     <!-- P2-28 抽取（zh 默认语言）-->
-    <string name="about_arkdo">关于 ArkDO</string>
+    <string name="about_jetdo">关于 JetDo</string>
     <string name="about_browser_failed">打不开浏览器，官网地址已复制</string>
     <string name="about_build">构建 %1$s (v%2$s) · %3$s</string>
     <string name="about_data_from">数据来自 </string>
@@ -409,7 +409,7 @@
     <string name="home_realtime_desc">看帖时自动接收他人的新回复</string>
     <string name="home_realtime_topics_desc">首页顶部提示有新话题，点一下插进列表</string>
     <string name="home_title">首页</string>
-    <string name="login_account_note">账号由该论坛提供,登录后即可参与讨论。登录在论坛自己的页面完成,ArkDO 不经手你的密码。</string>
+    <string name="login_account_note">账号由该论坛提供,登录后即可参与讨论。登录在论坛自己的页面完成,JetDo 不经手你的密码。</string>
     <string name="login_action">登录</string>
     <string name="login_benefit_engage">参与回帖、点赞与投票</string>
     <string name="login_benefit_pm">私信与实时通知提醒</string>
@@ -609,7 +609,7 @@
     <string name="weight_regular">常规</string>
     <string name="weight_semibold">加粗</string>
     <string name="poll_named">投票 · %1$s</string>
-    <string name="privacy_consent_title">欢迎使用 ArkDO</string>
+    <string name="privacy_consent_title">欢迎使用 JetDo</string>
     <string name="privacy_consent_body">在使用本应用前，请阅读并同意《隐私政策》与《用户协议》（完整内容见应用发布页）：\n\n· 本应用无广告、无埋点统计；你的账号数据仅在你的设备与 LINUX DO 社区之间流转。\n· 网络权限用于访问社区；通知权限仅在你授权后用于消息提醒。\n· 应用发生崩溃时，会通过腾讯 Bugly 上报崩溃堆栈与设备运行环境信息（不含账号与浏览记录），仅用于修复缺陷——经你同意后该功能才会启用。\n· 卸载应用即可删除全部本地数据。</string>
     <string name="privacy_consent_agree">同意并继续</string>
     <string name="privacy_consent_decline">不同意</string>

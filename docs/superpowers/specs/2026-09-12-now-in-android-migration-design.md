@@ -2,7 +2,7 @@
 
 ## 目标
 
-在保留 ArkDO Android 现有功能、WebView 网络桥接、Cloudflare 处理和未提交业务改动的前提下，将单模块 MVVM 项目渐进式迁移为接近 Google Now in Android 的多模块、单向数据流架构。
+在保留 JetDo Android 现有功能、WebView 网络桥接、Cloudflare 处理和未提交业务改动的前提下，将单模块 MVVM 项目渐进式迁移为接近 Google Now in Android 的多模块、单向数据流架构。
 
 首期范围是建立可持续扩展的模块边界，并迁移通知垂直切片。首期完成后，通知页面仍然保持现有用户行为，但其 UI、ViewModel、Repository、API 依赖和模型不再依赖 `app` 内的横向服务目录。
 

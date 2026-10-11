@@ -100,7 +100,7 @@ class ReadTopicsViewModel @Inject constructor(
                 bridge = ArkWebNetworkBridge,
                 ready = true,
                 alreadyLoaded = _uiState.value.categories.isNotEmpty(),
-                logTag = "[ArkDO][ReadTopics]"
+                logTag = "[JetDo][ReadTopics]"
             )?.let { loaded -> _uiState.update { it.copy(categories = loaded) } }
         }
     }

@@ -78,7 +78,7 @@ import com.arkdo.android.ui.user.UserProfileScreen
 import com.arkdo.android.ui.topic.TopicDetailScreen
 
 /**
- * ArkDO 导航宿主
+ * JetDo 导航宿主
  *
  * 单 Activity 架构的根导航容器，管理所有页面的路由栈。
  *
@@ -93,7 +93,7 @@ import com.arkdo.android.ui.topic.TopicDetailScreen
  * - ...
  */
 @Composable
-fun ArkDoNavHost(
+fun JetDoNavHost(
     isWebViewReady: Boolean = false,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
@@ -117,7 +117,7 @@ fun ArkDoNavHost(
     // LaunchedEffect 的 key 不变就不会重启，第二次点等于没反应。
     var notificationTabSignal by remember { mutableIntStateOf(0) }
 
-    // 推送通知深链（arkdo://notification[?topicId=N&postNumber=M]）。
+    // 推送通知深链（jetdo://notification[?topicId=N&postNumber=M]）。
     // 订阅挂在这里而不是 RootTabScreen：RootTabScreen 只在 ROOT 目的地组合，
     // 用户正停在详情页/设置页时点通知，它根本不在组合里，事件就没人收了。
     androidx.compose.runtime.DisposableEffect(navController) {

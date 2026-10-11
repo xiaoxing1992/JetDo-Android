@@ -34,11 +34,11 @@ object ChallengeEventBus {
     fun notifyChallengeRequired(source: String, statusCode: Int, challengeState: ChallengeState): Long {
         currentVersion++
         val event = ChallengeRequiredEvent(currentVersion, source, statusCode, challengeState)
-        Timber.i("[ArkDO][Challenge] notify source=%s status=%d state=%s version=%d",
+        Timber.i("[JetDo][Challenge] notify source=%s status=%d state=%s version=%d",
             source, statusCode, challengeState, currentVersion)
         listeners.values.toList().forEach { l ->
             runCatching { l(event) }.onFailure {
-                Timber.e(it, "[ArkDO][Challenge] listener threw")
+                Timber.e(it, "[JetDo][Challenge] listener threw")
             }
         }
         return currentVersion

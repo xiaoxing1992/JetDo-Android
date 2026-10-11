@@ -19,7 +19,7 @@ import com.arkdo.android.common.theme.AppThemeMode
 import com.arkdo.android.common.theme.ThemeModeStore
 
 /**
- * ArkDO 主题系统
+ * JetDo 主题系统
  *
  * 配色对齐鸿蒙版 resources/{base,dark}/element/color.json —— 蓝灰体系，
  * 不是之前注释里写的"温暖土色调"（那套赤陶橙与鸿蒙侧毫无关系）。
@@ -30,84 +30,84 @@ import com.arkdo.android.common.theme.ThemeModeStore
  */
 
 private val LightColorScheme = lightColorScheme(
-    primary = ArkdoLightColors.brand,
+    primary = JetDoLightColors.brand,
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = ArkdoLightColors.infoSoftBg,
-    onPrimaryContainer = ArkdoLightColors.ldAccent,
+    primaryContainer = JetDoLightColors.infoSoftBg,
+    onPrimaryContainer = JetDoLightColors.ldAccent,
 
-    secondary = ArkdoLightColors.ldAccent,
+    secondary = JetDoLightColors.ldAccent,
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = ArkdoLightColors.surfaceMuted,
-    onSecondaryContainer = ArkdoLightColors.textBody,
+    secondaryContainer = JetDoLightColors.surfaceMuted,
+    onSecondaryContainer = JetDoLightColors.textBody,
 
-    tertiary = ArkdoLightColors.ldAccent,
+    tertiary = JetDoLightColors.ldAccent,
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = ArkdoLightColors.fillSubtle,
-    onTertiaryContainer = ArkdoLightColors.textBody,
+    tertiaryContainer = JetDoLightColors.fillSubtle,
+    onTertiaryContainer = JetDoLightColors.textBody,
 
-    background = ArkdoLightColors.pageBg,
-    onBackground = ArkdoLightColors.textPrimary,
+    background = JetDoLightColors.pageBg,
+    onBackground = JetDoLightColors.textPrimary,
 
-    surface = ArkdoLightColors.pageBg,
-    onSurface = ArkdoLightColors.textPrimary,
-    surfaceVariant = ArkdoLightColors.surfaceMuted,
-    onSurfaceVariant = ArkdoLightColors.textSecondary,
+    surface = JetDoLightColors.pageBg,
+    onSurface = JetDoLightColors.textPrimary,
+    surfaceVariant = JetDoLightColors.surfaceMuted,
+    onSurfaceVariant = JetDoLightColors.textSecondary,
 
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFFDAD6),
     onErrorContainer = Color(0xFF410002),
 
-    outline = ArkdoLightColors.border,
-    outlineVariant = ArkdoLightColors.border,
+    outline = JetDoLightColors.border,
+    outlineVariant = JetDoLightColors.border,
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = ArkdoDarkColors.brand,
+    primary = JetDoDarkColors.brand,
     onPrimary = Color(0xFF0B1220),
-    primaryContainer = ArkdoDarkColors.infoSoftBg,
-    onPrimaryContainer = ArkdoDarkColors.ldAccent,
+    primaryContainer = JetDoDarkColors.infoSoftBg,
+    onPrimaryContainer = JetDoDarkColors.ldAccent,
 
-    secondary = ArkdoDarkColors.ldAccent,
+    secondary = JetDoDarkColors.ldAccent,
     onSecondary = Color(0xFF0B1220),
-    secondaryContainer = ArkdoDarkColors.surfaceMuted,
-    onSecondaryContainer = ArkdoDarkColors.textBody,
+    secondaryContainer = JetDoDarkColors.surfaceMuted,
+    onSecondaryContainer = JetDoDarkColors.textBody,
 
-    tertiary = ArkdoDarkColors.ldAccent,
+    tertiary = JetDoDarkColors.ldAccent,
     onTertiary = Color(0xFF0B1220),
-    tertiaryContainer = ArkdoDarkColors.fillSubtle,
-    onTertiaryContainer = ArkdoDarkColors.textBody,
+    tertiaryContainer = JetDoDarkColors.fillSubtle,
+    onTertiaryContainer = JetDoDarkColors.textBody,
 
-    background = ArkdoDarkColors.pageBg,
-    onBackground = ArkdoDarkColors.textPrimary,
+    background = JetDoDarkColors.pageBg,
+    onBackground = JetDoDarkColors.textPrimary,
 
-    surface = ArkdoDarkColors.pageBg,
-    onSurface = ArkdoDarkColors.textPrimary,
-    surfaceVariant = ArkdoDarkColors.surfaceMuted,
-    onSurfaceVariant = ArkdoDarkColors.textSecondary,
+    surface = JetDoDarkColors.pageBg,
+    onSurface = JetDoDarkColors.textPrimary,
+    surfaceVariant = JetDoDarkColors.surfaceMuted,
+    onSurfaceVariant = JetDoDarkColors.textSecondary,
 
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
     onErrorContainer = Color(0xFFFFDAD6),
 
-    outline = ArkdoDarkColors.border,
-    outlineVariant = ArkdoDarkColors.border,
+    outline = JetDoDarkColors.border,
+    outlineVariant = JetDoDarkColors.border,
 )
 
-private val LocalArkdoDark = staticCompositionLocalOf { false }
+private val LocalJetDoDark = staticCompositionLocalOf { false }
 
 /**
- * 当前是否画深色。由 [ArkDoTheme] 写入：跟随系统，或设置页的浅色/深色。
+ * 当前是否画深色。由 [JetDoTheme] 写入：跟随系统，或设置页的浅色/深色。
  * 只读 CompositionLocal，引用块这类 @ReadOnlyComposable 也能用。
  * 不要再直接调 [isSystemInDarkTheme]，否则强制浅色/深色时局部色不会跟着变。
  */
 @Composable
 @ReadOnlyComposable
-fun isArkdoInDarkTheme(): Boolean = LocalArkdoDark.current
+fun isJetDoInDarkTheme(): Boolean = LocalJetDoDark.current
 
 @Composable
-fun ArkDoTheme(
+fun JetDoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
@@ -119,7 +119,7 @@ fun ArkDoTheme(
         AppThemeMode.DARK -> true
     }
     val colorScheme = if (dark) DarkColorScheme else LightColorScheme
-    val tokens = if (dark) ArkdoDarkColors else ArkdoLightColors
+    val tokens = if (dark) JetDoDarkColors else JetDoLightColors
 
     // Edge-to-Edge 下状态栏/导航栏透明,图标深浅跟当前主题走,不跟系统夜间模式。
     val view = LocalView.current
@@ -134,8 +134,8 @@ fun ArkDoTheme(
     }
 
     CompositionLocalProvider(
-        LocalArkdoColors provides tokens,
-        LocalArkdoDark provides dark
+        LocalJetDoColors provides tokens,
+        LocalJetDoDark provides dark
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

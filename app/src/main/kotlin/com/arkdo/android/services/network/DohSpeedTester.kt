@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 // 拿一个固定域名去测，等于测了个跟用户无关的站。
 // ==========================================================================
 
-private const val TAG = "[ArkDO][DohTest]"
+private const val TAG = "[JetDo][DohTest]"
 
 /** 未选定论坛时的兜底探针域名，免得拼出空 query 让整轮测速失败。 */
 private const val FALLBACK_PROBE_DOMAIN = "example.com"

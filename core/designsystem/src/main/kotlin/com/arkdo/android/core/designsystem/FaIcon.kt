@@ -49,11 +49,11 @@ object FaIconSet {
                     }
                 }
             }.getOrElse {
-                Timber.e(it, "[ArkDO][FaIcon] 符号表加载失败")
+                Timber.e(it, "[JetDo][FaIcon] 符号表加载失败")
                 emptySet()
             }
             ids = loaded
-            Timber.i("[ArkDO][FaIcon] 符号表已加载 count=%d", loaded.size)
+            Timber.i("[JetDo][FaIcon] 符号表已加载 count=%d", loaded.size)
             return loaded
         }
     }
