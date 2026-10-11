@@ -1,8 +1,8 @@
-# ArkDO Android - 项目总结
+# JetDo Android - 项目总结
 
 ## 项目概述
 
-**ArkDO Android** 是 LINUX DO 社区的第三方 Android 原生客户端，基于 HarmonyOS 版本（ArkDO）1:1 还原核心功能和架构。
+**JetDo Android** 是 LINUX DO 社区的第三方 Android 原生客户端，基于 HarmonyOS 版本（JetDo）1:1 还原核心功能和架构。
 
 - **技术栈**：Jetpack Compose + Kotlin + Hilt + MVVM
 - **核心特性**：WebView 网络桥接（绕过 Cloudflare）、Cooked HTML 原生渲染、系统推送中继
@@ -92,13 +92,13 @@ ArkDO-Android/
 ├── app/
 │   ├── src/main/
 │   │   ├── kotlin/com/arkdo/android/
-│   │   │   ├── ArkDoApplication.kt              # 应用入口
+│   │   │   ├── JetDoApplication.kt              # 应用入口
 │   │   │   ├── MainActivity.kt                  # 主 Activity
 │   │   │   ├── common/                          # 通用工具（待扩展）
 │   │   │   ├── data/
 │   │   │   │   └── models/Models.kt             # 数据模型
 │   │   │   ├── di/AppModule.kt                  # 依赖注入
-│   │   │   ├── navigation/ArkDoNavHost.kt       # 导航定义
+│   │   │   ├── navigation/JetDoNavHost.kt       # 导航定义
 │   │   │   ├── services/
 │   │   │   │   ├── network/WebViewNetworkBridge.kt
 │   │   │   │   └── challenge/ChallengeRecoveryCoordinator.kt
@@ -305,7 +305,7 @@ cp app/src/main/assets/relay-config.example.json \
 
 ## 免责声明
 
-ArkDO Android 是个人开发的第三方客户端，与 LINUX DO 官方无关，不代表社区立场。所有内容版权归 LINUX DO 社区及原作者所有。本项目仅供学习交流。
+JetDo Android 是个人开发的第三方客户端，与 LINUX DO 官方无关，不代表社区立场。所有内容版权归 LINUX DO 社区及原作者所有。本项目仅供学习交流。
 
 ---
 

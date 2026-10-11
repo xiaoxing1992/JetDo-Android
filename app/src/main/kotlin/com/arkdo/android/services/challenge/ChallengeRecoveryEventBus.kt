@@ -34,10 +34,10 @@ object ChallengeRecoveryEventBus {
 
     fun notifyState(state: ChallengeRecoveryState) {
         currentState = state
-        Timber.i("[ArkDO][Challenge] recovery state=%s", state)
+        Timber.i("[JetDo][Challenge] recovery state=%s", state)
         stateListeners.values.toList().forEach { l ->
             runCatching { l(state) }.onFailure {
-                Timber.e(it, "[ArkDO][Challenge] state listener threw")
+                Timber.e(it, "[JetDo][Challenge] state listener threw")
             }
         }
     }
@@ -51,10 +51,10 @@ object ChallengeRecoveryEventBus {
     }
 
     fun requestManual() {
-        Timber.i("[ArkDO][Challenge] manual request")
+        Timber.i("[JetDo][Challenge] manual request")
         manualListeners.values.toList().forEach { l ->
             runCatching { l() }.onFailure {
-                Timber.e(it, "[ArkDO][Challenge] manual listener threw")
+                Timber.e(it, "[JetDo][Challenge] manual listener threw")
             }
         }
     }

@@ -25,7 +25,7 @@ const val ANNOUNCE_PROMPT_ENABLED: Boolean = false
 private const val MAX_TAIL_FETCH: Int = 15
 
 // 一条已有主版本公告被扫到的诊断前缀:hilog/DevEco 搜 ANNOUNCE_DIAG,Android 侧 logcat 同名。
-private const val LOG_TAG = "[ArkDO][ANNOUNCE_DIAG]"
+private const val LOG_TAG = "[JetDo][ANNOUNCE_DIAG]"
 
 // 版本标记正则:[v900008]。Discourse 里这写法无匹配引用,会原样留在 cooked 中,
 // 哪怕被 **加粗** 包成 <strong>[v900008]</strong>,子串仍在,照样命中。

@@ -32,20 +32,20 @@ fun ArkWebHost(
     var checkCount by remember { mutableStateOf(0) }
 
     DisposableEffect(Unit) {
-        Timber.i("[ArkDO][ArkWebHost] ========== WebView Host Init Start ==========")
-        Timber.i("[ArkDO][ArkWebHost] stage=hostInitStart ts=${System.currentTimeMillis()}")
+        Timber.i("[JetDo][ArkWebHost] ========== WebView Host Init Start ==========")
+        Timber.i("[JetDo][ArkWebHost] stage=hostInitStart ts=${System.currentTimeMillis()}")
 
         onDispose {
-            Timber.i("[ArkDO][ArkWebHost] disposed")
+            Timber.i("[JetDo][ArkWebHost] disposed")
         }
     }
 
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            Timber.i("[ArkDO][ArkWebHost] factory: creating WebView via attachHost")
-            Timber.i("[ArkDO][ArkWebHost] context=${ctx.javaClass.simpleName}")
-            Timber.i("[ArkDO][ArkWebHost] thread=${Thread.currentThread().name}")
+            Timber.i("[JetDo][ArkWebHost] factory: creating WebView via attachHost")
+            Timber.i("[JetDo][ArkWebHost] context=${ctx.javaClass.simpleName}")
+            Timber.i("[JetDo][ArkWebHost] thread=${Thread.currentThread().name}")
 
             try {
                 // 使用 ArkWebNetworkBridge 的 attachHost 方法创建 WebView
@@ -61,24 +61,24 @@ fun ArkWebHost(
                 // 这对应鸿蒙版本的 .onControllerAttached() 回调
                 webView.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(v: android.view.View) {
-                        Timber.i("[ArkDO][ArkWebHost] ✅ WebView attached to window")
-                        Timber.i("[ArkDO][ArkWebHost] width=${v.width} height=${v.height}")
-                        Timber.i("[ArkDO][ArkWebHost] isAttachedToWindow=${v.isAttachedToWindow}")
+                        Timber.i("[JetDo][ArkWebHost] ✅ WebView attached to window")
+                        Timber.i("[JetDo][ArkWebHost] width=${v.width} height=${v.height}")
+                        Timber.i("[JetDo][ArkWebHost] isAttachedToWindow=${v.isAttachedToWindow}")
                     }
 
                     override fun onViewDetachedFromWindow(v: android.view.View) {
-                        Timber.i("[ArkDO][ArkWebHost] WebView detached from window")
+                        Timber.i("[JetDo][ArkWebHost] WebView detached from window")
                     }
                 })
 
-                Timber.i("[ArkDO][ArkWebHost] WebView created successfully")
-                Timber.i("[ArkDO][ArkWebHost] WebView.url=${webView.url}")
-                Timber.i("[ArkDO][ArkWebHost] WebView.isAttachedToWindow=${webView.isAttachedToWindow}")
-                Timber.i("[ArkDO][ArkWebHost] waiting for onPageFinished callback...")
+                Timber.i("[JetDo][ArkWebHost] WebView created successfully")
+                Timber.i("[JetDo][ArkWebHost] WebView.url=${webView.url}")
+                Timber.i("[JetDo][ArkWebHost] WebView.isAttachedToWindow=${webView.isAttachedToWindow}")
+                Timber.i("[JetDo][ArkWebHost] waiting for onPageFinished callback...")
 
                 webView
             } catch (e: Exception) {
-                Timber.e(e, "[ArkDO][ArkWebHost] FATAL: Failed to create WebView")
+                Timber.e(e, "[JetDo][ArkWebHost] FATAL: Failed to create WebView")
                 throw e
             }
         },
@@ -86,32 +86,32 @@ fun ArkWebHost(
             // 确保 WebView 有足够的尺寸来完成 Cloudflare Turnstile 验证
             // Turnstile 需要至少 300x65 像素才能正常工作
             if (webView.width == 0 || webView.height == 0) {
-                Timber.w("[ArkDO][ArkWebHost] update: WebView has zero size, forcing measure")
+                Timber.w("[JetDo][ArkWebHost] update: WebView has zero size, forcing measure")
                 webView.measure(
                     android.view.View.MeasureSpec.makeMeasureSpec(400, android.view.View.MeasureSpec.EXACTLY),
                     android.view.View.MeasureSpec.makeMeasureSpec(300, android.view.View.MeasureSpec.EXACTLY)
                 )
                 webView.layout(0, 0, 400, 300)
-                Timber.i("[ArkDO][ArkWebHost] update: after layout width=${webView.width} height=${webView.height}")
+                Timber.i("[JetDo][ArkWebHost] update: after layout width=${webView.width} height=${webView.height}")
             }
         }
     )
 
     // 监听 Bridge 就绪状态（轮询检查）
     LaunchedEffect(Unit) {
-        Timber.i("[ArkDO][ArkWebHost] LaunchedEffect: start polling canFetch()")
+        Timber.i("[JetDo][ArkWebHost] LaunchedEffect: start polling canFetch()")
 
         while (!hasNotifiedReady && !hasNotifiedFailed) {
             delay(500)
             checkCount++
 
             val canFetch = ArkWebNetworkBridge.canFetch()
-            Timber.d("[ArkDO][ArkWebHost] poll #$checkCount: canFetch=$canFetch")
+            Timber.d("[JetDo][ArkWebHost] poll #$checkCount: canFetch=$canFetch")
 
             if (canFetch) {
                 hasNotifiedReady = true
-                Timber.i("[ArkDO][ArkWebHost] ✅ Bridge ready! Notifying onReady()")
-                Timber.i("[ArkDO][ArkWebHost] stage=hostPageEndReady ts=${System.currentTimeMillis()}")
+                Timber.i("[JetDo][ArkWebHost] ✅ Bridge ready! Notifying onReady()")
+                Timber.i("[JetDo][ArkWebHost] stage=hostPageEndReady ts=${System.currentTimeMillis()}")
                 onReady()
                 break
             }
@@ -119,11 +119,11 @@ fun ArkWebHost(
             // 超时检测：30 秒后仍未就绪，认为失败
             if (checkCount >= 60) { // 60 * 500ms = 30s
                 hasNotifiedFailed = true
-                Timber.e("[ArkDO][ArkWebHost] ❌ Timeout: canFetch() still false after 30s")
-                Timber.e("[ArkDO][ArkWebHost] Possible reasons:")
-                Timber.e("[ArkDO][ArkWebHost]   1. Network error (cannot reach linux.do)")
-                Timber.e("[ArkDO][ArkWebHost]   2. WebView onPageFinished not fired")
-                Timber.e("[ArkDO][ArkWebHost]   3. Cloudflare blocking the request")
+                Timber.e("[JetDo][ArkWebHost] ❌ Timeout: canFetch() still false after 30s")
+                Timber.e("[JetDo][ArkWebHost] Possible reasons:")
+                Timber.e("[JetDo][ArkWebHost]   1. Network error (cannot reach linux.do)")
+                Timber.e("[JetDo][ArkWebHost]   2. WebView onPageFinished not fired")
+                Timber.e("[JetDo][ArkWebHost]   3. Cloudflare blocking the request")
                 onLoadFailed()
                 break
             }

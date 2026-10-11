@@ -164,7 +164,7 @@ fun ReactionUsersSheetContent(
                         (info.visibleItemsInfo.lastOrNull()?.index ?: -1) to info.totalItemsCount
                     }.collect { (lastVisible, total) ->
                         timber.log.Timber.d(
-                            "[ArkDO][ReactionSheet] scroll last=%d total=%d hasMore=%s loading=%s",
+                            "[JetDo][ReactionSheet] scroll last=%d total=%d hasMore=%s loading=%s",
                             lastVisible, total, hasMore, loadMoreLoading
                         )
                         if (hasMore && !loadMoreLoading && total > 0 && lastVisible >= total - 2) {

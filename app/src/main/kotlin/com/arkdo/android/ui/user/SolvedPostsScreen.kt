@@ -49,7 +49,7 @@ import com.arkdo.android.data.models.TopicCategory
 import com.arkdo.android.services.site.CategoryIndex
 import com.arkdo.android.ui.components.TopicMetadataBadges
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.theme.isArkdoInDarkTheme
+import com.arkdo.android.ui.theme.isJetDoInDarkTheme
 
 // ==========================================================================
 // 解决方案列表（对齐鸿蒙 SolvedPostsPage.ets）。
@@ -70,7 +70,7 @@ fun SolvedPostsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
-    val success = if (isArkdoInDarkTheme()) Color(0xFF4CAF50) else Color(0xFF009900)
+    val success = if (isJetDoInDarkTheme()) Color(0xFF4CAF50) else Color(0xFF009900)
     val title = if (solvedCount > 0) stringResource(R.string.drawer_solutions_count, solvedCount) else stringResource(R.string.detail_solution)
 
     LaunchedEffect(username) {

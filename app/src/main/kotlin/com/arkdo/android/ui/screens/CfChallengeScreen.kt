@@ -25,7 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
-private const val LOG_TAG = "[ArkDO][ChallengeScreen]"
+private const val LOG_TAG = "[JetDo][ChallengeScreen]"
 private const val CHALLENGE_POLL_INTERVAL_MS = 1000L
 private const val MAX_CHALLENGE_POLL_COUNT = 90
 private const val CHALLENGE_URL = "https://linux.do/challenge"

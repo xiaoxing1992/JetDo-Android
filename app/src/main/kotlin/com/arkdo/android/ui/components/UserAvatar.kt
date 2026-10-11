@@ -28,7 +28,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.arkdo.android.common.constants.AppConstants
 import com.arkdo.android.data.models.User
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import timber.log.Timber
 import kotlin.math.floor
@@ -87,7 +87,7 @@ fun UserAvatar(
                 .size(avatarSize)
                 .clip(shape)
                 .background(colors.surfaceMuted)
-                .border(width = 1.dp, color = ArkdoFixedColors.AvatarBorder, shape = shape),
+                .border(width = 1.dp, color = JetDoFixedColors.AvatarBorder, shape = shape),
             contentAlignment = Alignment.Center
         ) {
             if (showInitial) {
@@ -171,7 +171,7 @@ private fun FlairBadge(
     val hasBg = !flairBgColor.isNullOrBlank()
 
     val backgroundColor = if (hasBg) {
-        parseColor(flairBgColor) ?: ArkdoFixedColors.FlairFallbackBg
+        parseColor(flairBgColor) ?: JetDoFixedColors.FlairFallbackBg
     } else {
         Color.Transparent
     }

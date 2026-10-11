@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.arkdo.android.core.designsystem.FaIcon
 import com.arkdo.android.ui.composer.MarkdownActions.EditState
 import com.arkdo.android.ui.composer.MarkdownActions.MdAction
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -435,7 +435,7 @@ private fun SendButton(enabled: Boolean, editMode: Boolean, onClick: () -> Unit)
         modifier = Modifier
             .size(36.dp)
             .background(
-                if (enabled) ArkdoFixedColors.BrandBlue else ArkdoFixedColors.BrandBlue.copy(alpha = 0.4f),
+                if (enabled) JetDoFixedColors.BrandBlue else JetDoFixedColors.BrandBlue.copy(alpha = 0.4f),
                 CircleShape
             )
             .clickable(enabled = enabled, onClick = onClick),
@@ -443,7 +443,7 @@ private fun SendButton(enabled: Boolean, editMode: Boolean, onClick: () -> Unit)
     ) {
         FaIcon(
             if (editMode) "check" else "paper-plane",
-            ArkdoFixedColors.OnDarkFg,
+            JetDoFixedColors.OnDarkFg,
             16.dp
         )
     }

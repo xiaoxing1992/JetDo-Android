@@ -35,7 +35,7 @@ class DeepLinkEventBusTest {
     fun `无参数的 notification 深链落到通知中心`() {
         assertEquals(
             DeepLinkTarget.NotificationInbox,
-            DeepLinkEventBus.parse("arkdo://notification")
+            DeepLinkEventBus.parse("jetdo://notification")
         )
     }
 
@@ -43,7 +43,7 @@ class DeepLinkEventBusTest {
     fun `带话题与楼层的深链落到话题详情`() {
         assertEquals(
             DeepLinkTarget.Topic(topicId = 123L, postNumber = 4),
-            DeepLinkEventBus.parse("arkdo://notification?topicId=123&postNumber=4")
+            DeepLinkEventBus.parse("jetdo://notification?topicId=123&postNumber=4")
         )
     }
 
@@ -51,7 +51,7 @@ class DeepLinkEventBusTest {
     fun `只带话题不带楼层`() {
         assertEquals(
             DeepLinkTarget.Topic(topicId = 123L, postNumber = null),
-            DeepLinkEventBus.parse("arkdo://notification?topicId=123")
+            DeepLinkEventBus.parse("jetdo://notification?topicId=123")
         )
     }
 
@@ -61,7 +61,7 @@ class DeepLinkEventBusTest {
             assertEquals(
                 "topicId=$bad 应退回通知中心",
                 DeepLinkTarget.NotificationInbox,
-                DeepLinkEventBus.parse("arkdo://notification?topicId=$bad")
+                DeepLinkEventBus.parse("jetdo://notification?topicId=$bad")
             )
         }
     }
@@ -70,7 +70,7 @@ class DeepLinkEventBusTest {
     fun `楼层号非法时忽略它但话题照跳`() {
         assertEquals(
             DeepLinkTarget.Topic(topicId = 7L, postNumber = null),
-            DeepLinkEventBus.parse("arkdo://notification?topicId=7&postNumber=0")
+            DeepLinkEventBus.parse("jetdo://notification?topicId=7&postNumber=0")
         )
     }
 
@@ -78,14 +78,14 @@ class DeepLinkEventBusTest {
     fun `scheme 与 host 大小写不敏感`() {
         assertEquals(
             DeepLinkTarget.NotificationInbox,
-            DeepLinkEventBus.parse("ARKDO://Notification")
+            DeepLinkEventBus.parse("JETDO://Notification")
         )
     }
 
     @Test
     fun `不认识的 scheme host 与空值一律不解析`() {
         assertNull("http 链接不该被本应用的深链接走", DeepLinkEventBus.parse("https://linux.do/notification"))
-        assertNull("host 不认识", DeepLinkEventBus.parse("arkdo://topic/123"))
+        assertNull("host 不认识", DeepLinkEventBus.parse("jetdo://topic/123"))
         assertNull(DeepLinkEventBus.parse(null))
         assertNull(DeepLinkEventBus.parse(""))
         assertNull(DeepLinkEventBus.parse("   "))

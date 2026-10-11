@@ -489,10 +489,10 @@ class NewTopicViewModel @Inject constructor(
         if (result.success && result.data != null) {
             draftSequence = result.data
             draftPersisted = true
-            Timber.i("[ArkDO][Composer] draft saved key=%s seq=%d", draftKey, draftSequence)
+            Timber.i("[JetDo][Composer] draft saved key=%s seq=%d", draftKey, draftSequence)
         } else {
             draftDirty = true
-            Timber.i("[ArkDO][Composer] draft save failed status=%d", result.statusCode)
+            Timber.i("[JetDo][Composer] draft save failed status=%d", result.statusCode)
         }
     }
 
@@ -507,7 +507,7 @@ class NewTopicViewModel @Inject constructor(
             // 草稿确已删除 → 角标乐观 -1（对齐鸿蒙 ComposerPage.deleteDraftAfterPublish 的
             // DraftEventBus.notifyDeleted）。不重查会话：服务端 draftCount 可能还是删除前的缓存。
             DraftCountStore.decrement(CurrentUserHolder.currentUser.value?.draftCount)
-            Timber.i("[ArkDO][Composer] draft deleted after publish key=%s", draftKey)
+            Timber.i("[JetDo][Composer] draft deleted after publish key=%s", draftKey)
         }
     }
 }

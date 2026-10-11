@@ -102,13 +102,13 @@ internal fun parseUploadedFile(
             // `upload://X.ext` / `/uploads/short-url/X.ext` 换成 CDN 直链；这一步是纯字符串
             // 替换做不到的，所以三个 URL 字段一起打出来，便于比对。
             Timber.i(
-                "[ArkDO][Composer] 上传成功 name=%s shortUrl=%s shortPath=%s url=%s",
+                "[JetDo][Composer] 上传成功 name=%s shortUrl=%s shortPath=%s url=%s",
                 file.fileName, file.shortUrl, file.shortPath, file.url
             )
             ParsedUpload(file = file, error = null)
         }
     }.getOrElse {
-        Timber.e(it, "[ArkDO][Composer] 上传响应解析失败")
+        Timber.e(it, "[JetDo][Composer] 上传响应解析失败")
         ParsedUpload(null, AppContextHolder.getString(R.string.composer_upload_failed, kindLabel))
     }
 }

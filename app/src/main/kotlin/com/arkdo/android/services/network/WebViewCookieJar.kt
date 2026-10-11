@@ -26,7 +26,7 @@ class WebViewCookieJar : CookieJar {
         // 正常时序下宿主 WebView 早就在主线程建好了；这里 runCatching 只是防「宿主尚未就绪」
         // 这类极端时序，拿不到 cookie 就当匿名请求，不要因为取 cookie 把图片加载整条打挂。
         val header = runCatching { CookieManager.getInstance().getCookie(url.toString()) }
-            .onFailure { Timber.i("[ArkDO][Cookie] 读取 cookie 失败 url=%s msg=%s", url, it.message) }
+            .onFailure { Timber.i("[JetDo][Cookie] 读取 cookie 失败 url=%s msg=%s", url, it.message) }
             .getOrNull()
         if (header.isNullOrEmpty()) return emptyList()
         return header.split(';').mapNotNull { part ->

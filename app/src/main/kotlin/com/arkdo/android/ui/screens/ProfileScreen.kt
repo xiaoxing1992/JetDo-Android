@@ -85,7 +85,7 @@ import com.arkdo.android.services.credit.reduceLdcEntry
 import com.arkdo.android.services.network.ArkWebJsonExecutor
 import com.arkdo.android.ui.credit.LdcCreditWebHost
 import kotlinx.coroutines.launch
-import com.arkdo.android.ui.theme.isArkdoInDarkTheme
+import com.arkdo.android.ui.theme.isJetDoInDarkTheme
 import com.arkdo.android.ui.utils.daysSince
 import com.arkdo.android.ui.utils.formatCount
 import com.arkdo.android.ui.utils.formatTimeRead
@@ -633,7 +633,7 @@ private fun androidx.compose.foundation.layout.RowScope.StatCellProfile(value: S
 private fun LdcEntryCard(state: LdcEntryState, onOpen: (Boolean) -> Unit, onRetry: () -> Unit) {
     val colors = arkdoColors
     val anonymous = state.phase == LdcEntryPhase.ANON
-    val gold = if (isArkdoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
+    val gold = if (isJetDoInDarkTheme()) Color(0xFFE0B84C) else Color(0xFFD4A017)
     val subtitle = when (state.phase) {
         LdcEntryPhase.ANON -> stringResource(R.string.credit_login_to_view)
         LdcEntryPhase.ERROR -> stringResource(R.string.credit_balance_unavailable)
@@ -720,7 +720,7 @@ private fun androidx.compose.foundation.layout.RowScope.QuickEntryNative(
 
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ProfileBadgeTile(badge: UserBadgeItem) {
-    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isJetDoInDarkTheme()
     val gold = if (isDark) Color(0xFFE0B84C) else Color(0xFFD4A017)
     val silver = if (isDark) Color(0xFF9AA6B8) else Color(0xFF9EA7AD)
     val bronze = if (isDark) Color(0xFFC89066) else Color(0xFFB87333)

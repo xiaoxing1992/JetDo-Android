@@ -27,7 +27,7 @@ import java.io.File
 // 不会出错，只是选择器暂时没内容。
 // ==========================================================================
 
-private const val LOG_TAG = "[ArkDO][EmojiCatalog]"
+private const val LOG_TAG = "[JetDo][EmojiCatalog]"
 private const val CACHE_DIR_NAME = "emoji_catalog"
 
 /** 表情表不常变，一天刷一次足够。过期只影响"新加的自定义表情多久能看到"，不影响可用性。 */

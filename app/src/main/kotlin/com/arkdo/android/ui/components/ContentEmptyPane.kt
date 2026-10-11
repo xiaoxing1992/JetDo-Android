@@ -37,7 +37,7 @@ fun ContentEmptyPane(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "ArkDO",
+            text = "JetDo",
             fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textSecondary

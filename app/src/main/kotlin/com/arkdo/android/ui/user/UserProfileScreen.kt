@@ -669,7 +669,7 @@ private fun androidx.compose.foundation.layout.RowScope.SolvedCell(
     onClick: () -> Unit
 ) {
     // 对齐鸿蒙 SolvedCell:数值 17 Bold 绿色 + chevron_right 绿色，整格进解决方案列表。
-    val success = if (com.arkdo.android.ui.theme.isArkdoInDarkTheme()) Color(0xFF4CAF50) else Color(0xFF009900)
+    val success = if (com.arkdo.android.ui.theme.isJetDoInDarkTheme()) Color(0xFF4CAF50) else Color(0xFF009900)
     Column(
         modifier = Modifier
             .weight(1f)
@@ -824,7 +824,7 @@ private fun BadgesCard(state: UserProfileViewModel.UiState, onAllBadges: () -> U
 
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.BadgeTile(badge: com.arkdo.android.data.models.UserBadgeItem) {
-    val isDark = com.arkdo.android.ui.theme.isArkdoInDarkTheme()
+    val isDark = com.arkdo.android.ui.theme.isJetDoInDarkTheme()
     val gold = if (isDark) Color(0xFFE0B84C) else Color(0xFFD4A017)
     val silver = if (isDark) Color(0xFF9AA6B8) else Color(0xFF9EA7AD)
     val bronze = if (isDark) Color(0xFFC89066) else Color(0xFFB87333)

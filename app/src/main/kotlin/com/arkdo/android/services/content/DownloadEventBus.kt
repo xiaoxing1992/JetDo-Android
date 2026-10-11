@@ -27,10 +27,10 @@ object DownloadEventBus {
     }
 
     fun notify(result: DownloadResult) {
-        Timber.i("[ArkDO][Download] success=%s name=%s path=%s", result.success, result.fileName, result.filePath)
+        Timber.i("[JetDo][Download] success=%s name=%s path=%s", result.success, result.fileName, result.filePath)
         listeners.values.toList().forEach { l ->
             runCatching { l(result) }.onFailure {
-                Timber.e(it, "[ArkDO][Download] listener threw")
+                Timber.e(it, "[JetDo][Download] listener threw")
             }
         }
     }

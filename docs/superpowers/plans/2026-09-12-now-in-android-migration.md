@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在不改变 ArkDO Android 通知功能行为的前提下，建立 Now in Android 风格的多模块边界，并完成通知垂直切片迁移。
+**Goal:** 在不改变 JetDo Android 通知功能行为的前提下，建立 Now in Android 风格的多模块边界，并完成通知垂直切片迁移。
 
 **Architecture:** 新增 `core:common`、`core:model`、`core:network`、`core:data`、`core:datastore`、`core:designsystem` 和 `feature:notification`。网络桥接由 `app` 提供实现并绑定到 `core:network` 契约；通知 Repository 位于 `core:data`；通知状态、ViewModel 和 Compose 页面位于 `feature:notification`；`app` 只负责 Hilt 组装、当前用户适配和顶层导航。
 

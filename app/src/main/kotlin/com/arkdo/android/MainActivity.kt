@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.lifecycleScope
-import com.arkdo.android.navigation.ArkDoNavHost
+import com.arkdo.android.navigation.JetDoNavHost
 import com.arkdo.android.navigation.DeepLinkEventBus
 import com.arkdo.android.services.challenge.ChallengeEventBus
 import com.arkdo.android.services.challenge.ChallengeRecoveryCoordinator
@@ -52,7 +52,7 @@ import com.arkdo.android.services.upload.VideoTranscoder
 import com.arkdo.android.services.web.WebSessionManager
 import com.arkdo.android.ui.components.ArkWebHost
 import com.arkdo.android.ui.screens.PrivateDnsGuideScreen
-import com.arkdo.android.ui.theme.ArkDoTheme
+import com.arkdo.android.ui.theme.JetDoTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        Timber.i("[ArkDO][MainActivity] onCreate ts=%d", System.currentTimeMillis())
+        Timber.i("[JetDo][MainActivity] onCreate ts=%d", System.currentTimeMillis())
 
         // 监听前后台状态（onStart → 前台，onStop → 后台）
         AppStateEventBus.observeLifecycle(this)
@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            ArkDoTheme {
+            JetDoTheme {
                 var isWebViewReady by remember { mutableStateOf(false) }
                 var showPrivateDnsGuide by remember { mutableStateOf(false) }
                 var showChallengeSheet by remember { mutableStateOf(false) }
@@ -141,24 +141,24 @@ class MainActivity : ComponentActivity() {
                 DisposableEffect(Unit) {
                     challengeCoordinator = ChallengeRecoveryCoordinator(
                         onRecovered = {
-                            Timber.i("[ArkDO][MainActivity] Challenge resolved, reloading WebView")
+                            Timber.i("[JetDo][MainActivity] Challenge resolved, reloading WebView")
                             showChallengeSheet = false
                             // 重新加载 WebView，完成后再广播 SessionChanged
                             com.arkdo.android.services.network.ArkWebNetworkBridge.reloadHost {
-                                Timber.i("[ArkDO][MainActivity] WebView reload complete, broadcasting SessionChanged")
+                                Timber.i("[JetDo][MainActivity] WebView reload complete, broadcasting SessionChanged")
                                 // 广播会话刷新——复查登录态、刷新列表
                                 com.arkdo.android.services.session.SessionEventBus.notifySessionChanged()
                             }
                         },
                         onEscalateToSheet = {
-                            Timber.i("[ArkDO][MainActivity] Challenge escalated to user interaction")
+                            Timber.i("[JetDo][MainActivity] Challenge escalated to user interaction")
                             showChallengeSheet = true
                         }
                     )
 
                     // 订阅 Challenge 事件
                     val unsubscribeChallengeEvent = ChallengeEventBus.subscribe { event ->
-                        Timber.i("[ArkDO][MainActivity] Challenge detected: source=${event.source} status=${event.statusCode}")
+                        Timber.i("[JetDo][MainActivity] Challenge detected: source=${event.source} status=${event.statusCode}")
                         challengeCoordinator?.handleChallengeSignal(event.source)
                     }
 
@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
                     // forceEscalate 在 COOLDOWN（刚过完盾 30s 内）会拒绝启动新一轮恢复，但验证页照开 ——
                     // 用户主动要求看一眼验证页，不该被冷却期挡回去。
                     val unsubscribeManualChallenge = ChallengeRecoveryEventBus.subscribeManual {
-                        Timber.i("[ArkDO][MainActivity] manual challenge requested")
+                        Timber.i("[JetDo][MainActivity] manual challenge requested")
                         challengeCoordinator?.forceEscalate()
                         showChallengeSheet = true
                     }
@@ -191,11 +191,11 @@ class MainActivity : ComponentActivity() {
                         // 必须可见且在屏幕内，否则 Cloudflare Turnstile 无法完成验证
                         ArkWebHost(
                             onReady = {
-                                Timber.i("[ArkDO][MainActivity] WebView bridge ready")
+                                Timber.i("[JetDo][MainActivity] WebView bridge ready")
                                 isWebViewReady = true
                             },
                             onLoadFailed = {
-                                Timber.e("[ArkDO][MainActivity] WebView bridge load failed")
+                                Timber.e("[JetDo][MainActivity] WebView bridge load failed")
                                 showPrivateDnsGuide = true
                             },
                             modifier = Modifier
@@ -209,7 +209,7 @@ class MainActivity : ComponentActivity() {
                         // 此时只有一个纯色底 + 模态弹窗；过盾 WebView 宿主照常引导，
                         // 同意后 NavHost 首次组合时 isWebViewReady 往往已经就绪。
                         if (!privacyConsentNeeded) {
-                            ArkDoNavHost(isWebViewReady = isWebViewReady)
+                            JetDoNavHost(isWebViewReady = isWebViewReady)
                         }
 
                         // Private DNS 配置引导页面（全屏覆盖）
@@ -234,11 +234,11 @@ class MainActivity : ComponentActivity() {
                                     // 「关一次验证页 = 手动验证永久失效」。这行是和入口配套的，不能少。
                                     challengeCoordinator?.notifySheetDismissed()
                                     showChallengeSheet = false
-                                    Timber.i("[ArkDO][MainActivity] Challenge sheet closed by user")
+                                    Timber.i("[JetDo][MainActivity] Challenge sheet closed by user")
                                 },
                                 onChallengeResolved = {
                                     showChallengeSheet = false
-                                    Timber.i("[ArkDO][MainActivity] Challenge resolved, closing sheet")
+                                    Timber.i("[JetDo][MainActivity] Challenge resolved, closing sheet")
                                     challengeCoordinator?.notifySheetResolved()
                                 }
                             )
@@ -302,8 +302,8 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 TextButton(onClick = {
                                                     com.arkdo.android.services.compliance.PrivacyConsentStore.agree(this@MainActivity)
-                                                    (application as ArkDoApplication).initCrashReportIfAllowed()
-                                                    Timber.i("[ArkDO][MainActivity] privacy consent given, crash report enabled")
+                                                    (application as JetDoApplication).initCrashReportIfAllowed()
+                                                    Timber.i("[JetDo][MainActivity] privacy consent given, crash report enabled")
                                                     privacyConsentNeeded = false
                                                 }) { Text(stringResource(R.string.privacy_consent_agree)) }
                                             }
@@ -321,7 +321,7 @@ class MainActivity : ComponentActivity() {
                                 text = { Text(stringResource(R.string.privacy_consent_exit_body)) },
                                 confirmButton = {
                                     TextButton(onClick = {
-                                        Timber.i("[ArkDO][MainActivity] user declined privacy consent, exiting")
+                                        Timber.i("[JetDo][MainActivity] user declined privacy consent, exiting")
                                         finishAffinity()
                                     }) { Text(stringResource(R.string.privacy_consent_exit_confirm)) }
                                 },
@@ -348,7 +348,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * App 还活着时又点了一条通知（或从外部点开 `arkdo://` 链接）。
+     * App 还活着时又点了一条通知（或从外部点开 `jetdo://` 链接）。
      *
      * 必须配合 Manifest 里的 `android:launchMode="singleTop"`：否则 standard 模式下
      * 系统会再建一个 MainActivity 实例，用户看到的是「点通知后 App 重开了一遍」——
@@ -359,14 +359,14 @@ class MainActivity : ComponentActivity() {
         // 必须回写：handleNotificationIntent 读的是 activity.intent，
         // 不 setIntent 的话它拿到的还是启动时那个旧 intent。
         setIntent(intent)
-        Timber.i("[ArkDO][MainActivity] onNewIntent ts=%d", System.currentTimeMillis())
+        Timber.i("[JetDo][MainActivity] onNewIntent ts=%d", System.currentTimeMillis())
         handleNotificationIntent()
     }
 
     /**
      * 处理推送通知深链接（冷启动走 onCreate，热启动走 onNewIntent）。
      *
-     * 这里只负责「解析 + 广播」，不做导航 —— 导航权在 ArkDoNavHost 的 navController 上。
+     * 这里只负责「解析 + 广播」，不做导航 —— 导航权在 JetDoNavHost 的 navController 上。
      * 冷启动时 NavHost 尚未组合，事件会先积压一份，等它订阅时补发（见 DeepLinkEventBus）。
      */
     private fun handleNotificationIntent() {

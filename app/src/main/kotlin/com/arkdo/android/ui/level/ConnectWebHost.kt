@@ -69,7 +69,7 @@ private class ConnectWebHolder(context: android.content.Context) {
         web.setBackgroundColor(0x00000000)
         web.webViewClient = object : android.webkit.WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                Timber.i("[ArkDO][Level] pageEnd url=%s", url)
+                Timber.i("[JetDo][Level] pageEnd url=%s", url)
                 view?.let { callbacks.onPageEnd(it) }
             }
 
@@ -79,7 +79,7 @@ private class ConnectWebHolder(context: android.content.Context) {
                 error: android.webkit.WebResourceError?
             ) {
                 if (request?.isForMainFrame == true) {
-                    Timber.i("[ArkDO][Level] main frame error code=%s", error?.errorCode)
+                    Timber.i("[JetDo][Level] main frame error code=%s", error?.errorCode)
                     callbacks.onMainFrameError()
                 }
             }
@@ -91,7 +91,7 @@ private class ConnectWebHolder(context: android.content.Context) {
         if (key == loadedKey) return
         loadedKey = key
         val load = {
-            Timber.i("[ArkDO][Level] load %s token=%d", url, reloadToken)
+            Timber.i("[JetDo][Level] load %s token=%d", url, reloadToken)
             webView.loadUrl(url)
         }
         if (Looper.myLooper() == Looper.getMainLooper()) load() else webView.post(load)

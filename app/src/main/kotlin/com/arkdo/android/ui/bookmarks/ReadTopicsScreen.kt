@@ -42,7 +42,7 @@ import com.arkdo.android.core.designsystem.TopicRowColors
 import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.core.model.HomeTopic
 import com.arkdo.android.data.models.TopicCategory
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 
 @Composable
@@ -61,8 +61,8 @@ fun ReadTopicsScreen(
         border = colors.border,
         surfaceMuted = colors.surfaceMuted,
         avatarFg = colors.avatarFg,
-        avatarBorder = ArkdoFixedColors.AvatarBorder,
-        unread = ArkdoFixedColors.Unread
+        avatarBorder = JetDoFixedColors.AvatarBorder,
+        unread = JetDoFixedColors.Unread
     )
 
     LaunchedEffect(Unit) { viewModel.loadInitial() }

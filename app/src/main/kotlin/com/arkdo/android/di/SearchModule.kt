@@ -13,7 +13,7 @@ import javax.inject.Singleton
 import org.json.JSONArray
 import timber.log.Timber
 
-private const val TAG = "[ArkDO][Search]"
+private const val TAG = "[JetDo][Search]"
 
 /** 与 FeedPrefs / DohManager 共用同一个 preferences 库,只是键不同。 */
 private const val PREF_STORE_NAME = "app_settings"

@@ -8,7 +8,7 @@ import timber.log.Timber
 // HomePage 订阅后驱动铃铛。保留 last 值，新订阅者可立即拿到当前数。
 // ==========================================================================
 
-private const val LOG_TAG = "[ArkDO][NotificationBus]"
+private const val LOG_TAG = "[JetDo][NotificationBus]"
 
 data class NotificationSnapshot(
     val unread: Int,

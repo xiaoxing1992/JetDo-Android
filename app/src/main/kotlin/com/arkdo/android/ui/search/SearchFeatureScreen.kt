@@ -7,7 +7,7 @@ import com.arkdo.android.core.model.HomeCategory
 import com.arkdo.android.feature.search.SearchRoute
 import com.arkdo.android.feature.search.SearchVisualTokens
 import com.arkdo.android.services.site.CategoryIndex
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 
 /**
@@ -48,7 +48,7 @@ private fun rememberCategories(): List<HomeCategory> {
             bridge = com.arkdo.android.services.network.ArkWebNetworkBridge,
             ready = true,
             alreadyLoaded = false,
-            logTag = "[ArkDO][Search]"
+            logTag = "[JetDo][Search]"
         ) ?: return@LaunchedEffect
         state.value = loaded.map { it.toHomeCategory() }
     }
@@ -80,7 +80,7 @@ private fun arkdoSearchTokens(): SearchVisualTokens {
         fillSubtle = colors.fillSubtle,
         surfaceMuted = colors.surfaceMuted,
         danger = colors.ldDanger,
-        highlightBg = ArkdoFixedColors.Amber,
+        highlightBg = JetDoFixedColors.Amber,
         infoSoftBg = colors.infoSoftBg,
         warning = colors.warning
     )

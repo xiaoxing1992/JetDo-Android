@@ -6,7 +6,7 @@ import android.content.Context
  * 应用级 Context 持有者。
  *
  * 服务层大量逻辑是 object 单例（DohManager / CookedHtmlParser / ArkWebNetworkBridge…），
- * 无法走构造注入；统一在 ArkDoApplication 启动时初始化，
+ * 无法走构造注入；统一在 JetDoApplication 启动时初始化，
  * 之后通过 [getString] 取本地化文案。
  *
  * [resolver] 供 JVM 单元测试注入（无 Android 环境）：装上后优先走它。

@@ -1,6 +1,6 @@
 # 推送中继服务器
 
-ArkDO Android 的系统推送基于 **Web Push 标准（RFC 8291）** + **自建中继** + **Firebase Cloud Messaging (FCM)**。
+JetDo Android 的系统推送基于 **Web Push 标准（RFC 8291）** + **自建中继** + **Firebase Cloud Messaging (FCM)**。
 
 ## 架构
 

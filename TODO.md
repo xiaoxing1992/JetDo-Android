@@ -1,4 +1,4 @@
-# ArkDO Android — 开发待办
+# JetDo Android — 开发待办
 
 > 功能缺口的**唯一权威**是 [`GAP_ANALYSIS.md`](GAP_ANALYSIS.md)（做完删一条）。
 > 本文件只保留发布准备相关的工程项，不重复记账。

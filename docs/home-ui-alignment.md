@@ -1,6 +1,6 @@
 # 首页 UI 对齐鸿蒙版 —— 进度
 
-对照基准：`/Users/tongtong/ArkDO` 的 `views/pages/HomePage.ets`（2217 行）
+对照基准：`/Users/tongtong/JetDo` 的 `views/pages/HomePage.ets`（2217 行）
 与 `views/components/TopicListItem.ets` 及其徽章组件。
 
 > 上一版文档声称「1/8 任务完成」，与代码实际状态不符，已按 2026-09-02 的实测重写。
@@ -8,7 +8,7 @@
 ## 已对齐
 
 ### 配色地基
-- `ArkdoColors.kt`：新增，逐条搬鸿蒙 `resources/{base,dark}/element/color.json` 的语义 token
+- `JetDoColors.kt`：新增，逐条搬鸿蒙 `resources/{base,dark}/element/color.json` 的语义 token
   （`textBody` / `surfaceMuted` / `border` / `ldAccent` / `infoSoftBg` …），走 CompositionLocal。
 - `Theme.kt`：**关掉了 `dynamicColor`**。之前默认开启，Android 12+ 上壁纸取色会覆盖
   `onSurface` / `surfaceVariant` / `outlineVariant` / `primaryContainer` 等几乎所有角色色，

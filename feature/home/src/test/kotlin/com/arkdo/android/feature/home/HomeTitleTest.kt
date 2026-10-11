@@ -9,7 +9,7 @@ import org.junit.Test
 class HomeTitleTest {
     @Test
     fun default_query_uses_app_name() {
-        assertEquals("ArkDO", homeTitle(HomeQuery()))
+        assertEquals("JetDo", homeTitle(HomeQuery()))
     }
 
     @Test

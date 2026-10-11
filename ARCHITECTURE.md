@@ -1,8 +1,8 @@
-# ArkDO Android - 项目结构文档
+# JetDo Android - 项目结构文档
 
 ## 概览
 
-ArkDO Android 是 LINUX DO 社区的第三方 Android 原生客户端，基于 HarmonyOS 版本（ArkDO）1:1 还原功能和架构。
+JetDo Android 是 LINUX DO 社区的第三方 Android 原生客户端，基于 HarmonyOS 版本（JetDo）1:1 还原功能和架构。
 
 - **架构模式**：单 Activity + Jetpack Compose + MVVM
 - **依赖注入**：Hilt
@@ -18,7 +18,7 @@ ArkDO Android 是 LINUX DO 社区的第三方 Android 原生客户端，基于 H
 
 ```
 app/src/main/kotlin/com/arkdo/android/
-├── ArkDoApplication.kt          # 应用入口
+├── JetDoApplication.kt          # 应用入口
 ├── MainActivity.kt              # 主 Activity
 │
 ├── common/                      # 通用工具和常量
@@ -39,7 +39,7 @@ app/src/main/kotlin/com/arkdo/android/
 │   └── DatabaseModule.kt       # 数据库相关（Room）
 │
 ├── navigation/                  # 导航定义
-│   ├── ArkDoNavHost.kt         # 导航宿主
+│   ├── JetDoNavHost.kt         # 导航宿主
 │   └── Routes.kt               # 路由常量
 │
 ├── services/                    # 14 个服务子域（对齐 HarmonyOS 版本）
@@ -68,7 +68,7 @@ app/src/main/kotlin/com/arkdo/android/
 │   │   └── SessionStore.kt             # 会话持久化
 │   │
 │   ├── push/                   # 系统推送
-│   │   ├── ArkDoFirebaseMessagingService.kt  # FCM 接收
+│   │   ├── JetDoFirebaseMessagingService.kt  # FCM 接收
 │   │   ├── PushSubscriptionService.kt        # 推送订阅（中继注册）
 │   │   └── PushNotificationNavigation.kt     # 推送深链接导航
 │   │

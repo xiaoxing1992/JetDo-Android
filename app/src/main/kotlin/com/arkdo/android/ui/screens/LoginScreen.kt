@@ -63,7 +63,7 @@ import com.arkdo.android.services.session.LOGIN_GATE_LOG_TAG
 import com.arkdo.android.services.session.SessionEventBus
 import com.arkdo.android.services.web.CookiePresenceSnapshot
 import com.arkdo.android.services.web.WebSessionManager
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -95,8 +95,8 @@ import timber.log.Timber
 // 鸿蒙把注入时机绑在「键盘弹起」（avoidAreaChange），Android 用 imeInsets 可见性同帧触发。
 // ==========================================================================
 
-private const val LOG_TAG = "[ArkDO][Login]"
-private const val KBD_TAG = "[ArkDO][LoginKbd]"
+private const val LOG_TAG = "[JetDo][Login]"
+private const val KBD_TAG = "[JetDo][LoginKbd]"
 private const val CHALLENGE_POLL_INTERVAL_MS = 1000L
 private const val MAX_CHALLENGE_POLL_COUNT = 90
 private const val LOGIN_POLL_INTERVAL_MS = 800L

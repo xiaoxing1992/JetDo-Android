@@ -46,11 +46,11 @@ class FileLoggerTest {
     @Test
     fun `落盘的行带时间前缀与级别`() {
         val logger = newLogger()
-        logger.append('I', "[ArkDO][Home] 列表加载完成")
+        logger.append('I', "[JetDo][Home] 列表加载完成")
         logger.flush()
 
         val text = currentFile().readText()
-        assertTrue(text.contains("[ArkDO][Home] 列表加载完成"))
+        assertTrue(text.contains("[JetDo][Home] 列表加载完成"))
         assertTrue(
             "行首应为 MM-dd HH:mm:ss.SSS + 级别",
             text.lines().first().matches(Regex("\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} I .*"))

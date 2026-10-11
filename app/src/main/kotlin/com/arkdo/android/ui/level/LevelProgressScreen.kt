@@ -59,7 +59,7 @@ import com.arkdo.android.data.models.ConnectVetoItem
 import com.arkdo.android.services.connect.CONNECT_EXTRACT_SCRIPT
 import com.arkdo.android.services.connect.ConnectLevelParser
 import com.arkdo.android.ui.theme.arkdoColors
-import com.arkdo.android.ui.theme.isArkdoInDarkTheme
+import com.arkdo.android.ui.theme.isJetDoInDarkTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -123,7 +123,7 @@ fun LevelProgressScreen(
     onOpenWeb: (String, String) -> Unit
 ) {
     val colors = arkdoColors
-    val connect = connectColors(isArkdoInDarkTheme())
+    val connect = connectColors(isJetDoInDarkTheme())
     var phase by remember { mutableStateOf(if (isLoggedIn) LevelPhase.LOADING else LevelPhase.ANON) }
     var data by remember { mutableStateOf<ConnectLevelData?>(null) }
     var reloadToken by remember { mutableIntStateOf(0) }

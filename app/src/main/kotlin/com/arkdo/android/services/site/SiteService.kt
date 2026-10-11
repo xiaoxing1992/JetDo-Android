@@ -54,7 +54,7 @@ class SiteService(private val bridge: JsonNetworkClient) {
             }
 
             val mapped = mapCategories(categories)
-            Timber.i("[ArkDO][Site] /site.json 已解析 categories=%d", mapped.size)
+            Timber.i("[JetDo][Site] /site.json 已解析 categories=%d", mapped.size)
             NetworkResult(
                 success = true,
                 statusCode = response.statusCode,
@@ -64,7 +64,7 @@ class SiteService(private val bridge: JsonNetworkClient) {
         } catch (e: Exception) {
             // 一定要打出来：/site.json 里任何一个字段的类型对不上都会整份解析失败，
             // 表现成「版块一个都没有」。之前这里静默吞掉，排查时完全没有线索。
-            Timber.e(e, "[ArkDO][Site] /site.json 解析失败 len=%d", data.length)
+            Timber.e(e, "[JetDo][Site] /site.json 解析失败 len=%d", data.length)
             NetworkResults.unexpectedResponse(
                 response.statusCode,
                 response.challengeState,

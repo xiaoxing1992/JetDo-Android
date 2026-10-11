@@ -21,7 +21,7 @@ class ComposeSmokeInstrumentedTest {
 
     @Test
     fun compose_rendersAndAsserts() {
-        composeRule.setContent { Text("ArkDO") }
-        composeRule.onNodeWithText("ArkDO").assertIsDisplayed()
+        composeRule.setContent { Text("JetDo") }
+        composeRule.onNodeWithText("JetDo").assertIsDisplayed()
     }
 }

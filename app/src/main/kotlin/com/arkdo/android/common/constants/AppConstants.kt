@@ -4,7 +4,7 @@ package com.arkdo.android.common.constants
 // 与 HarmonyOS 版 common/constants/AppConstants.ets 逐值对齐。
 // ==========================================================================
 object AppConstants {
-    const val APP_NAME = "ArkDO"
+    const val APP_NAME = "JetDo"
     const val BASE_URL = "https://linux.do"
 
     // 站点静态资源 CDN：主站域名在 TLS 层被按 SNI 阻断，原生请求取不到图。

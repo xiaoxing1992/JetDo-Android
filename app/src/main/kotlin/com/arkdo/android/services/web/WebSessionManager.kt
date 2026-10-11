@@ -20,7 +20,7 @@ import timber.log.Timber
 // saveCookies → CookieManager.flush()（异步写盘）。
 // ==========================================================================
 
-const val LOG_TAG = "[ArkDO][WebSession]"
+const val LOG_TAG = "[JetDo][WebSession]"
 
 data class CookiePresenceSnapshot(
     val hasCookie: Boolean,

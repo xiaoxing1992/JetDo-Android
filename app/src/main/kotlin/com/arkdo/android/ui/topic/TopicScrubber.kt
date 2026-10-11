@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlin.math.roundToInt
 
@@ -188,7 +188,7 @@ internal fun TopicScrubber(
                         .width(THUMB_WIDTH)
                         .height(THUMB_HEIGHT)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(ArkdoFixedColors.Unread)
+                        .background(JetDoFixedColors.Unread)
                 )
             }
         }
@@ -207,8 +207,8 @@ internal fun TopicScrubber(
                     .shadow(
                         elevation = 8.dp,
                         shape = RoundedCornerShape(16.dp),
-                        ambientColor = ArkdoFixedColors.Scrim,
-                        spotColor = ArkdoFixedColors.Scrim
+                        ambientColor = JetDoFixedColors.Scrim,
+                        spotColor = JetDoFixedColors.Scrim
                     )
                     .clip(RoundedCornerShape(16.dp))
                     .background(colors.brand)
@@ -218,7 +218,7 @@ internal fun TopicScrubber(
                     CircularProgressIndicator(
                         modifier = Modifier.size(14.dp),
                         strokeWidth = 2.dp,
-                        color = ArkdoFixedColors.OnDarkFg
+                        color = JetDoFixedColors.OnDarkFg
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                 }
@@ -226,7 +226,7 @@ internal fun TopicScrubber(
                     text = if (jumping) stringResource(R.string.detail_jump_to_floor, jumpTarget) else stringResource(R.string.detail_floor_shown, shown),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
-                    color = ArkdoFixedColors.OnDarkFg,
+                    color = JetDoFixedColors.OnDarkFg,
                     maxLines = 1
                 )
             }

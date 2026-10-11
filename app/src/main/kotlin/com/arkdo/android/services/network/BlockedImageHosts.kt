@@ -18,7 +18,7 @@ import timber.log.Timber
 /** 同一域名上有这么多张**不同的图**网络层失败，才判定「这个域名当前走不通」。 */
 private const val FAIL_THRESHOLD = 2
 
-private const val LOG_TAG = "[ArkDO][ImageHost]"
+private const val LOG_TAG = "[JetDo][ImageHost]"
 
 /**
  * 记住「Coil 走不通」的图片域名（仅本次运行内存态，冷启动自动复位）。

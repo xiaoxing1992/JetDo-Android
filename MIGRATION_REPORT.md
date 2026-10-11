@@ -123,10 +123,10 @@ data/models/
 ### 修改文件（9 个）
 - app/build.gradle.kts
 - gradle/libs.versions.toml
-- ArkDoApplication.kt
+- JetDoApplication.kt
 - MainActivity.kt
 - AppModule.kt（Hilt）
-- ArkDoNavHost.kt（路由）
+- JetDoNavHost.kt（路由）
 - RootTabScreen.kt
 - themes.xml
 

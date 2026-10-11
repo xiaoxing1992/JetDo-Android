@@ -78,7 +78,7 @@ import com.arkdo.android.ui.components.TagIconRegistry
 import com.arkdo.android.ui.components.TopicBadgeUtils
 import com.arkdo.android.ui.composer.MarkdownActions.EditState
 import com.arkdo.android.ui.composer.MarkdownActions.MdAction
-import com.arkdo.android.ui.theme.ArkdoFixedColors
+import com.arkdo.android.ui.theme.JetDoFixedColors
 import com.arkdo.android.ui.theme.arkdoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -121,7 +121,7 @@ fun NewTopicScreen(
             bridge = com.arkdo.android.services.network.ArkWebNetworkBridge,
             ready = true,
             alreadyLoaded = false,
-            logTag = "[ArkDO][Composer]"
+            logTag = "[JetDo][Composer]"
         )
         if (loaded != null) effectiveCategories = loaded
     }
@@ -433,7 +433,7 @@ fun NewTopicScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(ArkdoFixedColors.Scrim),
+                    .background(JetDoFixedColors.Scrim),
                 contentAlignment = Alignment.Center
             ) {
                 Row(

@@ -24,7 +24,7 @@ import timber.log.Timber
 import javax.inject.Inject
 
 /**
- * ArkDO Android 应用入口
+ * JetDo Android 应用入口
  *
  * 职责：
  * 1. 初始化日志系统（Timber）
@@ -35,7 +35,7 @@ import javax.inject.Inject
  * 6. 预热核心服务（WebView 网络桥）
  */
 @HiltAndroidApp
-class ArkDoApplication : Application(), SingletonImageLoader.Factory {
+class JetDoApplication : Application(), SingletonImageLoader.Factory {
 
     @Inject
     lateinit var imageLoaderProvider: dagger.Lazy<ImageLoader>
@@ -71,7 +71,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         // 弹窗前这里不装 SDK，MainActivity 拿到同意后回调同一入口（幂等）。
         initCrashReportIfAllowed()
 
-        Timber.i("[ArkDO][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
+        Timber.i("[JetDo][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
 
         // 初始化登录态持久化（SharedPreferences）
         LoginGate.initPersist(this)
@@ -101,8 +101,8 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
             DohManager.init(this)
             DohService.init(this)
         }
-            .onSuccess { Timber.i("[ArkDO][Startup] DoH service initialized url=%s", DohService.activeServerUrl()) }
-            .onFailure { Timber.e(it, "[ArkDO][Startup] DoH initialization failed") }
+            .onSuccess { Timber.i("[JetDo][Startup] DoH service initialized url=%s", DohService.activeServerUrl()) }
+            .onFailure { Timber.e(it, "[JetDo][Startup] DoH initialization failed") }
 
         // 用 Hilt 提供的 ImageLoader 作为 Coil 单例（经 SingletonImageLoader.Factory 注册）。
         SingletonImageLoader.setSafe(this)
@@ -124,7 +124,7 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
     fun initCrashReportIfAllowed() {
         if (crashReportInitialized) return
         if (com.arkdo.android.services.compliance.PrivacyConsentStore.needsConsent(this)) {
-            Timber.i("[ArkDO][Startup] Bugly deferred: privacy consent not given yet")
+            Timber.i("[JetDo][Startup] Bugly deferred: privacy consent not given yet")
             return
         }
         runCatching {
@@ -136,8 +136,8 @@ class ArkDoApplication : Application(), SingletonImageLoader.Factory {
         }
             .onSuccess {
                 crashReportInitialized = true
-                Timber.i("[ArkDO][Startup] Bugly initialized appId=%s", BuildConfig.BUGLY_APP_ID)
+                Timber.i("[JetDo][Startup] Bugly initialized appId=%s", BuildConfig.BUGLY_APP_ID)
             }
-            .onFailure { Timber.e(it, "[ArkDO][Startup] Bugly init failed") }
+            .onFailure { Timber.e(it, "[JetDo][Startup] Bugly init failed") }
     }
 }

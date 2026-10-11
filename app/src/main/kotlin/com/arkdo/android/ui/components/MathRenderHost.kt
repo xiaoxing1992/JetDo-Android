@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.arkdo.android.services.content.MathRenderService
 import timber.log.Timber
 
-private const val LOG_TAG = "[ArkDO][MathRenderHost]"
+private const val LOG_TAG = "[JetDo][MathRenderHost]"
 
 /**
  * 离屏公式引擎的 Web 载体:只加载本地 `mathjax/render.html`,1×1、透明、不参与命中测试。
@@ -50,7 +50,7 @@ fun MathRenderHost(modifier: Modifier = Modifier) {
                 settings.allowContentAccess = false
                 settings.blockNetworkLoads = true
 
-                addJavascriptInterface(MathRenderService.createBridge(), "ArkDOMath")
+                addJavascriptInterface(MathRenderService.createBridge(), "JetDoMath")
 
                 webViewClient = object : android.webkit.WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {

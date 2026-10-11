@@ -32,10 +32,10 @@ object ChallengeShortcutEventBus {
     fun notifyBlocked() {
         if (blocked) return
         blocked = true
-        Timber.i("[ArkDO][Challenge] shortcut blocked=true")
+        Timber.i("[JetDo][Challenge] shortcut blocked=true")
         listeners.values.toList().forEach { l ->
             runCatching { l(true) }.onFailure {
-                Timber.e(it, "[ArkDO][Challenge] shortcut listener threw")
+                Timber.e(it, "[JetDo][Challenge] shortcut listener threw")
             }
         }
     }
@@ -44,10 +44,10 @@ object ChallengeShortcutEventBus {
     fun notifyCleared() {
         if (!blocked) return
         blocked = false
-        Timber.i("[ArkDO][Challenge] shortcut blocked=false")
+        Timber.i("[JetDo][Challenge] shortcut blocked=false")
         listeners.values.toList().forEach { l ->
             runCatching { l(false) }.onFailure {
-                Timber.e(it, "[ArkDO][Challenge] shortcut listener threw")
+                Timber.e(it, "[JetDo][Challenge] shortcut listener threw")
             }
         }
     }

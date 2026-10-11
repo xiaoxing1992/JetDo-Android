@@ -178,7 +178,7 @@ class TopicDetailViewModel @Inject constructor(
 
     /** 用户点顶栏「手动验证」：请求恢复协调器停下来静默重试、把验证页交给用户（对齐鸿蒙 onOpenChallenge）。 */
     fun requestManualChallenge() {
-        Timber.i("[ArkDO][TopicDetail] manual challenge requested topicId=%s", currentTopicId)
+        Timber.i("[JetDo][TopicDetail] manual challenge requested topicId=%s", currentTopicId)
         ChallengeRecoveryEventBus.requestManual()
     }
 
@@ -483,7 +483,7 @@ class TopicDetailViewModel @Inject constructor(
                 bridge = ArkWebNetworkBridge,
                 ready = true,
                 alreadyLoaded = _uiState.value.categories.isNotEmpty(),
-                logTag = "[ArkDO][TopicDetail]"
+                logTag = "[JetDo][TopicDetail]"
             )?.let { loaded ->
                 _uiState.update { it.copy(categories = loaded) }
             }
@@ -1201,7 +1201,7 @@ class TopicDetailViewModel @Inject constructor(
             // 服务端回的是下次该带的序号，不存回去下次会因序号过期被拒。
             replyDraftSequence = result.data
             replyDraftPersisted = true
-            Timber.i("[ArkDO][TopicDetail] reply draft saved topicId=%s seq=%d", topicId, replyDraftSequence)
+            Timber.i("[JetDo][TopicDetail] reply draft saved topicId=%s seq=%d", topicId, replyDraftSequence)
         } else {
             replyDraftDirty = true
         }
@@ -1673,7 +1673,7 @@ class TopicDetailViewModel @Inject constructor(
         }
         if (atEnd) incomingFirstNewPostNumber = 0
         Timber.i(
-            "[ArkDO][TopicDetail] realtime created topicId=%s ids=%d added=%d atEnd=%s",
+            "[JetDo][TopicDetail] realtime created topicId=%s ids=%d added=%d atEnd=%s",
             topicId, ids.size, added, atEnd
         )
     }
@@ -1739,7 +1739,7 @@ class TopicDetailViewModel @Inject constructor(
         // 全 false 说明该话题未开启共享问题（服务端不下发 → 按钮本就不该出现，属正常）；
         // true 而 UI 没有才是客户端接线问题。lastRead 同理解释红线是否该出现。
         Timber.i(
-            "[ArkDO][TopicDetail] topicId=%s sharedIssue(visible=%s canCreate=%s created=%s count=%s) lastRead=%s accepted=%s",
+            "[JetDo][TopicDetail] topicId=%s sharedIssue(visible=%s canCreate=%s created=%s count=%s) lastRead=%s accepted=%s",
             detail.id,
             detail.sharedIssueVisible,
             detail.canCreateSharedIssue,
@@ -1797,16 +1797,16 @@ class TopicDetailViewModel @Inject constructor(
      */
     private fun startReadingTrackerIfNeeded(detail: TopicDetail) {
         if (trackerStarted) {
-            Timber.i("[ArkDO][ReadingTracker] skip start: already started topicId=%d", detail.id)
+            Timber.i("[JetDo][ReadingTracker] skip start: already started topicId=%d", detail.id)
             return
         }
         if (!LoginGate.isLoggedIn(appContext)) {
-            Timber.i("[ArkDO][ReadingTracker] skip start: not logged in topicId=%d", detail.id)
+            Timber.i("[JetDo][ReadingTracker] skip start: not logged in topicId=%d", detail.id)
             return
         }
         val posts = dataSource.posts
         if (posts.isEmpty()) {
-            Timber.i("[ArkDO][ReadingTracker] skip start: no posts topicId=%d", detail.id)
+            Timber.i("[JetDo][ReadingTracker] skip start: no posts topicId=%d", detail.id)
             return
         }
         readingTracker.start(
@@ -1819,7 +1819,7 @@ class TopicDetailViewModel @Inject constructor(
         )
         readingTracker.seedRead(collectAlreadyReadPostNumbers(posts, detail.lastReadPostNumber))
         trackerStarted = true
-        Timber.i("[ArkDO][ReadingTracker] started topicId=%d posts=%d", detail.id, posts.size)
+        Timber.i("[JetDo][ReadingTracker] started topicId=%d posts=%d", detail.id, posts.size)
     }
 
     /**
@@ -1843,7 +1843,7 @@ class TopicDetailViewModel @Inject constructor(
         if (postNumbers != lastOnscreenLogged) {
             lastOnscreenLogged = postNumbers
             Timber.i(
-                "[ArkDO][ReadingTracker] onscreen=%s..%s n=%d topicId=%s",
+                "[JetDo][ReadingTracker] onscreen=%s..%s n=%d topicId=%s",
                 postNumbers.firstOrNull(), postNumbers.lastOrNull(), postNumbers.size, currentTopicId
             )
         }
@@ -1937,7 +1937,7 @@ class TopicDetailViewModel @Inject constructor(
         // 两手对不上（nowRead < in）说明 postNumber 没落到列表上；这条日志根本不出现则说明
         // onRead 没被执行（上报未成功，或视觉收尾 job 被 reset 掐掉）。
         Timber.i(
-            "[ArkDO][ReadingTracker] markRead topicId=%s in=%d nowRead=%d",
+            "[JetDo][ReadingTracker] markRead topicId=%s in=%d nowRead=%d",
             currentTopicId,
             numbers.size,
             _uiState.value.posts.count { it.postNumber in numbers && it.read == true }

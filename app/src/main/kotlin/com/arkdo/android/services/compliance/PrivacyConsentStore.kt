@@ -6,7 +6,7 @@ import android.content.Context
  * 首启隐私同意状态（工信部合规：个人信息处理须在用户同意后进行）。
  *
  * 唯一被此闸门约束的是腾讯 Bugly 崩溃上报（远程采集）：
- * 未同意前 `ArkDoApplication.initCrashReportIfAllowed()` 不装 SDK；
+ * 未同意前 `JetDoApplication.initCrashReportIfAllowed()` 不装 SDK；
  * MainActivity 首启弹窗拿到同意后才初始化。
  *
  * [POLICY_VERSION] 对应 docs/publish/privacy-policy.md 的实质内容版本：

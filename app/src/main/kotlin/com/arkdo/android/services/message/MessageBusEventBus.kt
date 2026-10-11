@@ -119,7 +119,7 @@ object MessageBusEventBus {
         val event = runCatching {
             json.decodeFromString<MessageBusEvent>(payload)
         }.getOrElse {
-            Timber.w(it, "[ArkDO][MessageBus] payload parse failed len=%d", payload.length)
+            Timber.w(it, "[JetDo][MessageBus] payload parse failed len=%d", payload.length)
             return
         }
 
@@ -133,7 +133,7 @@ object MessageBusEventBus {
 
         listeners.values.toList().forEach { l ->
             runCatching { l(event) }.onFailure {
-                Timber.e(it, "[ArkDO][MessageBus] listener threw")
+                Timber.e(it, "[JetDo][MessageBus] listener threw")
             }
         }
     }

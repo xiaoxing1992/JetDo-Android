@@ -229,7 +229,7 @@ fun ImageViewer(
         image.toBitmap()
     }
 
-    /** 保存到系统相册 Pictures/ArkDO（MediaStore），成功回 true。 */
+    /** 保存到系统相册 Pictures/JetDo（MediaStore），成功回 true。 */
     fun saveToGallery(bitmap: Bitmap, onDone: (Boolean) -> Unit) {
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
@@ -238,7 +238,7 @@ fun ImageViewer(
                         put(MediaStore.Images.Media.DISPLAY_NAME, "arkdo-${System.currentTimeMillis()}.jpg")
                         put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                         if (Build.VERSION.SDK_INT >= 29) {
-                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ArkDO")
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JetDo")
                         }
                     }
                     val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)

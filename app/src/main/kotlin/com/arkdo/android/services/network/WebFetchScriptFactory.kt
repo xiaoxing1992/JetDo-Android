@@ -10,7 +10,7 @@ import com.arkdo.android.services.network.webscript.buildCsrfScript
 // ==========================================================================
 
 /** 脚本里的 requestId 占位符：执行器 run() 时用真实 id 替换。 */
-const val REQUEST_ID_TOKEN: String = "__ARKDO_REQUEST_ID__"
+const val REQUEST_ID_TOKEN: String = "__JETDO_REQUEST_ID__"
 
 object WebFetchScriptFactory {
 
@@ -32,14 +32,14 @@ object WebFetchScriptFactory {
               }
             }).then((response) => {
               response.text().then((body) => {
-                window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                   statusCode: response.status,
                   contentType: response.headers.get('content-type') || '',
                   cfMitigated: response.headers.get('cf-mitigated') || '',
                   body: body
                 }));
               }).catch((error) => {
-                window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                   statusCode: 0,
                   contentType: '',
                   body: '',
@@ -47,7 +47,7 @@ object WebFetchScriptFactory {
                 }));
               });
             }).catch((error) => {
-              window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+              window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0,
                 contentType: '',
                 body: '',
@@ -77,7 +77,7 @@ object WebFetchScriptFactory {
             const baseUrl = 'https://linux.do';
             const requestUrl = new URL($encodedPath, baseUrl);
             const fail = (error) => {
-              window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+              window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0,
                 contentType: '',
                 body: '',
@@ -100,7 +100,7 @@ object WebFetchScriptFactory {
             }
             fetch(requestUrl.toString(), fetchOptions).then((response) => {
               response.text().then((body) => {
-                window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                   statusCode: response.status,
                   contentType: response.headers.get('content-type') || '',
                   cfMitigated: response.headers.get('cf-mitigated') || '',
@@ -126,7 +126,7 @@ object WebFetchScriptFactory {
             const requestUrl = new URL($encodedTarget, baseUrl);
             const sameOrigin = requestUrl.origin === baseUrl;
             const fail = (error) => {
-              window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+              window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                 statusCode: 0, contentType: '', body: '', errorMessage: String(error)
               }));
             };
@@ -142,7 +142,7 @@ object WebFetchScriptFactory {
                 for (let i = 0; i < bytes.length; i += chunk) {
                   binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
                 }
-                window.ArkDOBridge.onJsonResult(requestId, JSON.stringify({
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
                   statusCode: response.status,
                   contentType: response.headers.get('content-type') || '',
                   body: btoa(binary)

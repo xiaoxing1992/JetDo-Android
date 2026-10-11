@@ -30,7 +30,7 @@ class SmokeInstrumentedTest {
 
     @Test
     fun appContextHolder_resolvesResource() {
-        assertEquals("ArkDO", AppContextHolder.getString(R.string.app_name))
+        assertEquals("JetDo", AppContextHolder.getString(R.string.app_name))
     }
 
     @Test

@@ -9,7 +9,7 @@ import timber.log.Timber
 // 带单调版本号去重（handledSessionVersion）。
 // ==========================================================================
 
-const val SESSION_LOG_TAG = "[ArkDO][Session]"
+const val SESSION_LOG_TAG = "[JetDo][Session]"
 
 typealias SessionChangedListener = (version: Long) -> Unit
 

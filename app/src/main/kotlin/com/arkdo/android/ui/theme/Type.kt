@@ -8,7 +8,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * ArkDO 字体系统
+ * JetDo 字体系统
  *
  * 对齐 HarmonyOS 版本的字体策略：
  * - 标题：使用 Serif 字体（优雅衬线）

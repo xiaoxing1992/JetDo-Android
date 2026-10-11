@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢考虑为 ArkDO Android 贡献代码！
+感谢考虑为 JetDo Android 贡献代码！
 
 ## 开发环境设置
 

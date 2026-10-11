@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Theme.ArkDO 深色档覆盖：只覆盖与浅色相反的亮度开关，其余继承 values/themes.xml。
+    <!-- Theme.JetDo 深色档覆盖：只覆盖与浅色相反的亮度开关，其余继承 values/themes.xml。
          windowLightStatusBar 不分日夜覆盖的话，深色模式下状态栏图标是深底深字，看不见。
          系统栏底色仍是透明（edge-to-edge），Compose 运行时深色主题负责实际内容，
          这里兜的是 Compose 首帧前 + 系统栏图标的资源级底。 -->
-    <style name="Theme.ArkDO" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.JetDo" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 
     <!-- 闪屏深色档：背景引用 @color/window_background 自动落 values-night 深色值。 -->
-    <style name="Theme.ArkDO.Splash" parent="Theme.SplashScreen">
+    <style name="Theme.JetDo.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/window_background</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-        <item name="postSplashScreenTheme">@style/Theme.ArkDO</item>
+        <item name="postSplashScreenTheme">@style/Theme.JetDo</item>
     </style>
 </resources>

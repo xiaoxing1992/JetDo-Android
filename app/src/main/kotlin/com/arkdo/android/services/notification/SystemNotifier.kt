@@ -29,7 +29,7 @@ object SystemNotifier {
     /** 默认渠道 id。P0-1 系统推送落地后按用途细分渠道时，这个保留给一般提醒。 */
     const val CHANNEL_ID = "arkdo_default"
 
-    private const val LOG_TAG = "[ArkDO][Notifier]"
+    private const val LOG_TAG = "[JetDo][Notifier]"
 
     /** 固定 id：重复发送只覆盖同一条，不会在通知栏堆积一列测试通知。 */
     private const val TEST_NOTIFICATION_ID = 1000

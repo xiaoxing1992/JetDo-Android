@@ -10,7 +10,7 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
-private const val TAG = "[ArkDO][DoH]"
+private const val TAG = "[JetDo][DoH]"
 
 /**
  * DoH 引擎。配置源是 [DohManager]（服务器列表 / 当前选择 / 开关 / 模式，与鸿蒙版同构），

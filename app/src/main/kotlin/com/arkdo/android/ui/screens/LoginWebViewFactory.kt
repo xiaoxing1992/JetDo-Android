@@ -110,13 +110,13 @@ class LoginWebViewFactory(
     }
 
     private companion object {
-        const val LOG_TAG = "[ArkDO][X5Login]"
+        const val LOG_TAG = "[JetDo][X5Login]"
     }
 }
 
 /** X5(TBS)加载与探测工具。 */
 object X5LoginSupport {
-    private const val TAG = "[ArkDO][X5]"
+    private const val TAG = "[JetDo][X5]"
     @Volatile private var initStarted = false
 
     /** 在 Application 预热:初始化 TBS(可能触发内核下载/加载,失败无害)。 */

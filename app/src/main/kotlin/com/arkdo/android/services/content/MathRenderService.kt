@@ -21,10 +21,10 @@ import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-private const val LOG_TAG = "[ArkDO][MathRender]"
+private const val LOG_TAG = "[JetDo][MathRender]"
 
-/** 离屏页里 window.ArkDOMath 的方法名(供 JS 回调)。 */
-private const val BRIDGE_NAME = "ArkDOMath"
+/** 离屏页里 window.JetDoMath 的方法名(供 JS 回调)。 */
+private const val BRIDGE_NAME = "JetDoMath"
 
 /** 单条公式渲染兜底超时:超时即失败,渲染层退回显示裸 LaTeX。 */
 private const val RENDER_TIMEOUT_MS = 8_000L
@@ -57,7 +57,7 @@ data class MathImage(
  *
  * 页面侧契约(见 assets/mathjax/render.html,与鸿蒙同一份):
  * `renderMath(requestId, latex, display, scale)` → 页面回调
- * `ArkDOMath.onResult(id, pngBase64, w, h, depth)` 或 `ArkDOMath.onError(id, msg)`。
+ * `JetDoMath.onResult(id, pngBase64, w, h, depth)` 或 `JetDoMath.onError(id, msg)`。
  * 这里通过 [MathBridge] 注入同名对象接收回调。
  */
 object MathRenderService {
@@ -198,7 +198,7 @@ object MathRenderService {
 
     /**
      * JS 回调桥。页面出图后调用 onResult / 出错调用 onError。
-     * 方法名与签名必须和 render.html 里 `window.ArkDOMath.onResult(...)` 的调用一致。
+     * 方法名与签名必须和 render.html 里 `window.JetDoMath.onResult(...)` 的调用一致。
      */
     internal class MathBridge {
         @JavascriptInterface
