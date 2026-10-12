@@ -108,29 +108,24 @@ private class QrAnalyzer(private val handled: AtomicBoolean, private val onQr: (
             val height = image.height
             val rowStride = plane.rowStride
             val buffer = plane.buffer
-            // rowStride 可能大于 width（内存对齐），逐行拷出连续平面数据。
-            val data = if (rowStride == width) {
-                ByteArray(buffer.remaining()).also { buffer.get(it) }
-            } else {
-                ByteArray(width * height).also { out ->
-                    for (row in 0 until height) {
-                        buffer.position(row * rowStride)
-                        buffer.get(out, row * width, width)
-                    }
-                }
+            // 统一逐行拷成「行距 == width」的紧凑平面：rowStride 是内存对齐后的值，可能大于 width。
+            // 传给 zxing 的 dataWidth 必须是这个紧凑行距（= width），否则 getRow() 会按 rowStride
+            // 定位，读越界或整帧错位。
+            val data = ByteArray(width * height)
+            for (row in 0 until height) {
+                buffer.position(row * rowStride)
+                buffer.get(data, row * width, width)
             }
-            var source: LuminanceSource = PlanarYUVLuminanceSource(
-                data, rowStride, height, 0, 0, width, height, false
+            // 不旋转。QR 码自带三个寻像图形，识别器自己定方向，帧转不转都解得开。
+            // ⚠️ 千万别对 PlanarYUVLuminanceSource 调 rotateCounterClockwise()/rotateClockwise()：
+            // zxing 3.5.3 里这个类**没有覆写**它们（javap 实证：类中既无 rotateCounterClockwise
+            // 也无 isRotateSupported），调用直接落到基类默认实现，抛
+            // UnsupportedOperationException("This luminance source does not support rotation by
+            // 90 degrees.")。手机竖屏的 rotationDegrees 恒为 90/270，于是每一帧都炸、永远扫不出码
+            // —— 扫码页「什么反应也没有」就是这个原因（logcat 曾以 150ms 一帧的节奏刷屏该异常）。
+            val source: LuminanceSource = PlanarYUVLuminanceSource(
+                data, width, height, 0, 0, width, height, false
             )
-            // 相机帧相对屏幕有旋转：按 rotationDegrees 转到「用户视角」再解。
-            // ⚠️ zxing 的 PlanarYUVLuminanceSource 只实现 rotateCounterClockwise
-            // （rotateClockwise 走基类默认抛 UnsupportedOperationException），270° 转三次。
-            when (image.imageInfo.rotationDegrees) {
-                90 -> source = source.rotateCounterClockwise()
-                180 -> source = source.rotateCounterClockwise().rotateCounterClockwise()
-                270 -> source = source
-                    .rotateCounterClockwise().rotateCounterClockwise().rotateCounterClockwise()
-            }
             val text = reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
             Timber.i("%s qr decoded len=%d", LOG_TAG, text.length)
             handled.set(true)

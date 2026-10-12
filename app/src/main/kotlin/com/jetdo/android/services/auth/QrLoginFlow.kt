@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -137,23 +138,66 @@ object QrLoginFlow {
 
     /**
      * 出示端轮询：分享 key 还活着吗？消失 = 扫码端已登录并焚毁。
-     * GET /u/{username}.json 的 user.user_api_keys[] 按 application_name 认领。
      *
-     * 三态而不是布尔：true=还在，false=确认已被消费，null=查不到（网络/会话异常）。
-     * **字段缺失必须归 null 而不是 false** —— `user_api_keys` 只在「看自己」时由
-     * UserSerializer 渲染，一旦会话失效或权限变化导致该字段不出现，说明我们什么都不知道，
-     * 此时若按 false 处理，弹窗会在 3 秒内直接跳到「已完成」，而对方根本没扫。
+     * 数据源是 Discourse `UserSerializer#user_api_keys`（`/u/{name}.json`），源码里有两个
+     * 决定判据怎么写的事实：
+     *
+     * ```ruby
+     * private_attributes ..., :user_api_keys, ...        # 只在「本人 / staff」视角才渲染
+     * def user_api_keys                                  # 无存活 key 时返回 nil，不是空数组
+     *   keys.length > 0 ? keys : nil
+     * end
+     * ```
+     *
+     * 于是有三种「没有」必须分开处理，语义完全不同：
+     * - 字段**没渲染** → 拿不到本人视角（会话异常等）→ **不知道**（unknown，继续轮询）
+     * - 字段是 **null**   → 服务端明说「一枚存活 key 都没有」→ **已被消费**（false）
+     * - 字段是**空数组** → 同上（兼容返回 `[]` 的旧版本）→ **已被消费**（false）
+     *
+     * 旧的 `?: return false` 把「没渲染」和「已消费」压成同一个 false —— 弹窗一打开 3 秒
+     * 就跳到「已完成」，而对方根本没扫。这就是用户报的「对方设备提示已登录成功」。
      */
     suspend fun isShareKeyAlive(username: String): Boolean? {
         return runCatching {
             val response = ArkWebNetworkBridge.getJson("/u/${URLEncoder.encode(username, "UTF-8")}.json")
-            if (!response.success) return@runCatching null
+            if (!response.success) {
+                Timber.w("%s alive probe http failed status=%d", LOG_TAG, response.statusCode)
+                return@runCatching null
+            }
             val body = response.data ?: return@runCatching null
-            val user = Json.parseToJsonElement(body).jsonObject["user"]?.jsonObject
-                ?: return@runCatching null
-            val keys = user["user_api_keys"]?.jsonArray ?: return@runCatching null
-            keys.any { it.jsonObject["application_name"]?.jsonPrimitive?.contentOrNull == UserApiKeyLoginManager.QR_APPLICATION_NAME }
+            evaluateShareKeyAlive(body)
         }.getOrNull()
+    }
+
+    /**
+     * 从 `/u/{name}.json` 响应体判定分享 key 存活（纯逻辑，可单测）。
+     * 三态语义见 [isShareKeyAlive] 的注释：字段没渲染 = unknown，null / 空数组 / 不含目标 = 已消费。
+     */
+    internal fun evaluateShareKeyAlive(body: String): Boolean? {
+        val user = runCatching {
+            Json.parseToJsonElement(body).jsonObject["user"]?.jsonObject
+        }.getOrNull() ?: return null
+        val element = user["user_api_keys"] ?: run {
+            // 字段根本不在 JSON 里：非本人视角（private_attributes）→ 谁也不知道。
+            // 绝不能当成已消费，否则就是「弹窗 3 秒假报已完成」那条假阳性。
+            Timber.w("%s alive probe: user_api_keys not rendered, unknown", LOG_TAG)
+            return null
+        }
+        if (element is JsonNull) {
+            Timber.i("%s alive probe: no live key -> consumed", LOG_TAG)
+            return false
+        }
+        val keys = runCatching { element.jsonArray }.getOrNull() ?: return null
+        if (keys.isEmpty()) {
+            Timber.i("%s alive probe: empty key list -> consumed", LOG_TAG)
+            return false
+        }
+        val names = keys.mapNotNull {
+            it.jsonObject["application_name"]?.jsonPrimitive?.contentOrNull
+        }
+        val alive = names.contains(UserApiKeyLoginManager.QR_APPLICATION_NAME)
+        Timber.i("%s alive probe count=%d names=%s alive=%s", LOG_TAG, keys.size, names, alive)
+        return alive
     }
 
     /** 出示端：撤销未被消费的分享 key（弹层关闭/过期时清理；已被扫入端焚毁时服务端 403，静默）。 */
