@@ -28,10 +28,10 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -79,7 +79,7 @@ import com.jetdo.android.feature.home.HomeDrawerOverlay
 import com.jetdo.android.feature.home.HomeViewModel
 import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.ui.composer.ensureComposerAccess
-import com.jetdo.android.ui.notification.NotificationScreen
+import com.jetdo.android.ui.notification.MessagesScreen
 
 /**
  * Root Tab 容器
@@ -393,22 +393,12 @@ fun RootTabScreen(
                     // 此前恒传 false，HomeScreen 里那个分支永远走不到。
                     isCheckingSession = isCheckingSession,
                     accountUser = currentUser?.toHomeUser(),
-                    // 顶栏铃铛未读角标（鸿蒙 HomePage.ets:980 的 NotificationBell）。
-                    // 未读数真源是 NotificationEventBus，本文件 :130-136 已订阅。
-                    unreadCount = unreadCount,
                     onTopicClick = { topicId, targetPostNumber ->
                         val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
                     },
                     onProfileClick = {
                         navController.navigate(Routes.PROFILE) { launchSingleTop = true }
-                    },
-                    onNotificationsClick = {
-                        tabNavController.navigate(Routes.NOTIFICATION) {
-                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
                     },
                     onSearchClick = { navController.navigate(Routes.SEARCH) },
                     onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
@@ -423,7 +413,10 @@ fun RootTabScreen(
                 )
             }
             composable(Routes.NOTIFICATION) {
-                NotificationScreen(
+                // 底部 Tab「消息」：标题「消息」+ 分段（通知 / 私信）。
+                // 登录态与用户名由 MessagesScreen 自己从 CurrentUserHolder 取，
+                // 与旁边「我的」tab 的取法一致，不必在这里再透传一层。
+                MessagesScreen(
                     onOpenTopic = { topicId, slug, title, postNumber ->
                         val parts = mutableListOf<String>()
                         slug?.takeIf { it.isNotEmpty() }?.let { parts.add("slug=$it") }
@@ -433,7 +426,7 @@ fun RootTabScreen(
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$q")
                     },
                     onOpenUser = { uname, displayName, avatarTemplate ->
-                        if (uname.isEmpty()) return@NotificationScreen
+                        if (uname.isEmpty()) return@MessagesScreen
                         val q = buildString {
                             displayName?.takeIf { it.isNotEmpty() }?.let {
                                 append("?displayName=${java.net.URLEncoder.encode(it, "UTF-8")}")
@@ -523,11 +516,20 @@ internal enum class RootTabDestination(
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home
     ),
+
+    /**
+     * 「消息」。
+     *
+     * 路由与枚举名**保持 NOTIFICATION**：推送深链（jetdo://notification →
+     * JetDoNavHost 的 notificationTabSignal）与 Manifest 都按这个字面量走，
+     * 改名会连带改深链、测试与清单，风险远大于收益。变的只是对用户可见的
+     * label/图标，以及它承载的内容（由单页通知改为「通知 + 私信」两段容器）。
+     */
     NOTIFICATION(
         route = Routes.NOTIFICATION,
-        label = AppContextHolder.getString(R.string.home_notifications),
-        selectedIcon = Icons.Filled.Notifications,
-        unselectedIcon = Icons.Outlined.Notifications
+        label = AppContextHolder.getString(R.string.home_messages),
+        selectedIcon = Icons.Filled.Mail,
+        unselectedIcon = Icons.Outlined.Mail
     ),
     PROFILE(
         route = Routes.PROFILE,

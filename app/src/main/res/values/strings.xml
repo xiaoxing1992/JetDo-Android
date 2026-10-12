@@ -428,6 +428,7 @@
     <string name="home_new_replies">%1$s 条新回复</string>
     <string name="home_new_topic_alert">首页新话题提醒</string>
     <string name="home_notifications">通知</string>
+    <string name="home_messages">消息</string>
     <string name="home_pick_topic">从左侧选择一个帖子开始阅读</string>
     <string name="home_profile">我的</string>
     <string name="home_push_summary">论坛回复、私信与提及提醒</string>
