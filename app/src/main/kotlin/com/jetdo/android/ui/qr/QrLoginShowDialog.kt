@@ -42,12 +42,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 // ==========================================================================
 // 扫码登录·出示端弹窗：创建一枚一次性分享 key → 画成二维码给另一台 JetDo 扫。
 // - 3 秒轮询分享 key 存活：key 消失 = 对方已登录（扫入端兑换成功后自焚）→ 显示已完成
-// - 关闭弹窗 / 10 分钟窗口过期：撤销未被消费的 key（服务端 key 无过期机制，只能主动 revoke）
+// - 关闭弹窗：撤销未被消费的 key（服务端 key 无过期机制，只能主动 revoke）
+// - 过期时间已烘进二维码载荷（QrLoginFlow.OTP_WINDOW_MS），扫入端会自己拒收过期码，
+//   这里的倒计时只是给用户看的读数 + 到点停轮询；出示端被杀也拦得住旧码
 // - 二维码内容是明文 key+OTP（一次性、兑换即焚），窗口内别截图外传
 // ==========================================================================
 
 private const val LOG_TAG = "[JetDo][QrShow]"
-private const val OTP_WINDOW_SEC = 10 * 60
+private val OTP_WINDOW_SEC = (QrLoginFlow.OTP_WINDOW_MS / 1000).toInt()
 private const val ALIVE_POLL_INTERVAL_MS = 3000L
 
 @Composable
@@ -108,8 +110,9 @@ fun QrLoginShowDialog(
     AlertDialog(
         onDismissRequest = {
             val shared = payload
-            if (shared != null && !consumed && remainingSec > 0) {
-                // 未消费的 key 主动撤销；已在窗口外/已消费则无需（已被对方焚毁或过期）。
+            if (shared != null && !consumed) {
+                // 未消费就撤 —— **窗口外更要撤**：服务端 user-api-key 没有过期机制，扫入端
+                // 虽然会拒收过期码，但 key 本身还挂在账号上，不清掉就是一条永久负债。
                 scope.launch {
                     QrLoginFlow.revokeSharedKey(shared.apiKey)
                 }
