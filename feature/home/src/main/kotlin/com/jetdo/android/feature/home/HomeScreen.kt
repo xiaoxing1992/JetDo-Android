@@ -88,8 +88,6 @@ import com.jetdo.android.core.model.HomeCategory
 import com.jetdo.android.core.model.HomeQuery
 import com.jetdo.android.core.model.HomeTag
 import com.jetdo.android.core.model.HomeTopic
-import com.jetdo.android.core.model.HomeUser
-import com.jetdo.android.core.designsystem.TopicAvatar
 import com.jetdo.android.core.designsystem.TopicRow
 import com.jetdo.android.core.designsystem.TopicRowColors
 import kotlinx.coroutines.delay
@@ -109,14 +107,10 @@ internal fun HomeScreen(
     onLoadMore: () -> Unit,
     onTopicClick: (Long, Int?) -> Unit,
     onMenuClick: () -> Unit,
-    onProfileClick: () -> Unit,
     onSearchClick: () -> Unit,
     onDebugClick: () -> Unit,
     onComposeClick: () -> Unit,
     isWebViewReady: Boolean = true,
-    isLoggedIn: Boolean = false,
-    isCheckingSession: Boolean = false,
-    accountUser: HomeUser? = null,
     // 「点分类/标签快速筛选」：开关开着时行上的徽章可点（由 HomeRoute 判定并处理）。
     badgesTappable: Boolean = false,
     onBadgeTagClick: (HomeTag) -> Unit = {},
@@ -214,15 +208,10 @@ internal fun HomeScreen(
             HomeTitleBar(
                 query = state.query,
                 categoryName = state.categories.firstOrNull { it.id == state.query.categoryId }?.name,
-                isLoggedIn = isLoggedIn,
-                isCheckingSession = isCheckingSession,
-                accountUser = accountUser,
                 onMenuClick = onMenuClick,
                 onSearchClick = onSearchClick,
-                onProfileClick = onProfileClick,
                 onDebugClick = onDebugClick,
-                colors = colors,
-                avatarBaseUrl = avatarBaseUrl
+                colors = colors
             )
         },
         floatingActionButton = {
@@ -339,15 +328,10 @@ internal fun HomeScreen(
 private fun HomeTitleBar(
     query: HomeQuery,
     categoryName: String?,
-    isLoggedIn: Boolean,
-    isCheckingSession: Boolean,
-    accountUser: HomeUser?,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
-    onProfileClick: () -> Unit,
     onDebugClick: () -> Unit,
-    colors: HomeVisualTokens,
-    avatarBaseUrl: String
+    colors: HomeVisualTokens
 ) {
     val lead = query.summaryLead()
     val tag = query.summaryTag()
@@ -415,18 +399,10 @@ private fun HomeTitleBar(
         // 通知入口**不在这里**：底栏已有「消息」tab（内含通知与私信）。
         // 顶栏再放一枚铃铛是同一功能的第二个入口，角标也会与底栏重复计数，故已移除。
         // 未读数仍由 NotificationEventBus 喂给底栏角标。
-        HomeBarButton(onClick = onProfileClick, contentDescription = stringResource(R.string.profile_center), endMargin = 0.dp) {
-            when {
-                isCheckingSession -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                isLoggedIn && accountUser != null -> TopicAvatar(accountUser, 34.dp, colors.toTopicRowColors(), avatarBaseUrl)
-                else -> Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = stringResource(R.string.profile_center),
-                    tint = colors.brand,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
+        // 用户头像**不在这里**：底栏已有「我的」tab（左上角是汉堡抽屉），
+        // 顶栏再放一枚头像是同一入口的第二次重复；且它此前既 push 独立个人页、
+        // 又和底栏「我的」指向同一个 ProfileScreen，两条路并存只会让人以为
+        // 它们是两个不同的"我"。现在底栏 tab 是唯一入口，未登录态由它承载。
         HomeBarButton(onClick = onDebugClick, contentDescription = stringResource(R.string.debug_share_log), endMargin = 0.dp) {
             Icon(
                 imageVector = Icons.Filled.BugReport,

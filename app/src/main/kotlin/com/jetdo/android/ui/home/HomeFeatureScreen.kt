@@ -13,7 +13,6 @@ import com.jetdo.android.services.realtime.RealtimeTopicsPrefs
 import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.core.model.HomeFeed
 import com.jetdo.android.core.model.HomeQuery
-import com.jetdo.android.core.model.HomeUser
 import com.jetdo.android.feature.home.HomeIncomingTopicEvent
 import com.jetdo.android.feature.home.HomeRoute
 import com.jetdo.android.feature.home.HomeVisualTokens
@@ -37,11 +36,7 @@ import com.jetdo.android.ui.theme.jetdoColors
 @Composable
 fun HomeFeatureScreen(
     isWebViewReady: Boolean,
-    isLoggedIn: Boolean,
-    isCheckingSession: Boolean,
-    accountUser: HomeUser?,
     onTopicClick: (Long, Int?) -> Unit,
-    onProfileClick: () -> Unit,
     onSearchClick: () -> Unit,
     onDebugClick: () -> Unit,
     onComposeClick: () -> Unit,
@@ -74,14 +69,10 @@ fun HomeFeatureScreen(
 
     HomeRoute(
         isWebViewReady = isWebViewReady,
-        isLoggedIn = isLoggedIn,
-        isCheckingSession = isCheckingSession,
-        accountUser = accountUser,
         colors = jetdoHomeVisualTokens(),
         avatarBaseUrl = AppConstants.BASE_URL,
         incomingTopicEvent = incomingTopicEvent.value,
         onTopicClick = onTopicClick,
-        onProfileClick = onProfileClick,
         onSearchClick = onSearchClick,
         onDebugClick = onDebugClick,
         onComposeClick = onComposeClick,

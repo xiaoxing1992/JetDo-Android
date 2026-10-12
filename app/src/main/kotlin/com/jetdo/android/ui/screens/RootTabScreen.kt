@@ -388,17 +388,9 @@ fun RootTabScreen(
                 val context = androidx.compose.ui.platform.LocalContext.current
                 HomeFeatureScreen(
                     isWebViewReady = isWebViewReady,
-                    isLoggedIn = currentUser != null,
-                    // 会话检查中：首页右上角转圈（鸿蒙 HomePage.ets:1307 的 isCheckingSession）。
-                    // 此前恒传 false，HomeScreen 里那个分支永远走不到。
-                    isCheckingSession = isCheckingSession,
-                    accountUser = currentUser?.toHomeUser(),
                     onTopicClick = { topicId, targetPostNumber ->
                         val targetArg = targetPostNumber?.let { "?target=$it" } ?: ""
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
-                    },
-                    onProfileClick = {
-                        navController.navigate(Routes.PROFILE) { launchSingleTop = true }
                     },
                     onSearchClick = { navController.navigate(Routes.SEARCH) },
                     onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
@@ -441,8 +433,13 @@ fun RootTabScreen(
                 )
             }
             composable(Routes.PROFILE) {
-                // 底部 Tab「我的」:沉浸式内容(无返回/设置栏,顶到状态栏),与独立页共用 ProfileScreen。
+                // 底部 Tab「我的」:沉浸式内容(无返回箭头,右上角常驻设置齿轮,顶到状态栏),
+                // 与独立页共用 ProfileScreen。
                 ProfileScreen(
+                    // 右上角齿轮 → 设置页(压在根栈上)。此前该回调从未被赋值,
+                    // 齿轮只存在于 push 进来的独立页形态里,底栏「我的」在登录/未登录下
+                    // 都够不到设置 —— 现在是这个页面的主要设置出口。
+                    onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                     onOpenLogin = {
                         // 未登录「立即登录」→ 请求根层弹登录半窗。
                         LoginGate.requestLogin()

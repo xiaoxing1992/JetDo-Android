@@ -139,6 +139,33 @@ private fun ProfileTopBar(onNavigateBack: () -> Unit, onOpenSettings: () -> Unit
     }
 }
 
+/**
+ * 沉浸态「我的」页的右上角设置入口。
+ *
+ * 形态对齐官方 iOS App 的「我的」页：右上角一枚圆底齿轮，**不随登录态显隐**。
+ * 只画齿轮不画标题，所以不能复用 [ProfileTopBar]（它左边带返回箭头、中间带标题，
+ * 是 push 进来的独立页形态）；齿轮本身也复用同一个 Icons.Filled.Settings，
+ * 保证两处入口长得一样。
+ */
+@Composable
+private fun ImmersiveSettingsEntry(onOpenSettings: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(top = 4.dp, end = 4.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        IconButton(onClick = onOpenSettings) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = stringResource(R.string.common_settings),
+                tint = jetdoColors.textPrimary
+            )
+        }
+    }
+}
+
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -237,8 +264,11 @@ fun ProfileScreen(
                 ProfileTopBar(onNavigateBack = onNavigateBack, onOpenSettings = onOpenSettings)
                 HorizontalDivider(color = jetdoColors.border, thickness = 0.5.dp)
             } else if (immersive) {
-                // 内容与状态栏条同灰:直接顶到屏幕顶,状态栏透明并透出本 Box 的灰底。
-                Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars))
+                // 沉浸态:不画整条标题栏(内容顶到状态栏),但右上角**常驻设置齿轮**。
+                // 「我的」是底栏一级页、无返回箭头,设置是它唯一通向全局配置的出口;
+                // 沿用「登录后才可用」的旧写法会让未登录用户在这里彻底够不到设置 ——
+                // 而外观/网络/推送这些开关本就该在登录前可改。
+                ImmersiveSettingsEntry(onOpenSettings = onOpenSettings)
             }
             Column(
                 modifier = Modifier
