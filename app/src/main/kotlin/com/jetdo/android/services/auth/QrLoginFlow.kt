@@ -2,10 +2,16 @@ package com.jetdo.android.services.auth
 
 import android.content.Context
 import com.jetdo.android.common.constants.AppConstants
+import com.jetdo.android.services.challenge.ChallengeEventBus
 import com.jetdo.android.services.network.ArkWebNetworkBridge
+import com.jetdo.android.services.network.ChallengeDetector
+import com.jetdo.android.services.network.ChallengeState
 import com.jetdo.android.services.network.WebFetchScriptFactory
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -105,6 +111,16 @@ object QrLoginFlow {
     internal const val SHARE_KEY_TIMEOUT_TAG = "share key timeout"
 
     /**
+     * 「宿主环境需要过盾」在失败原因里的稳定标记。
+     *
+     * 出码这条链路走 [ArkWebNetworkBridge.runRawScript]，它**不经过** ArkWebNetworkBridge
+     * 里带挑战判定的 convertEnvelope，所以 Cloudflare 挑战得在这里自己认一次并广播 —— 否则
+     * App 已有的过盾恢复（ChallengeRecoveryCoordinator 只订阅 ChallengeEventBus）永远不会被
+     * 唤醒，用户看到的就只是一句干巴巴的 403，而真实情况是"环境该刷新了，刷新完就能出码"。
+     */
+    internal const val SHARE_KEY_CHALLENGE_TAG = "share key challenge"
+
+    /**
      * 出示端：创建分享 key 并解出 (apiKey, otp)。
      * POST /user-api-key（会话 CSRF，Accept json → 200 {redirect_url}），
      * redirect_url 形如 discourse://auth_redirect?payload=...&oneTimePassword=...，
@@ -133,6 +149,24 @@ object QrLoginFlow {
                 SHARE_KEY_TIMEOUT_MS
             )
             val envelope = parseShareEnvelope(raw)
+            // Cloudflare 挑战要单独认出来：它必须「广播 + 触发过盾恢复」，而不是当一次普通
+            // HTTP 失败报掉。理由见 SHARE_KEY_CHALLENGE_TAG —— 这条链路绕开了带判定的
+            // convertEnvelope，不自己认一次，协调器就永远收不到信号，用户只能自己去点验证。
+            val shareChallenge = ChallengeDetector.detectChallenge(
+                envelope.statusCode ?: 0,
+                envelope.contentType.orEmpty(),
+                envelope.body.orEmpty(),
+                envelope.cfMitigated.orEmpty()
+            )
+            if (shareChallenge == ChallengeState.REQUIRED) {
+                Timber.w("%s share key create blocked by cloudflare status=%s", LOG_TAG, envelope.statusCode)
+                ChallengeEventBus.notifyChallengeRequired(
+                    "/user-api-key",
+                    envelope.statusCode ?: 0,
+                    ChallengeState.REQUIRED
+                )
+                error(SHARE_KEY_CHALLENGE_TAG)
+            }
             // 失败时把原因一起带出来，别只报一个 HTTP 码：
             // - statusCode = 0 是脚本自己 fail（取不到 CSRF / fetch 抛错）→ 详情在 errorMessage
             // - 4xx/5xx 是服务端拒了 → Discourse 的文案（BAD CSRF / 权限不足 / 参数非法）在 body
@@ -251,12 +285,43 @@ object QrLoginFlow {
     /** 出示端：撤销未被消费的分享 key（弹层关闭/过期时清理；已被扫入端焚毁时服务端 403，静默）。 */
     suspend fun revokeSharedKey(apiKey: String) {
         runCatching {
-            ArkWebNetworkBridge.runRawScript(
+            val raw = ArkWebNetworkBridge.runRawScript(
                 WebFetchScriptFactory.createUserApiKeyRevokeScript(apiKey)
+            )
+            // 原来这里成功即静默，于是「撤销压根没发出去」这类故障在日志里完全不可见 ——
+            // 真机滚动日志只看到 create、看不到任何 revoke，key 却一直挂在账号上。
+            // 把状态码打出来，撤销从此可验证：
+            //   200 = 已回收；403 = 已被扫入端焚毁（正常，服务端不会二次回收）。
+            val env = parseShareEnvelope(raw)
+            Timber.i(
+                "%s revoke share key status=%s body=%s",
+                LOG_TAG, env.statusCode, env.body?.take(120)
             )
         }.onFailure {
             Timber.w("%s revoke share key failed (ignored) msg=%s", LOG_TAG, it.message)
         }
+    }
+
+    /**
+     * 撤销必须跑在一个**不随 UI 走**的 scope 上。
+     *
+     * 弹窗关闭时会立刻把自己移出组合树；此前用的是弹窗自己的 rememberCoroutineScope，
+     * 协程还没来得及调度就跟着被 cancel 了 —— 设备上实测到
+     * `revoke share key failed (ignored) msg=rememberCoroutineScope left the composition`。
+     * 而服务端 user-api-key 没有过期机制，撤销是唯一回收手段，结果就是这把 key
+     * **永久留在账号上**（真机日志里 `JetDo（扫码登录）` 已经攒了两把）。
+     *
+     * 用 Main.immediate 与 ChallengeRecoveryCoordinator / MathRenderService 同款：
+     * runRawScript 要碰 WebView，只能在主线程。
+     */
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * fire-and-forget 撤销，供 UI 在「关闭 / 重新生成」时调用 —— 调用之后 UI 马上就没了，
+     * 所以这里不能返回 suspend 让调用方 await。
+     */
+    fun revokeSharedKeyDetached(apiKey: String) {
+        cleanupScope.launch { revokeSharedKey(apiKey) }
     }
 
     /**
@@ -270,7 +335,11 @@ object QrLoginFlow {
     internal data class ShareEnvelope(
         @SerialName("statusCode") val statusCode: Int? = null,
         @SerialName("body") val body: String? = null,
-        @SerialName("errorMessage") val errorMessage: String? = null
+        @SerialName("errorMessage") val errorMessage: String? = null,
+        // 挑战判定要用（见 SHARE_KEY_CHALLENGE_TAG）。CsrfScriptTemplate 一直在回传它们，
+        // 只是这边此前没声明 —— ignoreUnknownKeys 会安静丢掉，于是挑战被当成普通 403。
+        @SerialName("contentType") val contentType: String? = null,
+        @SerialName("cfMitigated") val cfMitigated: String? = null
     )
 
     /** 信封解码。internal 供单测直接打 —— 这里踩过坑，必须有回归护栏。 */

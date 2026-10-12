@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -12,7 +13,9 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +25,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -81,9 +86,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 private const val LOG_TAG = "[JetDo][QrScan]"
 private const val DECODE_INTERVAL_MS = 150L
 
-/** YUV_420_888 逐帧 → zxing 解码。节流 150ms/帧；命中后由 AtomicBoolean 停流。 */
-private class QrAnalyzer(private val handled: AtomicBoolean, private val onQr: (String) -> Unit) :
-    ImageAnalysis.Analyzer {
+/**
+ * YUV_420_888 逐帧 → zxing 解码。节流 150ms/帧；命中后由 AtomicBoolean 停流。
+ *
+ * @param isTarget 解出的文本是否值得进登录流程。**必须在 `handled` 置位之前判**：
+ *   这里是「不是本 App 的码就接着扫」的唯一实现点，放到回调里判就等于先把流停掉、
+ *   再发现这码不是我们的，然后还得把它放回来（中间那几帧已经白丢）。
+ */
+private class QrAnalyzer(
+    private val handled: AtomicBoolean,
+    private val isTarget: (String) -> Boolean,
+    private val onQr: (String) -> Unit
+) : ImageAnalysis.Analyzer {
 
     private val reader = MultiFormatReader().apply {
         setHints(
@@ -127,6 +141,11 @@ private class QrAnalyzer(private val handled: AtomicBoolean, private val onQr: (
                 data, width, height, 0, 0, width, height, false
             )
             val text = reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
+            // 不是本 App 的登录码 → 静默忽略，下一帧接着扫。以前是把**任何**二维码都
+            // 当登录码交给流程，扫到一张别人家的码就弹「二维码不是 JetDo 登录码」，
+            // 而用户当下要的其实是「继续对准」。对齐 FluxDO 的
+            // `if (parsePayload(raw) == null) return;`。
+            if (!isTarget(text)) return
             Timber.i("%s qr decoded len=%d", LOG_TAG, text.length)
             handled.set(true)
             onQr(text)
@@ -154,6 +173,10 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
     var permissionState by remember {
         mutableStateOf(CameraPermission.state(context, activity))
     }
+    // 扫码命中的 UI 态（纯状态机见 QrScanState.kt）。
+    // 「命中后界面毫无变化」是这次要修的主诉：命中瞬间只停了相机的解码，
+    // 预览照旧在动，而真正的反馈（Toast）要等整条兑换链路跑完才出现。
+    var ui by remember { mutableStateOf(QrScanUi()) }
     // 扫码命中守卫：分析器跑在相机线程，用 AtomicBoolean；失败时复位允许重扫。
     val handled = remember { AtomicBoolean(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -216,85 +239,178 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
             )
         }
 
-        when (permissionState) {
-            CameraPermissionState.GRANTED -> {
-                // lifecycleOwner 必须在 composable 上下文取（AndroidView factory 不是 composable）
-                val lifecycleOwner = LocalLifecycleOwner.current
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(16.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                ) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            val previewView = PreviewView(ctx)
-                            val providerFuture = ProcessCameraProvider.getInstance(ctx)
-                        providerFuture.addListener({
-                            runCatching {
-                                val provider = providerFuture.get()
-                                val preview = Preview.Builder().build()
-                                preview.setSurfaceProvider(previewView.surfaceProvider)
-                                val analysis = ImageAnalysis.Builder()
-                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                    .build()
-                                val executor = Executors.newSingleThreadExecutor()
-                                analysis.setAnalyzer(executor, QrAnalyzer(handled) { raw ->
-                                    scope.launch {
-                                        val result =
-                                            BrowserAuthLoginFlow.handleScannedPayload(context, raw)
-                                        BrowserAuthLoginFlow.toastResult(context, result)
-                                        if (result is BrowserAuthResult.Success) {
-                                            onNavigateBack()
-                                        } else {
-                                            handled.set(false) // 失败允许重扫
+        // 内容区（相机 + 底部提示）整体包一层，好在其上盖「正在完成登录」遮罩。
+        // 遮罩只盖内容区、**不盖顶栏**：兑换链路最长要等 45s，得给用户留一条随时能退出的路
+        // （对齐 FluxDO 把遮罩放在 Scaffold body 而不是整屏）。
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                when (permissionState) {
+                    CameraPermissionState.GRANTED -> {
+                        // lifecycleOwner 必须在 composable 上下文取（AndroidView factory 不是 composable）
+                        val lifecycleOwner = LocalLifecycleOwner.current
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(16.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                        ) {
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+                                factory = { ctx ->
+                                    val previewView = PreviewView(ctx)
+                                    val providerFuture = ProcessCameraProvider.getInstance(ctx)
+                                    providerFuture.addListener({
+                                        runCatching {
+                                            val provider = providerFuture.get()
+                                            val preview = Preview.Builder().build()
+                                            preview.setSurfaceProvider(previewView.surfaceProvider)
+                                            val analysis = ImageAnalysis.Builder()
+                                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                                .build()
+                                            val executor = Executors.newSingleThreadExecutor()
+                                            analysis.setAnalyzer(
+                                                executor,
+                                                QrAnalyzer(
+                                                    handled = handled,
+                                                    // 无关的码不进闸门，继续扫下一帧。
+                                                    isTarget = { classifyScannedQr(it).shouldHandle() }
+                                                ) { raw ->
+                                                    val kind = classifyScannedQr(raw)
+                                                    scope.launch {
+                                                        // 先把遮罩打出来，再去跑网络。顺序反了就等于没有提示：
+                                                        // 用户会盯着一个毫无变化的相机预览等几十秒。
+                                                        ui = ui.reduce(QrScanAction.Detected)
+                                                        val result = if (kind == ScannedQr.UNSUPPORTED) {
+                                                            BrowserAuthResult.Failed(R.string.auth_qr_unsupported)
+                                                        } else {
+                                                            BrowserAuthLoginFlow.handleScannedPayload(context, raw)
+                                                        }
+                                                        BrowserAuthLoginFlow.toastResult(context, result)
+                                                        if (result is BrowserAuthResult.Success) {
+                                                            ui = ui.reduce(QrScanAction.Finished)
+                                                            onNavigateBack()
+                                                        } else {
+                                                            // 失败必须回到可重扫态：撤遮罩 + 放开解码闸门，
+                                                            // 只做一半的话用户就只能退出页面重进。
+                                                            ui = ui.reduce(QrScanAction.Failed)
+                                                            handled.set(false)
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                            provider.unbindAll()
+                                            provider.bindToLifecycle(
+                                                lifecycleOwner,
+                                                CameraSelector.DEFAULT_BACK_CAMERA,
+                                                preview,
+                                                analysis
+                                            )
+                                        }.onFailure {
+                                            Timber.w("[JetDo][QrScan] bind camera failed msg=%s", it.message)
                                         }
-                                    }
-                                })
-                                provider.unbindAll()
-                                provider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    CameraSelector.DEFAULT_BACK_CAMERA,
-                                    preview,
-                                    analysis
+                                    }, ContextCompat.getMainExecutor(ctx))
+                                    previewView
+                                }
+                            )
+                            // 取景框：告诉用户该把码对在哪儿。纯视觉，不参与手势
+                            // （不加 pointerInput，Compose 里没有手势修饰符就不会吃事件）。
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(240.dp)
+                                        .border(
+                                            width = 2.5.dp,
+                                            color = Color.White.copy(alpha = 0.85f),
+                                            shape = RoundedCornerShape(20.dp)
+                                        )
                                 )
-                            }.onFailure {
-                                Timber.w("[JetDo][QrScan] bind camera failed msg=%s", it.message)
                             }
-                        }, ContextCompat.getMainExecutor(ctx))
-                            previewView
+                        }
+                    }
+                    // 还能弹框：给一次「重新授权」，点了立刻再弹一次系统框。
+                    CameraPermissionState.DENIED_CAN_ASK -> CameraDeniedPane(
+                        message = stringResource(R.string.auth_qr_camera_denied),
+                        actionLabel = stringResource(R.string.auth_qr_camera_retry),
+                        onAction = {
+                            CameraPermission.markRequested(context)
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
                         }
                     )
+                    // 系统不再弹框：App 侧无能为力，只能把人送去本应用的设置页（ON_RESUME 会把
+                    // 结果捞回来，授权后无需重进页面）。
+                    CameraPermissionState.DENIED_PERMANENT -> CameraDeniedPane(
+                        message = stringResource(R.string.auth_qr_camera_denied_permanent),
+                        actionLabel = stringResource(R.string.common_open_system_settings),
+                        onAction = { CameraPermission.openSystemSettings(context) }
+                    )
                 }
-            }
-            // 还能弹框：给一次「重新授权」，点了立刻再弹一次系统框。
-            CameraPermissionState.DENIED_CAN_ASK -> CameraDeniedPane(
-                message = stringResource(R.string.auth_qr_camera_denied),
-                actionLabel = stringResource(R.string.auth_qr_camera_retry),
-                onAction = {
-                    CameraPermission.markRequested(context)
-                    permissionLauncher.launch(Manifest.permission.CAMERA)
-                }
-            )
-            // 系统不再弹框：App 侧无能为力，只能把人送去本应用的设置页（ON_RESUME 会把
-            // 结果捞回来，授权后无需重进页面）。
-            CameraPermissionState.DENIED_PERMANENT -> CameraDeniedPane(
-                message = stringResource(R.string.auth_qr_camera_denied_permanent),
-                actionLabel = stringResource(R.string.common_open_system_settings),
-                onAction = { CameraPermission.openSystemSettings(context) }
-            )
-        }
 
-        Text(
-            text = stringResource(R.string.auth_qr_scan_hint),
-            fontSize = 13.sp,
-            color = colors.textSecondary,
+                Text(
+                    text = stringResource(R.string.auth_qr_scan_hint),
+                    fontSize = 13.sp,
+                    color = colors.textSecondary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
+                )
+            }
+
+            // 命中即遮罩（对齐 FluxDO QrLoginScanPage 的 `_handling || _statusMessage != null` 分支）。
+            if (ui.showOverlay()) {
+                QrScanOverlay(ui.statusRes)
+            }
+        }
+    }
+}
+
+/**
+ * 处理中遮罩：半透明压暗 + 居中卡片（转圈 + 状态文案）。
+ *
+ * 遮罩自己吃掉点击事件 —— 底下就是相机预览，命中期间再点一下不该有任何效果。
+ */
+@Composable
+private fun QrScanOverlay(@StringRes statusRes: Int?) {
+    val colors = jetdoColors
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.45f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 20.dp)
-        )
+                .clip(RoundedCornerShape(16.dp))
+                .background(colors.surfaceCard)
+                .padding(horizontal = 28.dp, vertical = 24.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(40.dp),
+                color = colors.ldAccent,
+                strokeWidth = 3.dp
+            )
+            if (statusRes != null) {
+                Text(
+                    text = stringResource(statusRes),
+                    fontSize = 14.sp,
+                    color = colors.textPrimary,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+        }
     }
 }
 

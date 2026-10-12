@@ -120,13 +120,18 @@ object UserApiKeyCrypto {
      * key 提取 → oneTimePassword 解密。
      *
      * nonce 规则（对齐 FluxDO）：
-     * - 无待处理 nonce 或与 payload 不符 → [AuthRedirectResult.Stale]（冷启动重放旧深链）
+     * - 与任何 pending nonce 都不符 → [AuthRedirectResult.Stale]（冷启动重放旧深链）
      * - 缺 payload / 解密失败（多为公钥已轮换的残留回调）→ 同样按 Stale 静默
      * - nonce 匹配后才算「本次流程」，后续失败才是 [AuthRedirectResult.Invalid]
+     *
+     * 为什么是集合而不是单个：入口每次点击都会生成一枚新 nonce。若只留最新那枚，
+     * 用户「以为没反应又点了一次」就会让第一次那一发的回调整体失配，被静默判成
+     * Stale —— 用户侧看到的就是"授权完返回 App 什么都没发生"。留最近几枚，
+     * 两次点击都算本次流程。
      */
     fun parseAuthRedirect(
         privateKey: PrivateKey?,
-        pendingNonce: String?,
+        pendingNonces: Collection<String>,
         dataString: String?
     ): AuthRedirectResult {
         val uri = dataString?.trim()?.let { runCatching { URI(it) }.getOrNull() }
@@ -141,7 +146,7 @@ object UserApiKeyCrypto {
         val params = uri.rawQuery?.split('&')?.mapNotNull { pair ->
             val eq = pair.indexOf('=')
             if (eq <= 0) null
-            else decode(pair.substring(0, eq)) to decode(pair.substring(eq + 1))
+            else percentDecode(pair.substring(0, eq)) to percentDecode(pair.substring(eq + 1))
         }?.toMap() ?: emptyMap()
 
         val payloadParam = params["payload"]
@@ -151,7 +156,7 @@ object UserApiKeyCrypto {
         val decrypted = decryptPayload(privateKey, payloadParam) ?: return AuthRedirectResult.Stale
         val (key, nonce) = parsePayloadJson(decrypted) ?: return AuthRedirectResult.Stale
 
-        if (pendingNonce.isNullOrEmpty() || nonce != pendingNonce) return AuthRedirectResult.Stale
+        if (pendingNonces.isEmpty() || nonce !in pendingNonces) return AuthRedirectResult.Stale
 
         val otp = params["oneTimePassword"]?.takeIf { it.isNotEmpty() }?.let {
             decryptPayload(privateKey, it)
@@ -162,6 +167,49 @@ object UserApiKeyCrypto {
         return AuthRedirectResult.Authorized(apiKey = key, otp = otp)
     }
 
-    private fun decode(value: String): String =
-        runCatching { java.net.URLDecoder.decode(value, Charsets.UTF_8) }.getOrDefault(value)
+    /**
+     * 查询串参数值解码：展开 %XX 转义（UTF-8，含多字节），**字面量 `+` 原样保留**。
+     *
+     * 为什么不用 java.net.URLDecoder —— 两个独立的坑，都真踩过：
+     * 1. `URLDecoder.decode(String, Charset)` 是 **API 33** 才加的重载：android-31 的
+     *    api-versions.xml 里只有 `decode(String)` 与 `decode(String, String)`。在 API 31
+     *    设备上调它直接 NoSuchMethodError，被 `runCatching{}.getOrDefault(value)` 吞掉后
+     *    **静默返回未解码的原串**；于是 Base64 文本里带着 %2B/%2F/%3D 进
+     *    `Base64.getDecoder()` 必然抛错 → 整个回调判 Stale → 用户点「授权」后深链明明
+     *    到手却毫无反应。JVM 单测抓不到它（桌面 JDK 有这个重载），只有真机复现。
+     * 2. URLDecoder 按表单语义把 `+` 当空格。而这里解的是 Base64：`+` 是数据本身
+     *    （Discourse 用 URI.encode_www_form_component 编码，`+` 早已写成 %2B），当空格
+     *    会凭空少字符、直接毁掉密文。
+     *
+     * 容错：非法转义（`%` 后不是两位十六进制）原样保留，不抛异常。
+     */
+    internal fun percentDecode(value: String): String {
+        if (!value.contains('%')) return value
+        val out = StringBuilder(value.length)
+        // 连续的 %XX 先攒成字节再按 UTF-8 解码，多字节字符（如中文）才不会解成乱码。
+        val pending = java.io.ByteArrayOutputStream(4)
+        fun flushPending() {
+            if (pending.size() > 0) {
+                out.append(String(pending.toByteArray(), Charsets.UTF_8))
+                pending.reset()
+            }
+        }
+        var i = 0
+        while (i < value.length) {
+            if (value[i] == '%' && i + 2 < value.length) {
+                val hi = Character.digit(value[i + 1], 16)
+                val lo = Character.digit(value[i + 2], 16)
+                if (hi >= 0 && lo >= 0) {
+                    pending.write((hi shl 4) or lo)
+                    i += 3
+                    continue
+                }
+            }
+            flushPending()
+            out.append(value[i])
+            i++
+        }
+        flushPending()
+        return out.toString()
+    }
 }

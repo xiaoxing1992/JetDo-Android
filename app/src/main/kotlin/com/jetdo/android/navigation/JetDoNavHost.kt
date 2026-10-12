@@ -66,6 +66,7 @@ import com.jetdo.android.ui.screens.SettingsScreen
 import com.jetdo.android.ui.screens.TopicListStyleSettingsScreen
 import com.jetdo.android.ui.screens.RootTabScreen
 import com.jetdo.android.ui.screens.WebViewPage
+import com.jetdo.android.ui.screens.BrowserAuthWebPage
 import com.jetdo.android.ui.network.DohSettingsScreen
 import com.jetdo.android.ui.network.NetworkSettingsScreen
 import com.jetdo.android.ui.bookmarks.BookmarksScreen
@@ -263,6 +264,8 @@ fun JetDoNavHost(
                 },
                 // 未登录卡片下方的「扫码登录」→ 相机扫码页（压在根栈上）。
                 onScanQr = { navController.navigate(Routes.QR_SCAN) },
+                // 未登录卡片下方的「站点授权登录」→ App 内 WebView 授权页（压在根栈上）。
+                onSiteAuth = { navController.navigate(Routes.AUTH_WEB) },
                 // 最近活动行 → 原生详情页并定位到该动态所在楼层（对齐鸿蒙 ProfilePage.onOpenTopic）。
                 onOpenTopic = { topicId, title, postNumber ->
                     val parts = mutableListOf<String>()
@@ -424,6 +427,14 @@ fun JetDoNavHost(
         // 扫码登录·扫入端（「我的」页未登录卡片下方的入口）：相机扫码 → 兑换另一台设备的 OTP
         composable(Routes.QR_SCAN) {
             QrScanScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        // 站点授权登录·App 内承载（「我的」页未登录卡片入口）：
+        // 授权页由 App 内 WebView 打开（挂 DoH 拦截，站内链路同源），回程深链
+        // discourse://auth_redirect 在 WebView 内被接住并兑换 —— 不经过系统浏览器，
+        // 因此不受外部浏览器无 DoH / 厂商安全浏览策略影响。
+        composable(Routes.AUTH_WEB) {
+            BrowserAuthWebPage(onDone = { navController.popBackStack() })
         }
 
         // 调试日志页（设置 → 诊断日志）
@@ -764,6 +775,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val DEBUG_LOG = "debug_log"
     const val QR_SCAN = "qr_scan"
+    const val AUTH_WEB = "auth_web"
 
     // Settings 子页面
     const val SETTINGS_DOH = "settings_doh"
