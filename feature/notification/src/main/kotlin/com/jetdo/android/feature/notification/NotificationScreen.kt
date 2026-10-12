@@ -55,7 +55,11 @@ data class NotificationColors(
     val unreadBg: Color,
     val divider: Color,
     val badgeReadBg: Color,
-    val badgeReadFg: Color
+    val badgeReadFg: Color,
+    /** 「消息」页分段控件：灰底轨道。 */
+    val segmentTrack: Color = Color(0xFFF2F3F5),
+    /** 「消息」页分段控件：选中项的白胶囊。 */
+    val segmentThumb: Color = Color.White
 ) {
     companion object {
         val Light = NotificationColors(
@@ -66,7 +70,10 @@ data class NotificationColors(
             unreadBg = Color(0xFFE8F1FE),
             divider = Color(0xFFE5E7EB),
             badgeReadBg = Color.White,
-            badgeReadFg = Color(0xFF222222)
+            badgeReadFg = Color(0xFF222222),
+            // 对齐鸿蒙 page_bg_gray(#F2F3F5)：分段轨道比页面白底略灰，白胶囊才浮得起来。
+            segmentTrack = Color(0xFFF2F3F5),
+            segmentThumb = Color.White
         )
     }
 }
@@ -84,10 +91,19 @@ internal fun NotificationScreen(
     onMarkRead: (NotificationItem) -> Unit,
     onOpenTopic: (Long, String?, String?, Int?) -> Unit,
     onOpenUser: (String, String?, String?) -> Unit,
-    colors: NotificationColors = NotificationColors.Light
+    colors: NotificationColors = NotificationColors.Light,
+    /**
+     * 顶栏标题。内嵌进「消息」页做第一段时传 "通知"（标题由外层「消息」大标题承担），
+     * 独立成页时也就是 "通知"。留参数是为了调用方能按上下文改字，不必改本文件。
+     */
+    title: String = "通知",
+    /** 未登录引导的主文案。私信段复用同一个组件，需要按段改字。 */
+    loginPromptTitle: String = "登录后查看通知",
+    /** 空列表文案。私信段传「暂无私信」。 */
+    emptyText: String = "暂无通知"
 ) {
     if (!loggedIn) {
-        CenterMessage("登录后查看通知", "立即登录", onRequestLogin, colors)
+        CenterMessage(loginPromptTitle, "立即登录", onRequestLogin, colors)
         return
     }
 
@@ -99,7 +115,7 @@ internal fun NotificationScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("通知", color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                Text(title, color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 if (state.items.any { !it.read }) {
                     Text("全部已读", color = colors.accent, modifier = Modifier.clickable(onClick = onMarkAllRead))
                 }
@@ -112,7 +128,7 @@ internal fun NotificationScreen(
                 when {
                     state.initialLoading -> CircularProgressIndicator(color = colors.accent)
                     state.error != null -> CenterMessage(state.error, "重试", onRetry, colors)
-                    else -> Text("暂无通知", color = colors.textSecondary)
+                    else -> Text(emptyText, color = colors.textSecondary)
                 }
             }
             return@Column
@@ -219,7 +235,7 @@ private fun NotificationRow(
 }
 
 @Composable
-private fun CenterMessage(
+internal fun CenterMessage(
     message: String,
     action: String?,
     onAction: (() -> Unit)?,

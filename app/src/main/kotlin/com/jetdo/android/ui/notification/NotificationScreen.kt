@@ -17,22 +17,12 @@ fun NotificationScreen(
     onOpenUser: (username: String, displayName: String?, avatarTemplate: String?) -> Unit = { _, _, _ -> }
 ) {
     val currentUser by CurrentUserHolder.currentUser.collectAsState()
-    val colors = jetdoColors
     NotificationRoute(
         loggedIn = currentUser != null,
         onRequestLogin = LoginGate::requestLogin,
         onOpenTopic = onOpenTopic,
         onOpenUser = onOpenUser,
         showTopBar = showTopBar,
-        colors = NotificationColors(
-            pageBg = colors.pageBg,
-            textPrimary = colors.textPrimary,
-            textSecondary = colors.textSecondary,
-            accent = colors.ldAccent,
-            unreadBg = colors.infoSoftBg,
-            divider = colors.border,
-            badgeReadBg = colors.surfaceCard,
-            badgeReadFg = colors.textPrimary
-        )
+        colors = notificationColors()
     )
 }

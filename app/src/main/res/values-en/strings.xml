@@ -406,6 +406,7 @@
     <string name="home_new_replies">%1$s new replies</string>
     <string name="home_new_topic_alert">New topic alerts</string>
     <string name="home_notifications">Notifications</string>
+    <string name="home_messages">Messages</string>
     <string name="home_pick_topic">Select a topic on the left to start reading</string>
     <string name="home_profile">Me</string>
     <string name="home_push_summary">Replies, PMs and mentions</string>
