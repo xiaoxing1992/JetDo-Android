@@ -9,6 +9,15 @@
     <!-- 推送权限 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- 相机权限：仅「扫码登录」扫入端使用（zxing + CameraX 逐帧解码）。
+         必须声明 —— 未声明的权限调 requestPermission 不报错、不弹框，
+         系统直接按拒绝回调，表现成「进入扫码页什么都没发生」。
+         相机不是核心功能，required=false 以免没摄像头的设备装不上；
+         composer 拍照走系统相机（ACTION_IMAGE_CAPTURE），同样不需要这个权限。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <!-- 下载/图片保存走应用专属目录 getExternalFilesDir，API 29+ 无需存储权限 -->
 
     <application
