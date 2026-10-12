@@ -35,6 +35,20 @@ object AppConstants {
 
     const val DEFAULT_TIMEOUT_MS = 15_000L
 
+    /**
+     * 「脚本内部两次串行 fetch」的写请求的等待窗口 —— **故意比 [DEFAULT_TIMEOUT_MS] 宽**。
+     *
+     * 通用闸门是按「单次请求」定的，而 buildCsrfScript 骨架拼出来的脚本内部是两次串行
+     * 网络往返：先 `GET /session/csrf.json` 取 CSRF token，再发主请求。宿主只要那一刻
+     * 还在 CF 挑战里，任一次 fetch 都可能被挂住，两次叠加轻松吃掉 15 秒 —— 用户看到的就是
+     * kotlinx 的英文原文 `Timed out waiting for 15000 ms`（创建分享 key / OTP 兑换都踩过）。
+     *
+     * 项目里 upload 吃过同一个亏（见 ArkWebNetworkBridge 的 UPLOAD_TIMEOUT_MS：15s 闸门
+     * 误杀 320KB 的截图上传）。这类调用点都是**用户主动触发后的前台等待**、有明确 loading 态，
+     * 宽一点无妨；真正的失败仍由服务端响应给出，不靠兜底超时。
+     */
+    const val AUTH_WRITE_TIMEOUT_MS = 45_000L
+
     // host webview 因 session 变化被重载时，注入式 fetch 排队等待 onPageEnd 的兜底超时。
     const val HOST_RELOAD_READY_TIMEOUT_MS = 5_000L
 

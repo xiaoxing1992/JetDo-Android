@@ -1040,11 +1040,20 @@ object ArkWebNetworkBridge : JsonNetworkClient {
      * 给不走标准 GET/POST 语义的特殊请求用：浏览器授权登录的
      * `/user-api-key/revoke`（User-Api-Key 头自证、无 CSRF、无会话）这类。
      * 调用方自己解析信封里的 statusCode/body；宿主未就绪时与 getJson 同语义等待。
+     *
+     * [timeoutMs] 可按脚本的**网络往返次数**放宽：通用闸门 15s 是按「单次请求」定的，
+     * 而 buildCsrfScript 拼出来的脚本内部是**两次串行 fetch**（先取 CSRF 再发主请求），
+     * 宿主只要还在 CF 挑战里，任一次都可能被挂住 —— 定额必须按调用点单独给。
      */
-    suspend fun runRawScript(script: String): String {
+    suspend fun runRawScript(
+        script: String,
+        timeoutMs: Long = AppConstants.DEFAULT_TIMEOUT_MS
+    ): String {
+        // 注意：这行文案是**内部标记**（UI 层按它区分「暂态失败」并给可行动提示），
+        // 不是给用户看的，别顺手 i18n 掉。
         if (!canFetch()) throw IllegalStateException("host not ready")
         whenHostReady()
-        return executor!!.run(script)
+        return executor!!.run(script, timeoutMs)
     }
 
     override suspend fun getJson(path: String, options: JsonRequestOptions?): NetworkResult<String> {
@@ -1097,14 +1106,40 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         }.getOrElse { ImageFetchResult(false, "", "") }
     }
 
-    override suspend fun postForm(path: String, body: String, options: JsonRequestOptions?): NetworkResult<String> {
+    override suspend fun postForm(path: String, body: String, options: JsonRequestOptions?): NetworkResult<String> =
+        postFormInternal(path, body, options?.referrer ?: "", options, AppConstants.DEFAULT_TIMEOUT_MS)
+
+    /**
+     * 与 [postForm] 同一条路（含 CSRF 预取），但允许调用方指定等待窗口。
+     *
+     * 给**登录相关的写请求**用（OTP 兑换 `/session/otp/{otp}` 这类）：它走 buildCsrfScript
+     * 骨架，脚本内部是两次串行 fetch（先取 CSRF 再发主请求），15s 的通用闸门按单次请求定、
+     * 会在宿主尚在 CF 挑战时误杀。窗口取值见 [AppConstants.AUTH_WRITE_TIMEOUT_MS]。
+     */
+    suspend fun postFormWithTimeout(
+        path: String,
+        body: String,
+        timeoutMs: Long,
+        options: JsonRequestOptions? = null
+    ): NetworkResult<String> =
+        postFormInternal(path, body, options?.referrer ?: "", options, timeoutMs)
+
+    private suspend fun postFormInternal(
+        path: String,
+        body: String,
+        referrer: String,
+        options: JsonRequestOptions?,
+        timeoutMs: Long
+    ): NetworkResult<String> {
         val requestPath = normalizePath(path)
-        Timber.i("[JetDo][Network] POST %s start bodyLength=%d", requestPath, body.length)
+        Timber.i("[JetDo][Network] POST %s start bodyLength=%d timeoutMs=%d", requestPath, body.length, timeoutMs)
         if (!canFetch()) return hostNotReady()
         whenHostReady()
         return runCatching {
-            val referrer = options?.referrer ?: ""
-            val raw = executor!!.run(WebFetchScriptFactory.createFormScript("POST", requestPath, body, referrer))
+            val raw = executor!!.run(
+                WebFetchScriptFactory.createFormScript("POST", requestPath, body, referrer),
+                timeoutMs
+            )
             convertEnvelope(requestPath, parseEnvelope(raw), "POST", options)
         }.getOrElse {
             Timber.i("[JetDo][Network] POST %s failed before response envelope", requestPath)

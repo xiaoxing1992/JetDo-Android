@@ -3,6 +3,7 @@ package com.jetdo.android.services.auth
 import android.content.Context
 import android.widget.Toast
 import com.jetdo.android.R
+import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.services.network.ArkWebNetworkBridge
 import com.jetdo.android.services.network.WebFetchScriptFactory
 import com.jetdo.android.services.session.LoginGate
@@ -138,8 +139,15 @@ object BrowserAuthLoginFlow {
         Timber.i("%s redeeming otp len=%d", LOG_TAG, otp.length)
         // 兑换请求本身对结果不重要（成功路径是 302 → /，fetch 跟随后 200）；
         // 登录态真源是紧随其后的会话复查。
-        runCatching { ArkWebNetworkBridge.postForm("/session/otp/$otp", "") }
-            .onFailure { Timber.w("%s redeem request error msg=%s", LOG_TAG, it.message) }
+        // 窗口取 AUTH_WRITE_TIMEOUT_MS 而不是通用 15s：这条同样走 buildCsrfScript 骨架、
+        // 内部两次串行 fetch（取 CSRF + 发 POST），宿主刚被浏览器唤起、还在过盾时 15s 会误杀。
+        runCatching {
+            ArkWebNetworkBridge.postFormWithTimeout(
+                "/session/otp/$otp",
+                "",
+                AppConstants.AUTH_WRITE_TIMEOUT_MS
+            )
+        }.onFailure { Timber.w("%s redeem request error msg=%s", LOG_TAG, it.message) }
 
         SessionChecker(AuthService(ArkWebNetworkBridge), context).checkCurrentUser()
         SessionEventBus.notifySessionChanged()
