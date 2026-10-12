@@ -62,6 +62,21 @@ object QrLoginFlow {
     private const val LOG_TAG = "[JetDo][QrLogin]"
 
     /**
+     * 信封解析器：**必须容忍未知字段**。
+     *
+     * buildCsrfScript 回传的信封固定带六个字段
+     * （`statusCode` / `contentType` / `cfMitigated` / `body` / `csrfSource` / `csrfLength`），
+     * 而这里只关心两个。kotlinx.serialization 的**默认 Json 实例是
+     * `ignoreUnknownKeys = false`** —— 写成 `Json.decodeFromString<ShareEnvelope>(raw)`
+     * 会在遇到 contentType 时抛 `Unexpected JSON key`，于是**每一次**生成二维码都失败，
+     * 而 UI 只有一句「二维码生成失败」，从现象完全看不出是解析问题。
+     *
+     * 桥内部解析信封（[com.jetdo.android.services.network.ArkWebNetworkBridge] 的
+     * parseEnvelope）一直是带这个开关的，这个调用点当初漏了。
+     */
+    private val envelopeJson = Json { ignoreUnknownKeys = true }
+
+    /**
      * 二维码有效期（毫秒）。**唯一真源** —— 出示端 UI 的倒计时读数也取它，别各写一份。
      *
      * 这个值必须烘进二维码载荷（见 [createSharePayload] 的 expiresAtMs），不能只做 UI 倒数：
@@ -98,13 +113,15 @@ object QrLoginFlow {
             val raw = ArkWebNetworkBridge.runRawScript(
                 WebFetchScriptFactory.createUserApiKeyShareScript(formBody, "/u/$username")
             )
-            val envelope = Json.decodeFromString<ShareEnvelope>(raw)
+            val envelope = parseShareEnvelope(raw)
+            // 失败时把 body 一起带出来：Discourse 的错误文案（BAD CSRF / 权限不足 / 参数非法）
+            // 全在 body 里，只报一个 HTTP 码等于什么都没说。
             if (envelope.statusCode !in 200..299) {
-                error("share key create http ${envelope.statusCode}")
+                error("share key create http ${envelope.statusCode} ${envelope.body.orEmpty().take(200)}")
             }
             val body = envelope.body.orEmpty()
-            val redirectUrl = Json.decodeFromString<ShareResponse>(body).redirectUrl
-                ?: error("server did not return redirect_url")
+            val redirectUrl = parseShareResponse(body).redirectUrl
+                ?: error("server did not return redirect_url ${body.take(200)}")
             val params = URI(redirectUrl).rawQuery.orEmpty().split('&').mapNotNull { pair ->
                 val eq = pair.indexOf('=')
                 if (eq <= 0) null
@@ -211,14 +228,20 @@ object QrLoginFlow {
         }
     }
 
+    /** 桥回传的信封（只声明关心的字段，其余由 [envelopeJson] 容忍）。 */
     @Serializable
-    private data class ShareEnvelope(
+    internal data class ShareEnvelope(
         @SerialName("statusCode") val statusCode: Int? = null,
         @SerialName("body") val body: String? = null
     )
 
+    /** 信封解码。internal 供单测直接打 —— 这里踩过坑，必须有回归护栏。 */
+    internal fun parseShareEnvelope(raw: String): ShareEnvelope = envelopeJson.decodeFromString(raw)
+
     @Serializable
-    private data class ShareResponse(
+    internal data class ShareResponse(
         @SerialName("redirect_url") val redirectUrl: String? = null
     )
+
+    internal fun parseShareResponse(body: String): ShareResponse = envelopeJson.decodeFromString(body)
 }

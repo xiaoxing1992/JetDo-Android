@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -63,12 +64,22 @@ fun QrLoginShowDialog(
     var payload by remember { mutableStateOf<QrLoginPayload?>(null) }
     var qrPainter by remember { mutableStateOf<BitmapPainter?>(null) }
     var failed by remember { mutableStateOf(false) }
+    // 失败原因留一份给 UI。以前所有失败都压成一句「二维码生成失败」，用户报障只能复述
+    // 「失败了」；而失败可能出在宿主机未就绪 / HTTP 状态码被拒 / payload 解不开 / nonce
+    // 对不上——层级完全不同，修法也完全不同。把原因显示出来，一句话就能定性。
+    var failReason by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableStateOf(0) }
     var consumed by remember { mutableStateOf(false) }
     var remainingSec by remember { mutableStateOf(OTP_WINDOW_SEC) }
     val pollInFlight = remember { AtomicBoolean(false) }
 
-    // 创建分享 key → 生成二维码位图。
-    LaunchedEffect(username) {
+    // 创建分享 key → 生成二维码位图。attempt 变化 = 用户点了「重试」，整条重来。
+    LaunchedEffect(username, attempt) {
+        payload = null
+        qrPainter = null
+        failed = false
+        failReason = null
+        remainingSec = OTP_WINDOW_SEC
         QrLoginFlow.createSharePayload(context, username)
             .onSuccess { created ->
                 payload = created
@@ -77,9 +88,14 @@ fun QrLoginShowDialog(
                 }.onFailure {
                     Timber.w("%s qr render failed msg=%s", LOG_TAG, it.message)
                     failed = true
+                    failReason = "qr render: ${it.message}"
                 }
             }
-            .onFailure { failed = true }
+            .onFailure {
+                Timber.w("%s create share payload failed msg=%s", LOG_TAG, it.message)
+                failed = true
+                failReason = it.message
+            }
     }
 
     // 10 分钟窗口倒数（服务端 OTP TTL 兜底值；key 本身不过期，过窗主动 revoke）。
@@ -107,18 +123,22 @@ fun QrLoginShowDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = {
-            val shared = payload
-            if (shared != null && !consumed) {
-                // 未消费就撤 —— **窗口外更要撤**：服务端 user-api-key 没有过期机制，扫入端
-                // 虽然会拒收过期码，但 key 本身还挂在账号上，不清掉就是一条永久负债。
-                scope.launch {
-                    QrLoginFlow.revokeSharedKey(shared.apiKey)
-                }
+    // 关闭的唯一出口：未消费就撤掉分享 key。
+    // ⚠️ 「关闭」按钮此前直接调 onDismiss()，绕过了 onDismissRequest 里的撤销 —— 点「关闭」
+    // 关掉的二维码，key 会**永久留在账号上**（服务端 user-api-key 没有过期机制，唯一回收
+    // 手段就是这次撤销）。窗口外更要撤。
+    val dismiss: () -> Unit = {
+        val shared = payload
+        if (shared != null && !consumed) {
+            scope.launch {
+                QrLoginFlow.revokeSharedKey(shared.apiKey)
             }
-            onDismiss()
-        },
+        }
+        onDismiss()
+    }
+
+    AlertDialog(
+        onDismissRequest = dismiss,
         title = {
             Text(
                 text = if (consumed) stringResource(R.string.auth_qr_show_consumed)
@@ -160,12 +180,25 @@ fun QrLoginShowDialog(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
-                    failed -> Text(
-                        text = stringResource(R.string.auth_qr_show_failed),
-                        fontSize = 14.sp,
-                        color = colors.textSecondary,
-                        modifier = Modifier.padding(vertical = 24.dp)
-                    )
+                    failed -> {
+                        val reason = failReason
+                        Text(
+                            // 宿主还没就绪（冷启动刚进 App 就点）是暂时性的，给一句可行动的
+                            // 提示；其余原因原样透出，用户复述一句就够我们定位。
+                            text = when {
+                                reason == null -> stringResource(R.string.auth_qr_show_failed)
+                                reason.contains(HOST_NOT_READY) ->
+                                    stringResource(R.string.auth_qr_show_failed_host)
+                                else -> stringResource(
+                                    R.string.auth_qr_show_failed_reason,
+                                    reason.take(120)
+                                )
+                            },
+                            fontSize = 14.sp,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                        )
+                    }
                     else -> Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -182,12 +215,26 @@ fun QrLoginShowDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onDismiss() }) {
-                Text(stringResource(R.string.common_close), color = colors.ldAccent)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 失败时给「重试」：宿主未就绪这类失败是暂时的，关掉重开太别扭。
+                if (failed) {
+                    TextButton(onClick = { attempt += 1 }) {
+                        Text(stringResource(R.string.auth_qr_retry), color = colors.ldAccent)
+                    }
+                }
+                TextButton(onClick = dismiss) {
+                    Text(
+                        stringResource(R.string.common_close),
+                        color = if (failed) colors.textSecondary else colors.ldAccent
+                    )
+                }
             }
         }
     )
 }
+
+/** 「宿主未就绪」标记，来自 ArkWebNetworkBridge.runRawScript 的抛错文案。 */
+private const val HOST_NOT_READY = "host not ready"
 
 private fun formatRemaining(totalSec: Int): String {
     val m = totalSec / 60

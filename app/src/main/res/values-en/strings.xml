@@ -34,6 +34,9 @@
     <string name="auth_qr_show_consumed">Signed in on the other device</string>
     <string name="auth_qr_show_consumed_body">The scanning device is now signed in. This device stays signed in.</string>
     <string name="auth_qr_show_failed">Failed to generate the QR, please try again later</string>
+    <string name="auth_qr_show_failed_host">Network is not ready yet, please try again shortly</string>
+    <string name="auth_qr_show_failed_reason">Failed to generate the QR: %1$s</string>
+    <string name="auth_qr_retry">Retry</string>
     <string name="announce_new_version">New version available</string>
     <string name="announce_view_announcement">View official announcement</string>
     <string name="announce_view_full">View full release notes</string>
