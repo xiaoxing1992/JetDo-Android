@@ -189,6 +189,11 @@ fun QrLoginShowDialog(
                                 reason == null -> stringResource(R.string.auth_qr_show_failed)
                                 reason.contains(HOST_NOT_READY) ->
                                     stringResource(R.string.auth_qr_show_failed_host)
+                                // 超时是这一步最常见的失败：脚本内部两次串行 fetch（取 CSRF +
+                                // 发 POST），宿主还在过盾时很容易吃满窗口。它不该显示成
+                                // 「生成失败：share key timeout」这种内部标记，给一句人说人话的。
+                                reason.contains(QrLoginFlow.SHARE_KEY_TIMEOUT_TAG) ->
+                                    stringResource(R.string.auth_qr_show_failed_timeout)
                                 else -> stringResource(
                                     R.string.auth_qr_show_failed_reason,
                                     reason.take(120)

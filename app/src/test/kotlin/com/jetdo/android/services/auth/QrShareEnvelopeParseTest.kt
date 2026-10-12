@@ -55,6 +55,27 @@ class QrShareEnvelopeParseTest {
     }
 
     @Test
+    fun `js catch envelope keeps errorMessage`() {
+        // statusCode = 0 时 body 是空串，唯一能说明原因的就是 errorMessage。
+        // 不把它带出来，UI 只剩「share key create http 0 」，等于什么都没说 ——
+        // 用户复述一句也定不了性，而我们又拿不到那台设备的 logcat。
+        val raw = """{"statusCode":0,"contentType":"","body":"","errorMessage":"csrf token missing","csrfSource":"none","csrfLength":0}"""
+        val envelope = QrLoginFlow.parseShareEnvelope(raw)
+        assertEquals(0, envelope.statusCode)
+        assertEquals("csrf token missing", envelope.errorMessage)
+    }
+
+    @Test
+    fun `timeout tag is a stable ascii marker`() {
+        // UI 层用 contains(tag) 做分支、日志也靠它定位。它一旦被换成给人看的本地化文案，
+        // 这套匹配就会随语言失效（切英文/中文时行为不同）。钉死它只允许是稳定 ASCII 标记。
+        val tag = QrLoginFlow.SHARE_KEY_TIMEOUT_TAG
+        assertEquals(true, tag.isNotBlank())
+        assertEquals(true, tag.all { it.code in 32..126 })
+        assertEquals(tag, tag.trim())
+    }
+
+    @Test
     fun `error body is preserved for diagnostics`() {
         // 失败要能把服务端原文带出来 —— 只报一个 HTTP 码等于什么都没说。
         val raw = """{"statusCode":403,"contentType":"text/html","cfMitigated":"challenge","body":"<html>Just a moment...</html>","csrfSource":"session","csrfLength":64}"""

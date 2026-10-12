@@ -1,9 +1,11 @@
 package com.jetdo.android.services.auth
 
 import android.content.Context
+import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.services.network.ArkWebNetworkBridge
 import com.jetdo.android.services.network.WebFetchScriptFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -87,6 +89,22 @@ object QrLoginFlow {
     const val OTP_WINDOW_MS = 10L * 60 * 1000
 
     /**
+     * 创建分享 key 的等待窗口：取共享的 [AppConstants.AUTH_WRITE_TIMEOUT_MS]（45s），
+     * 不用 15s 的通用闸门 —— share 脚本内部是两次串行 fetch（取 CSRF + POST /user-api-key），
+     * 理由与代价见该常量的注释。
+     */
+    private const val SHARE_KEY_TIMEOUT_MS = AppConstants.AUTH_WRITE_TIMEOUT_MS
+
+    /**
+     * 超时失败在异常 message 里的**稳定标记**。
+     *
+     * 不用本地化文案当标记：文案会随语言变，UI 层拿它做匹配等于把 i18n 和逻辑绑死
+     * （`host not ready` 就是这个模式，见 [com.jetdo.android.services.network.ArkWebNetworkBridge.runRawScript]）。
+     * UI 层据此换成给用户看的提示，日志里也是一眼能认的英文。
+     */
+    internal const val SHARE_KEY_TIMEOUT_TAG = "share key timeout"
+
+    /**
      * 出示端：创建分享 key 并解出 (apiKey, otp)。
      * POST /user-api-key（会话 CSRF，Accept json → 200 {redirect_url}），
      * redirect_url 形如 discourse://auth_redirect?payload=...&oneTimePassword=...，
@@ -111,13 +129,17 @@ object QrLoginFlow {
                 k + "=" + URLEncoder.encode(v, Charsets.UTF_8.name())
             }
             val raw = ArkWebNetworkBridge.runRawScript(
-                WebFetchScriptFactory.createUserApiKeyShareScript(formBody, "/u/$username")
+                WebFetchScriptFactory.createUserApiKeyShareScript(formBody, "/u/$username"),
+                SHARE_KEY_TIMEOUT_MS
             )
             val envelope = parseShareEnvelope(raw)
-            // 失败时把 body 一起带出来：Discourse 的错误文案（BAD CSRF / 权限不足 / 参数非法）
-            // 全在 body 里，只报一个 HTTP 码等于什么都没说。
+            // 失败时把原因一起带出来，别只报一个 HTTP 码：
+            // - statusCode = 0 是脚本自己 fail（取不到 CSRF / fetch 抛错）→ 详情在 errorMessage
+            // - 4xx/5xx 是服务端拒了 → Discourse 的文案（BAD CSRF / 权限不足 / 参数非法）在 body
             if (envelope.statusCode !in 200..299) {
-                error("share key create http ${envelope.statusCode} ${envelope.body.orEmpty().take(200)}")
+                val detail = envelope.errorMessage?.takeIf { it.isNotEmpty() }
+                    ?: envelope.body.orEmpty().take(200)
+                error("share key create http ${envelope.statusCode} $detail")
             }
             val body = envelope.body.orEmpty()
             val redirectUrl = parseShareResponse(body).redirectUrl
@@ -148,6 +170,15 @@ object QrLoginFlow {
                 // 过期时间随二维码走，扫入端自己判 —— 出示端被杀也拦得住。
                 expiresAtMs = System.currentTimeMillis() + OTP_WINDOW_MS
             )
+        }.recoverCatching { e ->
+            // 超时（withTimeout 抛的 TimeoutCancellationException）自带的 message 是 kotlinx 的
+            // 英文原文「Timed out waiting for 45000 ms」。它一路透到弹窗上就是用户报的那句
+            // 「timed out wait for 15000」—— 对用户毫无意义，也说不清下一步该做什么。
+            // 换成稳定标记，由 UI 层翻成可行动的提示（见 SHARE_KEY_TIMEOUT_TAG 的注释）。
+            if (e is TimeoutCancellationException) {
+                throw IllegalStateException(SHARE_KEY_TIMEOUT_TAG, e)
+            }
+            throw e
         }.onFailure {
             Timber.w("%s create share payload failed msg=%s", LOG_TAG, it.message)
         }
@@ -228,11 +259,18 @@ object QrLoginFlow {
         }
     }
 
-    /** 桥回传的信封（只声明关心的字段，其余由 [envelopeJson] 容忍）。 */
+    /**
+     * 桥回传的信封（只声明关心的字段，其余由 [envelopeJson] 容忍）。
+     *
+     * `errorMessage` 必须声明：脚本**在客户端就失败**时（取不到 CSRF、fetch 抛错）
+     * statusCode 是 0、body 是空串，唯一能说明原因的就是这个字段 —— 不带上它，
+     * UI 只剩一句「share key create http 0 」，等于什么都没说。
+     */
     @Serializable
     internal data class ShareEnvelope(
         @SerialName("statusCode") val statusCode: Int? = null,
-        @SerialName("body") val body: String? = null
+        @SerialName("body") val body: String? = null,
+        @SerialName("errorMessage") val errorMessage: String? = null
     )
 
     /** 信封解码。internal 供单测直接打 —— 这里踩过坑，必须有回归护栏。 */
