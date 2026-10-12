@@ -49,6 +49,17 @@ class QrLoginPayloadTest {
     }
 
     @Test
+    fun `encode carries expiry into payload`() {
+        // 过期时间必须随二维码走：扫入端靠它自己拒收过期码，不依赖出示端存活去 revoke。
+        val exp = System.currentTimeMillis() + QrLoginFlow.OTP_WINDOW_MS
+        val raw = QrLoginPayload.encode(
+            QrLoginPayload(apiKey = "k", otp = "0a", username = "u", expiresAtMs = exp)
+        )
+        assertTrue("载荷 JSON 必须带 exp 字段", raw.contains("\"exp\""))
+        assertEquals(exp, QrLoginPayload.parse(raw)?.expiresAtMs ?: -1L)
+    }
+
+    @Test
     fun `otp hex validation shared with browser auth`() {
         assertTrue(UserApiKeyCrypto.isValidOtpHex("0a1b2c3d"))
         assertFalse(UserApiKeyCrypto.isValidOtpHex("0a1b2c3g"))

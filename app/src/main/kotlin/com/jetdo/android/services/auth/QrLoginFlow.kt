@@ -61,6 +61,16 @@ object QrLoginFlow {
     private const val LOG_TAG = "[JetDo][QrLogin]"
 
     /**
+     * 二维码有效期（毫秒）。**唯一真源** —— 出示端 UI 的倒计时读数也取它，别各写一份。
+     *
+     * 这个值必须烘进二维码载荷（见 [createSharePayload] 的 expiresAtMs），不能只做 UI 倒数：
+     * 服务端的 user-api-key 本身**没有过期机制**，唯一回收手段是出示端主动 revoke。出示端
+     * 若在出示后被强杀/崩溃/断网，revoke 就永远不会发生，这枚 key 会一直可用 —— 谁拿到那张
+     * 二维码截图都能换到登录态。烘进载荷后，扫入端自己就能拒绝过期码，不依赖出示端存活。
+     */
+    const val OTP_WINDOW_MS = 10L * 60 * 1000
+
+    /**
      * 出示端：创建分享 key 并解出 (apiKey, otp)。
      * POST /user-api-key（会话 CSRF，Accept json → 200 {redirect_url}），
      * redirect_url 形如 discourse://auth_redirect?payload=...&oneTimePassword=...，
@@ -113,7 +123,13 @@ object QrLoginFlow {
                 UserApiKeyCrypto.isValidOtpHex(it)
             } ?: error("otp decrypt failed")
             Timber.i("%s share key created keyLen=%d otpLen=%d", LOG_TAG, apiKey.length, otp.length)
-            QrLoginPayload(apiKey = apiKey, otp = otp, username = username, expiresAtMs = null)
+            QrLoginPayload(
+                apiKey = apiKey,
+                otp = otp,
+                username = username,
+                // 过期时间随二维码走，扫入端自己判 —— 出示端被杀也拦得住。
+                expiresAtMs = System.currentTimeMillis() + OTP_WINDOW_MS
+            )
         }.onFailure {
             Timber.w("%s create share payload failed msg=%s", LOG_TAG, it.message)
         }
@@ -122,7 +138,11 @@ object QrLoginFlow {
     /**
      * 出示端轮询：分享 key 还活着吗？消失 = 扫码端已登录并焚毁。
      * GET /u/{username}.json 的 user.user_api_keys[] 按 application_name 认领。
-     * null = 查询失败（网络抖动），调用方不应当作「已消费」。
+     *
+     * 三态而不是布尔：true=还在，false=确认已被消费，null=查不到（网络/会话异常）。
+     * **字段缺失必须归 null 而不是 false** —— `user_api_keys` 只在「看自己」时由
+     * UserSerializer 渲染，一旦会话失效或权限变化导致该字段不出现，说明我们什么都不知道，
+     * 此时若按 false 处理，弹窗会在 3 秒内直接跳到「已完成」，而对方根本没扫。
      */
     suspend fun isShareKeyAlive(username: String): Boolean? {
         return runCatching {
@@ -131,8 +151,7 @@ object QrLoginFlow {
             val body = response.data ?: return@runCatching null
             val user = Json.parseToJsonElement(body).jsonObject["user"]?.jsonObject
                 ?: return@runCatching null
-            val keys = user["user_api_keys"]?.jsonArray
-                ?: return@runCatching false // 序列化器无存活 key 时置 null，视同已消失
+            val keys = user["user_api_keys"]?.jsonArray ?: return@runCatching null
             keys.any { it.jsonObject["application_name"]?.jsonPrimitive?.contentOrNull == UserApiKeyLoginManager.QR_APPLICATION_NAME }
         }.getOrNull()
     }
