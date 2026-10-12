@@ -35,6 +35,7 @@
     <string name="about_version">版本 %1$s</string>
     <string name="about_website">官网 </string>
     <string name="action_browse_topics">浏览话题</string>
+    <string name="auth_other_methods">其他登录方式</string>
     <string name="auth_browser_entry">浏览器授权登录</string>
     <string name="auth_browser_hint">拉起系统浏览器完成授权，返回后自动登录，全程无需输入密码</string>
     <string name="auth_browser_launch_failed">打不开浏览器，请检查设备上的浏览器应用</string>
@@ -42,7 +43,6 @@
     <string name="auth_redeem_failed">授权成功，但登录令牌兑换失败，请重试</string>
     <string name="auth_login_success">登录成功</string>
     <string name="auth_qr_scan_title">扫码登录</string>
-    <string name="auth_qr_scan_entry">扫一扫，在已登录的设备上出示二维码</string>
     <string name="auth_qr_scan_hint">对准另一台已登录 JetDo 出示的二维码，扫码即完成登录</string>
     <string name="auth_qr_camera_denied">需要相机权限才能扫码，请在系统设置中允许</string>
     <string name="auth_qr_invalid">二维码不是 JetDo 登录码，请确认后再扫</string>

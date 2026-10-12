@@ -13,6 +13,7 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_website">Website </string>
     <string name="action_browse_topics">Browse topics</string>
+    <string name="auth_other_methods">Other sign-in methods</string>
     <string name="auth_browser_entry">Browser authorization</string>
     <string name="auth_browser_hint">Authorize in your system browser and you\'ll be signed in automatically on return — no password needed in-app</string>
     <string name="auth_browser_launch_failed">Could not open a browser app</string>
@@ -20,7 +21,6 @@
     <string name="auth_redeem_failed">Authorized, but the login token exchange failed, please retry</string>
     <string name="auth_login_success">Signed in</string>
     <string name="auth_qr_scan_title">Scan to sign in</string>
-    <string name="auth_qr_scan_entry">Scan a QR shown on a signed-in device</string>
     <string name="auth_qr_scan_hint">Point at the QR shown by another signed-in JetDo device to sign in</string>
     <string name="auth_qr_camera_denied">Camera permission is required to scan. Please allow it in system settings</string>
     <string name="auth_qr_invalid">That QR is not a JetDo login code</string>

@@ -83,6 +83,7 @@ import com.jetdo.android.services.credit.fetchLdcUserInfo
 import com.jetdo.android.services.credit.formatLdcAmount
 import com.jetdo.android.services.credit.ldcUserInfoEvent
 import com.jetdo.android.services.credit.reduceLdcEntry
+import com.jetdo.android.services.auth.BrowserAuthLoginFlow
 import com.jetdo.android.services.network.ArkWebJsonExecutor
 import com.jetdo.android.ui.credit.LdcCreditWebHost
 import kotlinx.coroutines.launch
@@ -146,6 +147,9 @@ fun ProfileScreen(
     onNavigateBack: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenLogin: () -> Unit,
+    // 未登录态下方的备用登录方式：扫码登录（扫入端）→ 相机扫码页。
+    // 浏览器授权在页面内自行发起（BrowserAuthLoginFlow），不需要外部回调。
+    onScanQr: () -> Unit = {},
     onOpenWeb: (String, String?) -> Unit = { _, _ -> },
     // 最近活动行点击 → 原生详情页并定位楼层（对齐鸿蒙 ProfilePage 的 onOpenTopic）。
     onOpenTopic: (topicId: Long, title: String, postNumber: Int?) -> Unit = { _, _, _ -> },
@@ -275,6 +279,7 @@ fun ProfileScreen(
                         username = accountUser.username,
                         onLoginClick = onOpenLogin
                     )
+                    AnonymousAuthOptions(onScanQr = onScanQr)
                 }
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -898,6 +903,106 @@ private fun AnonymousContent(username: String, onLoginClick: () -> Unit) {
                     color = colors.textFaint,
                     modifier = Modifier.padding(top = if (index > 0) 6.dp else 0.dp)
                 )
+            }
+        }
+    }
+}
+
+// 未登录态下方的备用登录方式：浏览器授权（User API Key 跳板换 _t）+ 扫码登录（扫入端）。
+// 主入口仍是上方「立即登录」走站内 WebView 表单；这两条都不经过站内表单，故独立成卡。
+@Composable
+private fun AnonymousAuthOptions(onScanQr: () -> Unit) {
+    val colors = jetdoColors
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.auth_other_methods),
+            fontSize = 13.sp,
+            color = colors.textFaint,
+            modifier = Modifier.padding(start = 4.dp, top = CardGap, bottom = 8.dp)
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(CardRadius))
+                .background(colors.surfaceCard)
+        ) {
+            // 浏览器授权：拉起系统浏览器完成授权，回程深链兑换 _t；成功与否由会话总线广播，
+            // 这里只负责发起（兑换后 Cookie 落在 WebView CookieManager，全局登录态自更新）。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        scope.launch {
+                            if (!BrowserAuthLoginFlow.start(context)) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.auth_browser_launch_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                    .padding(horizontal = CardPadding, vertical = 14.dp)
+            ) {
+                FaIcon("globe", colors.ldAccent, 16.dp)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.auth_browser_entry),
+                        fontSize = 15.sp,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        text = stringResource(R.string.auth_browser_hint),
+                        fontSize = 12.sp,
+                        color = colors.textFaint,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                FaIcon("chevron-right", colors.textFaint, 12.dp)
+            }
+
+            HorizontalDivider(
+                color = colors.border,
+                thickness = 0.5.dp,
+                modifier = Modifier.padding(horizontal = CardPadding)
+            )
+
+            // 扫码登录（扫入端）：扫另一台已登录 JetDo 出示的码，兑换其一次性 OTP。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onScanQr)
+                    .padding(horizontal = CardPadding, vertical = 14.dp)
+            ) {
+                FaIcon("camera", colors.ldAccent, 16.dp)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.auth_qr_scan_title),
+                        fontSize = 15.sp,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        text = stringResource(R.string.auth_qr_scan_hint),
+                        fontSize = 12.sp,
+                        color = colors.textFaint,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                FaIcon("chevron-right", colors.textFaint, 12.dp)
             }
         }
     }
