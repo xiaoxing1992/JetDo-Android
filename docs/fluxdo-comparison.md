@@ -9,22 +9,35 @@
 
 ## 结论先行
 
-**真缺口 8 项。** 其中成体系的大活只有 1 个（私信+Chat，约等于再迁一个通知模块的量），其余都是单页面级。
+**真缺口 6 项。** 其中成体系的大活只有 1 个（Discourse Chat），其余都是单页面级。
 
-| # | 功能 | 量级 | 建议 |
+| # | 功能 | 量级 | 状态 |
 |---|---|---|---|
-| F1 | 私信收件箱（收/发/归档） | 大 | ⭐ 最先考虑 |
-| F2 | Discourse Chat 频道聊天 | 特大 | 随 F1 一起评估 |
-| F3 | 浏览历史时间线 | 小 | ⭐ 性价比最高 |
-| F4 | 信任等级逐条要求清单 | 中 | 建议做 |
-| F5 | 数据管理（缓存清理/备份） | 中 | 国内商店场景加分 |
-| F6 | 关注列表页 | 小 | 按需 |
-| F7 | 邀请链接 | 中 | 增长功能，按需 |
-| F8 | mermaid 图渲染 | 小 | 按需 |
+| F1 | ~~私信收件箱（收/发/归档）~~ | 大 | **未做**（浏览器授权/扫码登录落地后，私信是下一个候选） |
+| F2 | Discourse Chat 频道聊天 | 特大 | 未做 |
+| F3 | ~~浏览历史时间线~~ | 小 | **已覆盖**（复核发现 Profile 快捷入口「浏览历史」= 服务端已读列表 `READ_TOPICS`，与 FluxDO 本地访问日志语义高度重叠；仅差「本地访问时间 + 清空/导出」，降级为可选增强，不再列缺口） |
+| F4 | 信任等级逐条要求清单 | 中 | 未做 |
+| F5 | 数据管理（缓存清理/备份） | 中 | 未做 |
+| F6 | ~~扫码登录~~ | 中 | **已完成（2026-10-12）** |
+| F7 | 邀请链接 | 中 | 未做 |
+| F8 | mermaid 图渲染 | 小 | 未做 |
+| F9 | ~~登录方式对齐（浏览器授权 + 扫码）~~ | 大 | **已完成（2026-10-12）**，见下 |
 
 ---
 
-## 逐项明细
+## 已落地（做完即删原则的例外留档：两项是本文件立项后完成的）
+
+### F9 · 登录方式对齐（浏览器授权 + 扫码登录，2026-10-12）
+
+对齐 FluxDO 的两条非密码登录链路，核心思路一致：**拿 Discourse User API Key 流程当跳板换 `_t` 会话**，全程不输密码、不碰内嵌 WebView 的 CF 盾。
+
+- **浏览器授权**：登录页入口 → Custom Tabs 打开 `/user-api-key/new`（scopes 只申请 `one_time_password`，linux.do 收窄过；auth_redirect 固定 `discourse://auth_redirect`）→ 授权后 302 深链回 App → RSA-PKCS1 解密 payload（key+nonce）与 oneTimePassword → `POST /session/otp/{otp}` 走宿主 WebView fetch（CSRF/过盾/cookie 落库全复用）→ Set-Cookie `_t` → SessionChecker 收口 → key 用完即焚（revoke）。冷启动重放的旧回调按 nonce 防重放静默忽略。
+- **扫码登录**：已登录设备「我的 → 扫码登录到其他设备」→ `POST /user-api-key` 创建分享 key → 解出 key+OTP 明文 → 紧凑 JSON `{v,k,o,u,exp}` 画成二维码；另一台设备登录页「扫码登录」→ CameraX + zxing（无 GMS）逐帧解码 → 校验有效期 → 同一条 OTP 兑换链路 → 成功后焚毁分享 key；出示端 3 秒轮询 key 存活（`GET /u/{name}.json` 的 `user_api_keys[]` 按 application_name 认领）显示「已登录」，10 分钟窗口过期/关闭弹窗主动 revoke。
+- 代码：`services/auth/UserApiKeyCrypto.kt`（纯逻辑 14 测）/ `UserApiKeyLoginManager.kt` / `BrowserAuthLoginFlow.kt` / `QrLoginFlow.kt`（5 测）/ `ui/qr/QrScanScreen.kt` / `ui/qr/QrLoginShowDialog.kt`；Manifest 增 `discourse://auth_redirect` intent-filter（装了 DiscourseHub 的设备会出现应用选择器，预期行为）。
+
+---
+
+## 逐项明细（未做项）
 
 ### F1 · 私信收件箱（收件箱 / 已发送 / 归档）
 

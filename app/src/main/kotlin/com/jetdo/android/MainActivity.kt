@@ -44,6 +44,7 @@ import com.jetdo.android.navigation.DeepLinkEventBus
 import com.jetdo.android.services.challenge.ChallengeEventBus
 import com.jetdo.android.services.challenge.ChallengeRecoveryCoordinator
 import com.jetdo.android.services.challenge.ChallengeRecoveryEventBus
+import com.jetdo.android.services.auth.BrowserAuthLoginFlow
 import com.jetdo.android.services.logging.FileLoggerDaemon
 import com.jetdo.android.services.network.ArkWebNetworkBridge
 import com.jetdo.android.services.session.AppStateEventBus
@@ -339,6 +340,8 @@ class MainActivity : ComponentActivity() {
 
         // 处理推送通知深链接（如果是从通知点击启动）
         handleNotificationIntent()
+        // 处理浏览器授权登录回调（discourse://auth_redirect，冷启动/热启动都走这里）
+        handleAuthRedirectIntent()
     }
 
     override fun onDestroy() {
@@ -361,6 +364,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         Timber.i("[JetDo][MainActivity] onNewIntent ts=%d", System.currentTimeMillis())
         handleNotificationIntent()
+        handleAuthRedirectIntent()
     }
 
     /**
@@ -372,5 +376,29 @@ class MainActivity : ComponentActivity() {
     private fun handleNotificationIntent() {
         val target = DeepLinkEventBus.parse(intent?.dataString) ?: return
         DeepLinkEventBus.dispatch(target)
+    }
+
+    /**
+     * 处理浏览器授权登录回调（discourse://auth_redirect?payload=...&oneTimePassword=...）。
+     *
+     * 冷启动场景：浏览器授权完成时 App 已被杀，深链直接拉起 MainActivity —— 此时
+     * NavHost/WebView 宿主都还没就绪，兑换请求会在 ArkWebNetworkBridge 里等待宿主
+     * 加载完成（whenHostReady 语义），流程不依赖任何 UI 存活。
+     * 残留回调重放（nonce 不匹配）由流程内部静默忽略，不打扰用户。
+     */
+    private fun handleAuthRedirectIntent() {
+        val data = intent?.dataString ?: return
+        val isAuthRedirect = runCatching {
+            val uri = java.net.URI(data)
+            // host 对带下划线的 authority 会解析成 null（RFC 2396 hostname 规则），用 authority。
+            "discourse".equals(uri.scheme, ignoreCase = true) &&
+                "auth_redirect".equals(uri.host ?: uri.authority, ignoreCase = true)
+        }.getOrDefault(false)
+        if (!isAuthRedirect) return
+        Timber.i("[JetDo][MainActivity] auth redirect received len=%d", data.length)
+        lifecycleScope.launch {
+            val result = BrowserAuthLoginFlow.handleCallback(this@MainActivity, data)
+            BrowserAuthLoginFlow.toastResult(this@MainActivity, result)
+        }
     }
 }

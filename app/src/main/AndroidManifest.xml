@@ -71,6 +71,19 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="jetdo" />
             </intent-filter>
+
+            <!--
+              浏览器授权登录回调：Discourse User API Key 流程固定 302 到
+              discourse://auth_redirect（站点 allowed_user_api_auth_redirects 内置放行该值，
+              自定义 scheme 需站点加白不可控，故随大流接 discourse://）。
+              若设备装有 DiscourseHub 官方应用，系统会出现应用选择器，属预期行为。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="discourse" android:host="auth_redirect" />
+            </intent-filter>
         </activity>
 
         <!-- 日志文件分享（FileProvider：调试日志导出） -->

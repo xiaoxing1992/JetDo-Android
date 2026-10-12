@@ -1034,6 +1034,19 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         this.executor = executor
     }
 
+    /**
+     * 执行一段自定义 fetch 脚本并返回原始信封 JSON（不做 NetworkResult 包装）。
+     *
+     * 给不走标准 GET/POST 语义的特殊请求用：浏览器授权登录的
+     * `/user-api-key/revoke`（User-Api-Key 头自证、无 CSRF、无会话）这类。
+     * 调用方自己解析信封里的 statusCode/body；宿主未就绪时与 getJson 同语义等待。
+     */
+    suspend fun runRawScript(script: String): String {
+        if (!canFetch()) throw IllegalStateException("host not ready")
+        whenHostReady()
+        return executor!!.run(script)
+    }
+
     override suspend fun getJson(path: String, options: JsonRequestOptions?): NetworkResult<String> {
         val requestPath = normalizePath(path)
         Timber.i("[JetDo][Network] GET %s start", requestPath)

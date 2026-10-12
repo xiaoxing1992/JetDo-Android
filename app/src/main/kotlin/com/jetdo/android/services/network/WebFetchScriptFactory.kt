@@ -197,6 +197,71 @@ object WebFetchScriptFactory {
             referrerExpr = jsonString(referrer)
         )
 
+    /**
+     * 撤销 User API Key：POST /user-api-key/revoke。
+     * key 自证身份（User-Api-Key 头），**不需要 CSRF 也不需要会话**——浏览器授权
+     * 兑换成功后「用完即焚」走这里，此时 App 还没有会话，所以不能走 buildCsrfScript。
+     */
+    fun createUserApiKeyRevokeScript(key: String): String {
+        val encodedKey = jsonString(key)
+        return """
+        (() => {
+            const requestId = '$requestIdToken';
+            const baseUrl = 'https://linux.do';
+            fetch(baseUrl + '/user-api-key/revoke', {
+              method: 'POST',
+              credentials: 'omit',
+              cache: 'no-store',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'User-Api-Key': $encodedKey,
+                'X-Requested-With': 'XMLHttpRequest'
+              }
+            }).then((response) => {
+              response.text().then((body) => {
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
+                  statusCode: response.status,
+                  contentType: response.headers.get('content-type') || '',
+                  body: body
+                }));
+              }).catch((error) => {
+                window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
+                  statusCode: 0, body: '', errorMessage: String(error)
+                }));
+              });
+            }).catch((error) => {
+              window.JetDoBridge.onJsonResult(requestId, JSON.stringify({
+                statusCode: 0, body: '', errorMessage: String(error)
+              }));
+            });
+            return requestId;
+          })();
+        """.trimIndent()
+    }
+
+    /**
+     * 扫码登录出示端：POST /user-api-key 创建一枚跨设备分享 key（会话 CSRF）。
+     * 必须带 Accept json + X-Requested-With——服务端对 XHR 返回 200 JSON
+     * {redirect_url}；若按 HTML 协商会 302 到 discourse://，fetch 跟不动（scheme 不支持），
+     * 那条路在 WebView 里走不通，只能指望 JSON 路径（FluxDO 同款约束）。
+     */
+    fun createUserApiKeyShareScript(formBody: String, referrer: String): String =
+        buildCsrfScript(
+            requestIdToken = REQUEST_ID_TOKEN,
+            urlExpr = jsonString("/user-api-key"),
+            methodExpr = "'POST'",
+            headerLines = listOf(
+                "'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'",
+                "'Accept': 'application/json, text/javascript, */*; q=0.01'",
+                "'X-CSRF-Token': csrf",
+                "'X-Requested-With': 'XMLHttpRequest'"
+            ),
+            prelude = "",
+            bodyExpr = jsonString(formBody),
+            referrerExpr = jsonString(referrer)
+        )
+
     /** 图片上传：base64 → Uint8Array → Blob → FormData。刻意不设 Content-Type（浏览器写 multipart boundary）。 */
     fun createUploadScript(base64: String, fileName: String, mimeType: String, referrer: String): String {
         val encodedBase64 = jsonString(base64)
