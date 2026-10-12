@@ -3,6 +3,8 @@ tbs = "44286"
 bugly = "4.1.9.3"
 androidx-browser = "1.8.0"
 androidx-webkit = "1.14.0"
+zxing-core = "3.5.3"
+androidx-camera = "1.4.2"
 agp = "9.3.1"
 kotlin = "2.4.10"
 compose-bom = "2026.06.01"
@@ -67,6 +69,12 @@ tbssdk = { group = "com.tencent.tbs", name = "tbssdk", version.ref = "tbs" }
 bugly-crashreport = { group = "com.tencent.bugly", name = "crashreport", version.ref = "bugly" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "androidx-browser" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "androidx-webkit" }
+# 扫码登录：zxing core 纯 Java 生成/解码（无 GMS 依赖，国产机可用）；CameraX 只取预览与逐帧分析
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing-core" }
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "androidx-camera" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "androidx-camera" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "androidx-camera" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "androidx-camera" }
 
 # DataStore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "androidx-datastore" }

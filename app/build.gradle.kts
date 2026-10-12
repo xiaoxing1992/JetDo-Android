@@ -92,6 +92,15 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    // 浏览器授权登录：Custom Tabs 拉起系统浏览器（共享 Chrome 登录态，避免 external
+    // 模式被 App Links 回弹）。无 GMS 依赖，任何实现 Custom Tabs 协议的浏览器都可用。
+    implementation(libs.androidx.browser)
+    // 扫码登录（出示二维码 + 相机扫码）。zxing core 纯 Java，CameraX 无 GMS 依赖。
+    implementation(libs.zxing.core)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     // Compose
     val composeBom = platform(libs.compose.bom)

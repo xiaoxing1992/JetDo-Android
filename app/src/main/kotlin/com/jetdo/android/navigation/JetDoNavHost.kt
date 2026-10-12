@@ -58,6 +58,7 @@ import com.jetdo.android.ui.drafts.DraftResume
 import com.jetdo.android.ui.drafts.DraftsScreen
 import com.jetdo.android.ui.screens.DebugLogScreen
 import com.jetdo.android.ui.screens.ExperimentalSettingsScreen
+import com.jetdo.android.ui.qr.QrScanScreen
 import com.jetdo.android.ui.screens.LoginScreen
 import com.jetdo.android.ui.screens.ProfileScreen
 import com.jetdo.android.ui.screens.PushSettingsScreen
@@ -418,6 +419,11 @@ fun JetDoNavHost(
             )
         }
 
+        // 扫码登录·扫入端（登录页「扫码登录」入口）：相机扫码 → 兑换另一台设备的 OTP
+        composable(Routes.QR_SCAN) {
+            QrScanScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
         // 调试日志页（设置 → 诊断日志）
         composable(Routes.DEBUG_LOG) {
             DebugLogScreen(
@@ -731,6 +737,10 @@ fun JetDoNavHost(
         if (showLoginSheet) {
             LoginScreen(
                 onNavigateBack = { showLoginSheet = false },
+                onScanQr = {
+                    showLoginSheet = false
+                    navController.navigate(Routes.QR_SCAN)
+                },
                 modifier = Modifier.zIndex(4f)
             )
         }
@@ -755,6 +765,7 @@ object Routes {
     const val DRAFTS = "drafts"
     const val SETTINGS = "settings"
     const val DEBUG_LOG = "debug_log"
+    const val QR_SCAN = "qr_scan"
 
     // Settings 子页面
     const val SETTINGS_DOH = "settings_doh"

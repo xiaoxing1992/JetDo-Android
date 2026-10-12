@@ -70,6 +70,7 @@ import com.jetdo.android.core.designsystem.bottomBarClearance
 import com.jetdo.android.ui.components.InlineText
 import com.jetdo.android.ui.components.TopicMetadataBadges
 import com.jetdo.android.ui.components.UserAvatar
+import com.jetdo.android.ui.qr.QrLoginShowDialog
 import com.jetdo.android.ui.theme.jetdoColors
 import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.core.model.RelativeTime
@@ -166,6 +167,7 @@ fun ProfileScreen(
     val accountUser: User = currentUser ?: User(id = 0, username = "")
     val context = LocalContext.current
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showQrLogin by remember { mutableStateOf(false) }
     val ldcVersion by LdcCreditEventBus.version.collectAsState()
     var ldc by remember { mutableStateOf(LdcEntryState()) }
     var ldcExecutor by remember { mutableStateOf<ArkWebJsonExecutor?>(null) }
@@ -258,7 +260,8 @@ fun ProfileScreen(
                         onOpenLdcCredit = onOpenLdcCredit,
                         ldc = ldc,
                         onRetryLdc = { refreshLdc() },
-                        onRequestLogout = { showLogoutDialog = true }
+                        onRequestLogout = { showLogoutDialog = true },
+                        onShowQrLogin = { showQrLogin = true }
                     )
                 } else {
                     // 未登录占位:沉浸态下只垫了状态栏高度,没有额外垂直 padding,
@@ -305,6 +308,13 @@ fun ProfileScreen(
             }
         )
     }
+    // 扫码登录·出示端：已登录设备生成一次性二维码给另一台 JetDo 扫（设备间迁移登录）。
+    if (showQrLogin && isLoggedIn && accountUser.username.isNotEmpty()) {
+        QrLoginShowDialog(
+            username = accountUser.username,
+            onDismiss = { showQrLogin = false }
+        )
+    }
 }
 
 // ==================== 已登录内容 ====================
@@ -324,7 +334,8 @@ private fun LoggedInContent(
     onOpenLdcCredit: (Boolean) -> Unit,
     ldc: LdcEntryState,
     onRetryLdc: () -> Unit,
-    onRequestLogout: () -> Unit
+    onRequestLogout: () -> Unit,
+    onShowQrLogin: () -> Unit
 ) {
     val colors = jetdoColors
     val username = accountUser.username
@@ -466,6 +477,29 @@ private fun LoggedInContent(
     }
 
     LdcEntryCard(state = ldc, onOpen = onOpenLdcCredit, onRetry = onRetryLdc)
+
+    // 扫码登录·出示端入口：把当前登录态递到另一台 JetDo。
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = CardGap)
+            .clip(RoundedCornerShape(CardRadius))
+            .background(colors.surfaceCard)
+            .clickable(onClick = onShowQrLogin)
+            .padding(horizontal = CardPadding, vertical = 14.dp)
+    ) {
+        FaIcon("camera", colors.ldAccent, 16.dp)
+        Text(
+            text = stringResource(R.string.auth_qr_show_entry),
+            fontSize = 15.sp,
+            color = colors.textPrimary,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp)
+        )
+        FaIcon("chevron-right", colors.textFaint, 12.dp)
+    }
 
     // 卡片 3:徽章
     Column(
