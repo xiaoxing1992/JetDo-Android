@@ -28,10 +28,10 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Mail
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -530,8 +530,8 @@ internal enum class RootTabDestination(
     NOTIFICATION(
         route = Routes.NOTIFICATION,
         label = AppContextHolder.getString(R.string.home_messages),
-        selectedIcon = Icons.Filled.Mail,
-        unselectedIcon = Icons.Outlined.Mail
+        selectedIcon = Icons.Filled.Notifications,
+        unselectedIcon = Icons.Outlined.Notifications
     ),
     PROFILE(
         route = Routes.PROFILE,
