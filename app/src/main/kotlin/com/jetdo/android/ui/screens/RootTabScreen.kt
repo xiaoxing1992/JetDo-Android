@@ -454,6 +454,8 @@ fun RootTabScreen(
                         // 未登录「立即登录」→ 请求根层弹登录半窗。
                         LoginGate.requestLogin()
                     },
+                    // 未登录卡片下方的「扫码登录」→ 相机扫码页（压在根栈上）。
+                    onScanQr = { navController.navigate(Routes.QR_SCAN) },
                     // 最近活动行 → 原生详情页并定位到该动态所在楼层(对齐鸿蒙 ProfilePage.onOpenTopic)。
                     onOpenTopic = { topicId, title, postNumber ->
                         val parts = mutableListOf<String>()

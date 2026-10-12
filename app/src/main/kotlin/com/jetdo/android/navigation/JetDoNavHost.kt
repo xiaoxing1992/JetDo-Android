@@ -261,6 +261,8 @@ fun JetDoNavHost(
                     // 未登录「立即登录」→ 请求根层弹登录半窗。
                     LoginGate.requestLogin()
                 },
+                // 未登录卡片下方的「扫码登录」→ 相机扫码页（压在根栈上）。
+                onScanQr = { navController.navigate(Routes.QR_SCAN) },
                 // 最近活动行 → 原生详情页并定位到该动态所在楼层（对齐鸿蒙 ProfilePage.onOpenTopic）。
                 onOpenTopic = { topicId, title, postNumber ->
                     val parts = mutableListOf<String>()
@@ -419,7 +421,7 @@ fun JetDoNavHost(
             )
         }
 
-        // 扫码登录·扫入端（登录页「扫码登录」入口）：相机扫码 → 兑换另一台设备的 OTP
+        // 扫码登录·扫入端（「我的」页未登录卡片下方的入口）：相机扫码 → 兑换另一台设备的 OTP
         composable(Routes.QR_SCAN) {
             QrScanScreen(onNavigateBack = { navController.popBackStack() })
         }
@@ -737,10 +739,6 @@ fun JetDoNavHost(
         if (showLoginSheet) {
             LoginScreen(
                 onNavigateBack = { showLoginSheet = false },
-                onScanQr = {
-                    showLoginSheet = false
-                    navController.navigate(Routes.QR_SCAN)
-                },
                 modifier = Modifier.zIndex(4f)
             )
         }

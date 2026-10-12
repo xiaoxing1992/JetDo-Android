@@ -19,13 +19,11 @@ import android.webkit.WebSettings
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.statusBars
@@ -60,7 +58,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.services.network.ArkWebNetworkBridge
-import com.jetdo.android.services.auth.BrowserAuthLoginFlow
+import com.jetdo.android.services.auth.AuthService
 import com.jetdo.android.services.session.LOGIN_GATE_LOG_TAG
 import com.jetdo.android.services.session.SessionEventBus
 import com.jetdo.android.services.web.CookiePresenceSnapshot
@@ -220,7 +218,6 @@ private object LoginKeyboardScript {
 @Composable
 fun LoginScreen(
     onNavigateBack: () -> Unit,
-    onScanQr: () -> Unit = {},
     modifier: Modifier = Modifier,
     sessionViewModel: SessionViewModel = hiltViewModel()
 ) {
@@ -425,65 +422,6 @@ fun signalLoginSuccess(source: String, url: String) {
                 )
             }
             HorizontalDivider(thickness = 1.dp, color = colors.border)
-
-            // 浏览器授权登录入口：拉起系统浏览器完成 User API Key 授权，回程深链
-            // 兑换 _t（BrowserAuthLoginFlow）。兑换落在 WebView CookieManager 后，
-            // 下方既有的 800ms `_t` cookie 轮询会自动判定成功并走统一收口 ——
-            // 这里只负责发起，不需要任何成功/失败回程 UI。
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.surfaceCard)
-                    .clickable {
-                        scope.launch {
-                            val launched = BrowserAuthLoginFlow.start(context)
-                            if (!launched) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.auth_browser_launch_failed),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    }
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.auth_browser_entry),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.textPrimary
-                    )
-                    Text(
-                        text = stringResource(R.string.auth_browser_hint),
-                        fontSize = 12.sp,
-                        color = colors.textSecondary,
-                        lineHeight = 16.sp
-                    )
-                }
-                Text(
-                    text = "→",
-                    fontSize = 18.sp,
-                    color = colors.textSecondary,
-                    modifier = Modifier.align(Alignment.CenterVertically)
-                )
-            }
-
-            // 扫码登录（扫入端）：扫另一台已登录 JetDo 出示的二维码，兑换其一次性 OTP。
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.surfaceMuted)
-                    .clickable { onScanQr() }
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.auth_qr_scan_entry),
-                    fontSize = 13.sp,
-                    color = colors.textSecondary
-                )
-            }
 
             AndroidView(
                 modifier = Modifier
