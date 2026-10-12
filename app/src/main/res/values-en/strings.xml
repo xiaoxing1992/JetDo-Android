@@ -22,7 +22,9 @@
     <string name="auth_login_success">Signed in</string>
     <string name="auth_qr_scan_title">Scan to sign in</string>
     <string name="auth_qr_scan_hint">Point at the QR shown by another signed-in JetDo device to sign in</string>
-    <string name="auth_qr_camera_denied">Camera permission is required to scan. Please allow it in system settings</string>
+    <string name="auth_qr_camera_denied">Camera permission is required to scan</string>
+    <string name="auth_qr_camera_denied_permanent">Camera permission was denied permanently — please enable it in system settings</string>
+    <string name="auth_qr_camera_retry">Request again</string>
     <string name="auth_qr_invalid">That QR is not a JetDo login code</string>
     <string name="auth_qr_expired">The QR has expired, please have the other device regenerate it</string>
     <string name="auth_qr_show_entry">Sign in on another device</string>

@@ -5,7 +5,6 @@ import com.jetdo.android.R
 import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -56,6 +55,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.jetdo.android.services.notification.NotificationPermission
 import com.jetdo.android.services.notification.NotificationPermissionState
 import com.jetdo.android.services.notification.SystemNotifier
+import com.jetdo.android.services.permission.findActivity
 import com.jetdo.android.ui.theme.jetdoColors
 
 // ==========================================================================
@@ -362,13 +362,6 @@ private fun resolveNotificationState(
 ): NotificationPermissionState = activity
     ?.let { NotificationPermission.state(context, NotificationPermission.canRequestAgain(context, it)) }
     ?: NotificationPermissionState.DENIED_PERMANENT
-
-/** LocalContext 在 Activity 宿主下可能是被包装过的 Context，逐层拆到 Activity。 */
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
 
 private fun toast(context: Context, message: String) {
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()

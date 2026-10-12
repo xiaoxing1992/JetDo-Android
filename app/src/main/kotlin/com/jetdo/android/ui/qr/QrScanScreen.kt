@@ -1,7 +1,6 @@
 package com.jetdo.android.ui.qr
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,8 +13,10 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,10 +44,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
@@ -57,6 +63,9 @@ import com.google.zxing.common.HybridBinarizer
 import com.jetdo.android.R
 import com.jetdo.android.services.auth.BrowserAuthLoginFlow
 import com.jetdo.android.services.auth.BrowserAuthResult
+import com.jetdo.android.services.permission.CameraPermission
+import com.jetdo.android.services.permission.CameraPermissionState
+import com.jetdo.android.services.permission.findActivity
 import com.jetdo.android.ui.theme.jetdoColors
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -142,23 +151,42 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val colors = jetdoColors
-    var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED
-        )
+    // shouldShowRequestPermissionRationale 是 Activity 的方法；LocalContext 在 Activity 宿主下
+    // 就是它本身，但经 ContextWrapper 包过一层，所以要走 findActivity 拆出来。
+    val activity = remember(context) { context.findActivity() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var permissionState by remember {
+        mutableStateOf(CameraPermission.state(context, activity))
     }
-    var denied by remember { mutableStateOf(false) }
     // 扫码命中守卫：分析器跑在相机线程，用 AtomicBoolean；失败时复位允许重扫。
     val handled = remember { AtomicBoolean(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-        denied = !granted
+    ) {
+        // 回调时重算而不是直接用 granted 布尔：shouldShowRequestPermissionRationale 的
+        // 真值要到这一刻才更新，用布尔会把「还能再问」和「不再询问」压成同一个态。
+        permissionState = CameraPermission.state(context, activity)
     }
+
+    // 进页面即申请：只对「还能弹框」的态发起 —— 永久拒绝态发起也弹不出来（系统静默回调拒绝）。
     LaunchedEffect(Unit) {
-        if (!hasPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
+        if (permissionState == CameraPermissionState.DENIED_CAN_ASK) {
+            CameraPermission.markRequested(context) // 必须在 launch 之前落盘
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // 从系统设置返回时重算：用户在设置里开了相机权限，只有 ON_RESUME 能收到这个变化
+    // （记住的 permissionState 不会自己变），否则预览永远起不来。
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionState = CameraPermission.state(context, activity)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(
@@ -193,8 +221,8 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
             )
         }
 
-        when {
-            hasPermission -> {
+        when (permissionState) {
+            CameraPermissionState.GRANTED -> {
                 // lifecycleOwner 必须在 composable 上下文取（AndroidView factory 不是 composable）
                 val lifecycleOwner = LocalLifecycleOwner.current
                 Box(
@@ -202,7 +230,7 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(16.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.dp))
                 ) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
@@ -246,30 +274,22 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
                     )
                 }
             }
-            denied -> Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.auth_qr_camera_denied),
-                    fontSize = 14.sp,
-                    color = colors.textSecondary
-                )
-            }
-            else -> Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.network_loading),
-                    fontSize = 14.sp,
-                    color = colors.textSecondary
-                )
-            }
+            // 还能弹框：给一次「重新授权」，点了立刻再弹一次系统框。
+            CameraPermissionState.DENIED_CAN_ASK -> CameraDeniedPane(
+                message = stringResource(R.string.auth_qr_camera_denied),
+                actionLabel = stringResource(R.string.auth_qr_camera_retry),
+                onAction = {
+                    CameraPermission.markRequested(context)
+                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+            )
+            // 系统不再弹框：App 侧无能为力，只能把人送去本应用的设置页（ON_RESUME 会把
+            // 结果捞回来，授权后无需重进页面）。
+            CameraPermissionState.DENIED_PERMANENT -> CameraDeniedPane(
+                message = stringResource(R.string.auth_qr_camera_denied_permanent),
+                actionLabel = stringResource(R.string.common_open_system_settings),
+                onAction = { CameraPermission.openSystemSettings(context) }
+            )
         }
 
         Text(
@@ -280,6 +300,43 @@ fun QrScanScreen(onNavigateBack: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 20.dp)
         )
+    }
+}
+
+/** 相机权限缺失时的引导面板：一句说明 + 一个动作按钮（重新申请 / 去系统设置）。 */
+@Composable
+private fun ColumnScope.CameraDeniedPane(
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    val colors = jetdoColors
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+            .padding(horizontal = 32.dp)
+    ) {
+        Text(
+            text = message,
+            fontSize = 14.sp,
+            color = colors.textSecondary,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+        Box(
+            modifier = Modifier
+                .padding(top = 18.dp)
+                .clip(RoundedCornerShape(21.dp))
+                .background(colors.ldAccent)
+                .clickable(onClick = onAction)
+                .padding(horizontal = 28.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(actionLabel, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White)
+        }
     }
 }
 
