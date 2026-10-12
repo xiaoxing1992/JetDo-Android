@@ -165,7 +165,14 @@ private fun BrowserLoadingPane(progress: Int) {
 fun WebViewPage(
     url: String,
     pageTitle: String = "",
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    // 非 http(s) scheme 的接管者：返回 true 表示本次导航已被消费、WebView 停在原页。
+    // 默认 null 即维持原行为（交给系统，无处理器时静默失败）。
+    //
+    // 存在的理由只有一条：授权回程 discourse://auth_redirect。WebView 自己加载不了这个
+    // scheme，不接管就被丢给系统 —— 设备上没人认领时页面一片空白且毫无反馈，用户读到的
+    // 就是「点了授权什么也没发生」。用 App 内 WebView 承载授权页时必须把它接回来。
+    onSchemeUrl: ((String) -> Boolean)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -201,13 +208,7 @@ fun WebViewPage(
 
     fun currentUrl(): String {
         val current = runCatching { webRef?.url.orEmpty() }.getOrDefault("")
-        val lower = current.lowercase()
-        return if (lower.startsWith("http://") || lower.startsWith("https://")) current else url
-    }
-
-    fun isBrowsable(link: String): Boolean {
-        val lower = link.lowercase()
-        return lower.startsWith("http://") || lower.startsWith("https://")
+        return if (isWebViewLoadable(current)) current else url
     }
 
     fun copyToClipboard(link: String, okMessage: String) {
@@ -238,7 +239,7 @@ fun WebViewPage(
 
     fun openInBrowser() {
         val link = currentUrl()
-        if (!isBrowsable(link)) {
+        if (!isWebViewLoadable(link)) {
             android.widget.Toast.makeText(context, context.getString(R.string.common_cannot_open_in_browser), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
@@ -354,6 +355,18 @@ fun WebViewPage(
                         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
                         webViewClient = object : WebViewClient() {
+                            // http(s) 一律返回 false 让 WebView 自己加载（与不覆写时等价）；
+                            // 其余 scheme 交给宿主，没人接管也不放给系统去乱找处理器。
+                            // minSdk 26，302 重定向到自定义 scheme 也走这个重载。
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): Boolean {
+                                val link = request?.url?.toString().orEmpty()
+                                if (link.isEmpty() || isWebViewLoadable(link)) return false
+                                return onSchemeUrl?.invoke(link) == true
+                            }
+
                             override fun shouldInterceptRequest(
                                 view: WebView?,
                                 request: WebResourceRequest?

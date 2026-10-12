@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -83,7 +84,6 @@ import com.jetdo.android.services.credit.fetchLdcUserInfo
 import com.jetdo.android.services.credit.formatLdcAmount
 import com.jetdo.android.services.credit.ldcUserInfoEvent
 import com.jetdo.android.services.credit.reduceLdcEntry
-import com.jetdo.android.services.auth.BrowserAuthLoginFlow
 import com.jetdo.android.services.network.ArkWebJsonExecutor
 import com.jetdo.android.ui.credit.LdcCreditWebHost
 import kotlinx.coroutines.launch
@@ -147,9 +147,10 @@ fun ProfileScreen(
     onNavigateBack: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenLogin: () -> Unit,
-    // 未登录态下方的备用登录方式：扫码登录（扫入端）→ 相机扫码页。
-    // 浏览器授权在页面内自行发起（BrowserAuthLoginFlow），不需要外部回调。
+    // 未登录态下方的备用登录方式：扫码登录（扫入端）→ 相机扫码页；
+    // 站点授权登录 → App 内 WebView 承载的授权页（BrowserAuthWebPage）。
     onScanQr: () -> Unit = {},
+    onSiteAuth: () -> Unit = {},
     onOpenWeb: (String, String?) -> Unit = { _, _ -> },
     // 最近活动行点击 → 原生详情页并定位楼层（对齐鸿蒙 ProfilePage 的 onOpenTopic）。
     onOpenTopic: (topicId: Long, title: String, postNumber: Int?) -> Unit = { _, _, _ -> },
@@ -279,7 +280,7 @@ fun ProfileScreen(
                         username = accountUser.username,
                         onLoginClick = onOpenLogin
                     )
-                    AnonymousAuthOptions(onScanQr = onScanQr)
+                    AnonymousAuthOptions(onScanQr = onScanQr, onSiteAuth = onSiteAuth)
                 }
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -420,6 +421,29 @@ private fun LoggedInContent(
                     }
                 }
             }
+            // 扫码登录·出示端入口（对齐 FluxDO `_ProfileHeader`）：昵称区之后、右箭头之前，
+            // 一枚 32dp 圆底二维码图标。FluxDO 用的是 Symbols.qr_code_rounded，这里对应
+            // Icons.Rounded.QrCode2。
+            //
+            // 为什么单独给一份 clickable：外层没有整行点击（头像/昵称/右箭头各自绑 openProfileWeb），
+            // 所以这里是平级节点、不存在手势竞技场争抢——FluxDO 那边要在整行 GestureDetector 里
+            // 额外嵌一层内层手势才压得住冒泡，我们不需要。
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(colors.surfaceMuted)
+                    .clickable(onClick = onShowQrLogin),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.QrCode2,
+                    contentDescription = stringResource(R.string.auth_qr_show_entry),
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             FaIcon(
                 "chevron-right",
                 colors.textFaint,
@@ -483,28 +507,8 @@ private fun LoggedInContent(
 
     LdcEntryCard(state = ldc, onOpen = onOpenLdcCredit, onRetry = onRetryLdc)
 
-    // 扫码登录·出示端入口：把当前登录态递到另一台 JetDo。
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = CardGap)
-            .clip(RoundedCornerShape(CardRadius))
-            .background(colors.surfaceCard)
-            .clickable(onClick = onShowQrLogin)
-            .padding(horizontal = CardPadding, vertical = 14.dp)
-    ) {
-        FaIcon("camera", colors.ldAccent, 16.dp)
-        Text(
-            text = stringResource(R.string.auth_qr_show_entry),
-            fontSize = 15.sp,
-            color = colors.textPrimary,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp)
-        )
-        FaIcon("chevron-right", colors.textFaint, 12.dp)
-    }
+    // 扫码登录·出示端入口已上移到身份卡头部的二维码图标（对齐 FluxDO），这里不再重复给一行，
+    // 否则同一个弹窗会有两个入口。
 
     // 卡片 3:徽章
     Column(
@@ -908,13 +912,11 @@ private fun AnonymousContent(username: String, onLoginClick: () -> Unit) {
     }
 }
 
-// 未登录态下方的备用登录方式：浏览器授权（User API Key 跳板换 _t）+ 扫码登录（扫入端）。
+// 未登录态下方的备用登录方式：站点授权登录（App 内 WebView 承载授权页）+ 扫码登录（扫入端）。
 // 主入口仍是上方「立即登录」走站内 WebView 表单；这两条都不经过站内表单，故独立成卡。
 @Composable
-private fun AnonymousAuthOptions(onScanQr: () -> Unit) {
+private fun AnonymousAuthOptions(onScanQr: () -> Unit, onSiteAuth: () -> Unit) {
     val colors = jetdoColors
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.auth_other_methods),
@@ -928,23 +930,13 @@ private fun AnonymousAuthOptions(onScanQr: () -> Unit) {
                 .clip(RoundedCornerShape(CardRadius))
                 .background(colors.surfaceCard)
         ) {
-            // 浏览器授权：拉起系统浏览器完成授权，回程深链兑换 _t；成功与否由会话总线广播，
-            // 这里只负责发起（兑换后 Cookie 落在 WebView CookieManager，全局登录态自更新）。
+            // 站点授权登录：App 内 WebView 打开 /user-api-key/new，确认后深链回程兑换 _t；
+            // 成功与否由会话总线广播，这里只负责导航（兑换后 Cookie 落在全局 CookieManager）。
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        scope.launch {
-                            if (!BrowserAuthLoginFlow.start(context)) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.auth_browser_launch_failed),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    }
+                    .clickable(onClick = onSiteAuth)
                     .padding(horizontal = CardPadding, vertical = 14.dp)
             ) {
                 FaIcon("globe", colors.ldAccent, 16.dp)

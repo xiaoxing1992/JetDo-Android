@@ -84,6 +84,54 @@ class QrShareEnvelopeParseTest {
         assertEquals(true, envelope.body!!.contains("Just a moment"))
     }
 
+    /**
+     * 挑战信封必须能被判成 REQUIRED。
+     *
+     * 出码链路走 runRawScript，绕开了 ArkWebNetworkBridge 里带挑战判定的 convertEnvelope，
+     * 所以 QrLoginFlow 得自己判一次并广播 ChallengeEventBus —— 否则协调器收不到信号，
+     * 用户只能自己去点过盾（真机验证过：手动过盾后立刻就能出码，正是这一步没自动化的代价）。
+     * 判定的原料是信封里的 contentType/cfMitigated，缺了它们就只能靠 body 猜。
+     */
+    @Test
+    fun `cloudflare challenge envelope is detected as required`() {
+        val raw = """{"statusCode":403,"contentType":"text/html; charset=UTF-8","cfMitigated":"challenge","body":"<html dir=\"ltr\"><head><title>Just a moment...</title>","csrfSource":"session","csrfLength":64}"""
+        val envelope = QrLoginFlow.parseShareEnvelope(raw)
+        assertEquals("challenge", envelope.cfMitigated)
+        assertEquals("text/html; charset=UTF-8", envelope.contentType)
+        assertEquals(
+            com.jetdo.android.services.network.ChallengeState.REQUIRED,
+            com.jetdo.android.services.network.ChallengeDetector.detectChallenge(
+                envelope.statusCode ?: 0,
+                envelope.contentType.orEmpty(),
+                envelope.body.orEmpty(),
+                envelope.cfMitigated.orEmpty()
+            )
+        )
+    }
+
+    /** 正常出码的信封不能被误判成挑战（否则每次出码都会去踢一轮过盾）。 */
+    @Test
+    fun `successful share envelope is not a challenge`() {
+        val envelope = QrLoginFlow.parseShareEnvelope(successEnvelope)
+        assertEquals(
+            com.jetdo.android.services.network.ChallengeState.NONE,
+            com.jetdo.android.services.network.ChallengeDetector.detectChallenge(
+                envelope.statusCode ?: 0,
+                envelope.contentType.orEmpty(),
+                envelope.body.orEmpty(),
+                envelope.cfMitigated.orEmpty()
+            )
+        )
+    }
+
+    @Test
+    fun `challenge tag is a stable ascii marker`() {
+        val tag = QrLoginFlow.SHARE_KEY_CHALLENGE_TAG
+        assertEquals(true, tag.isNotBlank())
+        assertEquals(true, tag.all { it.code in 32..126 })
+        assertEquals(tag, tag.trim())
+    }
+
     @Test
     fun `share response parses redirect url`() {
         val response = QrLoginFlow.parseShareResponse("""{"redirect_url":"discourse://auth_redirect?a=1"}""")

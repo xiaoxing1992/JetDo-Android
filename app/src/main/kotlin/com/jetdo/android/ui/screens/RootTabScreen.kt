@@ -449,6 +449,8 @@ fun RootTabScreen(
                     },
                     // 未登录卡片下方的「扫码登录」→ 相机扫码页（压在根栈上）。
                     onScanQr = { navController.navigate(Routes.QR_SCAN) },
+                    // 未登录卡片下方的「站点授权登录」→ App 内 WebView 授权页（压在根栈上）。
+                    onSiteAuth = { navController.navigate(Routes.AUTH_WEB) },
                     // 最近活动行 → 原生详情页并定位到该动态所在楼层(对齐鸿蒙 ProfilePage.onOpenTopic)。
                     onOpenTopic = { topicId, title, postNumber ->
                         val parts = mutableListOf<String>()

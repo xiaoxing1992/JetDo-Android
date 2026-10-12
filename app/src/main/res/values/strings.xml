@@ -36,9 +36,11 @@
     <string name="about_website">官网 </string>
     <string name="action_browse_topics">浏览话题</string>
     <string name="auth_other_methods">其他登录方式</string>
-    <string name="auth_browser_entry">浏览器授权登录</string>
-    <string name="auth_browser_hint">拉起系统浏览器完成授权，返回后自动登录，全程无需输入密码</string>
-    <string name="auth_browser_launch_failed">打不开浏览器，请检查设备上的浏览器应用</string>
+    <string name="auth_browser_entry">站点授权登录</string>
+    <string name="auth_browser_hint">在 App 内打开站点授权页，确认后自动登录，无需输入密码</string>
+    <string name="auth_browser_web_title">授权登录</string>
+    <string name="auth_browser_finishing">正在完成登录…</string>
+    <string name="auth_browser_launch_failed">授权页打不开，请稍后重试</string>
     <string name="auth_redirect_invalid">授权回调解析失败，请重新授权</string>
     <string name="auth_redeem_failed">授权成功，但登录令牌兑换失败，请重试</string>
     <string name="auth_login_success">登录成功</string>
@@ -49,8 +51,21 @@
     <string name="auth_qr_camera_retry">重新授权</string>
     <string name="auth_qr_invalid">二维码不是 JetDo 登录码，请确认后再扫</string>
     <string name="auth_qr_expired">二维码已过期，请让对端重新生成</string>
+    <string name="auth_qr_unsupported">二维码版本不受支持，请升级 App 后再扫</string>
+    <string name="auth_qr_logging_in">正在完成登录…</string>
     <string name="auth_qr_show_entry">扫码登录到其他设备</string>
     <string name="auth_qr_show_title">出示登录二维码</string>
+    <!-- 出示端两段式流程：先看安全说明 → 点「生成登录二维码」→ 二次确认 → 才真的签发 key。
+         对齐 FluxDO 的 qr_login_sheet：key 一签发就落在账号上，不该由「点开入口」这个动作
+         顺带完成，必须由用户显式确认。 -->
+    <string name="auth_qr_show_security_warning">二维码含 User API Key 与一次性登录令牌，约 10 分钟内有效。请勿分享给他人，也不要在公共场合长时间展示。</string>
+    <string name="auth_qr_show_generate">生成登录二维码</string>
+    <string name="auth_qr_show_confirm_title">确认生成登录二维码？</string>
+    <string name="auth_qr_show_confirm_message">将为另一台设备创建一枚 User API Key 并生成二维码，对方扫码后即可登录你的账号。重新生成会使此前分享的二维码立即失效。请确认是本人操作，且周围没有他人窥视。</string>
+    <string name="auth_qr_show_confirm_action">确认生成</string>
+    <string name="auth_qr_show_account">账号：%1$s</string>
+    <string name="auth_qr_show_regenerate">重新生成</string>
+    <string name="auth_qr_show_expired">二维码已过期，点「重新生成」换一张</string>
     <string name="auth_qr_show_hint">用另一台设备上的 JetDo 扫这个码，即可登录同一账号</string>
     <string name="auth_qr_show_remaining">有效期 %1$s</string>
     <string name="auth_qr_show_consumed">已在另一台设备登录</string>
@@ -58,6 +73,7 @@
     <string name="auth_qr_show_failed">二维码生成失败，请稍后再试</string>
     <string name="auth_qr_show_failed_host">网络环境尚未就绪，请稍后重试</string>
     <string name="auth_qr_show_failed_timeout">网络超时，请检查网络后重试</string>
+    <string name="auth_qr_show_failed_challenge">网络环境需要验证，正在自动处理，稍后点「重试」即可</string>
     <string name="auth_qr_show_failed_reason">二维码生成失败：%1$s</string>
     <string name="auth_qr_retry">重试</string>
     <string name="announce_new_version">发现新版本</string>
@@ -100,6 +116,7 @@
     <string name="common_cannot_open_in_browser">当前页面地址无法用浏览器打开</string>
     <string name="common_clear">清空</string>
     <string name="common_close">关闭</string>
+    <string name="common_done">完成</string>
     <string name="common_collapse">收起</string>
     <string name="common_continue_loading">继续加载</string>
     <string name="common_copy_link">复制链接</string>

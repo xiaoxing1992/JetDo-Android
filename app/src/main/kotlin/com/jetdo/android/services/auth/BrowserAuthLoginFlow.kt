@@ -9,25 +9,25 @@ import com.jetdo.android.services.network.WebFetchScriptFactory
 import com.jetdo.android.services.session.LoginGate
 import com.jetdo.android.services.session.SessionChecker
 import com.jetdo.android.services.session.SessionEventBus
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import androidx.browser.customtabs.CustomTabsIntent
-import android.net.Uri
 import timber.log.Timber
 
 // ==========================================================================
-// 浏览器授权登录流程编排（对齐 FluxDO UserApiKeyLoginFlow）。
+// 站点授权登录流程编排（对齐 FluxDO UserApiKeyLoginFlow）。
 //
-// 发起：登录页按钮 → [start] 拉起系统浏览器（Custom Tabs）打开 /user-api-key/new。
-// 回程：授权后 302 到 discourse://auth_redirect，系统深链拉回 App，
-// MainActivity 分发到 [handleCallback]：
+// 发起：设置页授权入口 → 导航到 App 内 WebView 承载的授权页（BrowserAuthWebPage），
+// 由它调用 UserApiKeyLoginManager.buildAuthorizeUrl 打开 /user-api-key/new
+// —— 刻意不走 Custom Tabs：设备环境里外部浏览器没有 DoH、还会被厂商安全浏览策略拦，
+// 点「授权」直接 403 且深链永不回程（见 BrowserAuthWebPage 顶部注释）。
+// 回程：授权后 302 到 discourse://auth_redirect，App 内 WebView 的同名 scheme 钩子
+// 把整条 URL 交给 [handleCallback]；外部浏览器仍可用时，MainActivity 的深链分发同样
+// 会落到这里 —— 两条路共用同一个入口。
 // 1. 解密 payload、校验 nonce（重放的旧回调按 stale 静默忽略）
 // 2. 已有登录态：只是补授权 —— key 立即焚毁（scopes 无 write 是纯负债），toast 成功
 // 3. 无登录态：用随行 OTP 兑换 _t（POST /session/otp/{otp}，走宿主 WebView fetch
 //    —— CSRF/过盾/cookie 落库全部复用既有链路），复查会话翻 LoginGate，key 焚毁
 //
-// 全程无可见 WebView、不输密码；登录页开着时，既有 800ms `_t` cookie 轮询会自动
-// 检测到新会话并走 signalLoginSuccess 统一收口。
+// 全程不输密码；登录页开着时，既有 800ms `_t` cookie 轮询会自动检测到新会话并走
+// signalLoginSuccess 统一收口。
 // ==========================================================================
 
 private const val LOG_TAG = "[JetDo][BrowserAuth]"
@@ -47,27 +47,7 @@ object BrowserAuthLoginFlow {
 
     private var handling = false
 
-    /**
-     * 拉起系统浏览器打开授权页。返回是否成功拉起。
-     * RSA 密钥对首次生成在 Default 线程（可能数百毫秒）。
-     *
-     * 用 Custom Tabs 而不是 ACTION_VIEW external：Chrome 对已建立 App Links 关联的
-     * 域名会把 external 打开的链接直接弹回本 App（「浏览器一闪就跳回」）；Custom Tabs
-     * 在浏览器上下文内打开且共享 Chrome cookie，复用浏览器已有登录态（OAuth 标准做法）。
-     */
-    suspend fun start(context: Context): Boolean = withContext(Dispatchers.Main) {
-        runCatching {
-            val url = UserApiKeyLoginManager.buildAuthorizeUrl(context)
-            CustomTabsIntent.Builder()
-                .setShowTitle(true)
-                .build()
-                .launchUrl(context, Uri.parse(url))
-        }.onFailure {
-            Timber.w("%s launch browser failed msg=%s", LOG_TAG, it.message)
-        }.isSuccess
-    }
-
-    /** 深链回调入口（MainActivity onCreate/onNewIntent 分发）。主线程调用，内部挂起。 */
+    /** 深链回调入口（App 内 WebView 的 scheme 钩子 / MainActivity onCreate·onNewIntent）。 */
     suspend fun handleCallback(activityContext: Context, dataString: String?): BrowserAuthResult {
         if (handling) {
             Timber.i("%s callback reentry, ignore", LOG_TAG)

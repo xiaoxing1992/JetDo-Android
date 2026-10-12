@@ -111,8 +111,16 @@ object DeepLinkEventBus {
         return result
     }
 
+    /**
+     * 深链查询参数解码（表单语义：`+` = 空格 —— 参数由 [java.net.URLEncoder.encode] 产出）。
+     *
+     * ⚠️ 必须走 `decode(String, String)` 这个 API 1 就有的重载：
+     * `decode(String, Charset)` 是 **API 33** 才加的，在 API < 33 的机器上抛
+     * NoSuchMethodError，被下面的 runCatching 吞掉后静默返回未解码原串
+     * （同类坑已在 UserApiKeyCrypto 上真实发作过，见那里的 percentDecode 注释）。
+     */
     private fun decode(value: String): String =
-        runCatching { URLDecoder.decode(value, Charsets.UTF_8) }.getOrDefault(value)
+        runCatching { URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
 
     /** 单测用：清掉单例里跨用例残留的订阅者与积压。 */
     internal fun resetForTest() {

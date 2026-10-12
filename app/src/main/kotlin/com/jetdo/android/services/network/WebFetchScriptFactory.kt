@@ -199,8 +199,17 @@ object WebFetchScriptFactory {
 
     /**
      * 撤销 User API Key：POST /user-api-key/revoke。
-     * key 自证身份（User-Api-Key 头），**不需要 CSRF 也不需要会话**——浏览器授权
-     * 兑换成功后「用完即焚」走这里，此时 App 还没有会话，所以不能走 buildCsrfScript。
+     * key 自证身份（User-Api-Key 头），Rails 侧**不需要 CSRF 也不需要会话**——浏览器授权
+     * 兑换成功后「用完即焚」走这里，此时 App 还没登录，所以不能走 buildCsrfScript。
+     *
+     * ⚠️ 但 Cloudflare 侧需要 cookie：真机实测（CDP header/credentials 矩阵）——
+     * `credentials: 'omit'` 一律回 403 + `cf-mitigated: challenge`（Just a moment...）；
+     * 换成 `'include'` 后同一请求直接穿过，服务端回 Rails JSON
+     * `{"errors":["您没有权限查看请求的资源。"],"error_type":"invalid_access"}`
+     * （403 是因为实验用的是假 key，重点是**请求已到 Rails**）。
+     * "不依赖会话"是 Rails 的语义，不等于"不带 cookie"——带上是纯赚，CF 就认这个。
+     * 原先用 omit 导致焚毁静默失败：出示端轮询按 key 存活判断「已被扫」，
+     * key 烧不掉就一直显示"等待扫描"。
      */
     fun createUserApiKeyRevokeScript(key: String): String {
         val encodedKey = jsonString(key)
@@ -210,13 +219,15 @@ object WebFetchScriptFactory {
             const baseUrl = 'https://linux.do';
             fetch(baseUrl + '/user-api-key/revoke', {
               method: 'POST',
-              credentials: 'omit',
+              credentials: 'include',
               cache: 'no-store',
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                 'User-Api-Key': $encodedKey,
-                'X-Requested-With': 'XMLHttpRequest'
+                'X-Requested-With': 'XMLHttpRequest',
+                'Discourse-Present': 'true',
+                'Discourse-Logged-In': 'true'
               }
             }).then((response) => {
               response.text().then((body) => {
@@ -245,6 +256,14 @@ object WebFetchScriptFactory {
      * 必须带 Accept json + X-Requested-With——服务端对 XHR 返回 200 JSON
      * {redirect_url}；若按 HTML 协商会 302 到 discourse://，fetch 跟不动（scheme 不支持），
      * 那条路在 WebView 里走不通，只能指望 JSON 路径（FluxDO 同款约束）。
+     *
+     * ⚠️ Discourse-Present / Discourse-Logged-In 是本端点的**过盾必需品**，不是可选装饰：
+     * 真机实测（CDP 在宿主 WebView 里做 header 变体矩阵）——只带 Content-Type/Accept/
+     * X-CSRF-Token/X-Requested-With 时，Cloudflare 对 POST /user-api-key 一律回
+     * 403 + `cf-mitigated: challenge`（Just a moment... 挑战页，请求根本没到 Rails）；
+     * 补上这两个头后同一个请求直接穿过，服务端回 `["BAD CSRF"]`（text/plain）——
+     * 即已进 Rails 的 CSRF 校验。本文件其余 4 个写脚本一直带着它们，只有本脚本漏了，
+     * 表现就是"出码恒失败 403"，与是否登录、是否过盾都无关。
      */
     fun createUserApiKeyShareScript(formBody: String, referrer: String): String =
         buildCsrfScript(
@@ -255,7 +274,9 @@ object WebFetchScriptFactory {
                 "'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'",
                 "'Accept': 'application/json, text/javascript, */*; q=0.01'",
                 "'X-CSRF-Token': csrf",
-                "'X-Requested-With': 'XMLHttpRequest'"
+                "'X-Requested-With': 'XMLHttpRequest'",
+                "'Discourse-Present': 'true'",
+                "'Discourse-Logged-In': 'true'"
             ),
             prelude = "",
             bodyExpr = jsonString(formBody),
