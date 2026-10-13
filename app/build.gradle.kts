@@ -48,8 +48,8 @@ android {
         applicationId = "com.jetdo.android"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 1
+        versionName = "1.0.0"
         // 构建时间注入 BuildConfig：日志页顶部展示，用于确认设备上安装的是哪次构建。
         buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
 
