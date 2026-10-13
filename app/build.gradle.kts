@@ -1,4 +1,5 @@
 import java.time.LocalDateTime
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -24,6 +25,24 @@ kotlin {
 android {
     namespace = "com.jetdo.android"
     compileSdk = 37
+
+    // release 签名：从 local.properties 读（该文件不入库）。
+    // 密钥文件也不放仓库里，避免误提交；两样都齐才启用签名，缺了就退回未签名（不挡别人构建）。
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val keystoreFile = keystoreProps.getProperty("jetdo.release.storeFile")?.let { rootProject.file(it) }
+    signingConfigs {
+        if (keystoreFile != null && keystoreFile.exists()) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = keystoreProps.getProperty("jetdo.release.storePassword")
+                keyAlias = keystoreProps.getProperty("jetdo.release.keyAlias")
+                keyPassword = keystoreProps.getProperty("jetdo.release.keyPassword")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.jetdo.android"
@@ -51,6 +70,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // local.properties 配了密钥才签名；否则产出未签名包（构建不报错，装不上是预期）。
+            signingConfig = signingConfigs.findByName("release")
         }
         debug {
             isMinifyEnabled = false
