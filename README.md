@@ -2,9 +2,14 @@
 
 > 一个真诚、友善、团结、专业的 [LINUX DO](https://linux.do) 第三方 Android 原生客户端
 
-[![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-green)](https://developer.android.com/)
-[![Language](https://img.shields.io/badge/language-Kotlin-purple)](https://kotlinlang.org/)
-[![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-blue)](https://developer.android.com/jetpack/compose)
+[![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
+[![Language](https://img.shields.io/badge/language-Kotlin-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![MinSdk](https://img.shields.io/badge/minSdk-26-orange)](https://developer.android.com/about/versions/oreo)
+[![License](https://img.shields.io/github/license/xiaoxing1992/JetDo-Android?color=blue)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/xiaoxing1992/JetDo-Android?logo=github&color=yellow)](https://github.com/xiaoxing1992/JetDo-Android/stargazers)
+[![Issues](https://img.shields.io/github/issues/xiaoxing1992/JetDo-Android?color=red)](https://github.com/xiaoxing1992/JetDo-Android/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/xiaoxing1992/JetDo-Android/pulls)
 [![Community](https://img.shields.io/badge/LINUX%20DO-社区-ffb003)](https://linux.do)
 
 JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户端，基于 Jetpack Compose 从零编写。没有跨平台框架，没有妥协的渲染层——帖子里的一切都渲染成真正的原生视图。
