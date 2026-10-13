@@ -9,6 +9,10 @@
 
 JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户端，基于 Jetpack Compose 从零编写。没有跨平台框架，没有妥协的渲染层——帖子里的一切都渲染成真正的原生视图。
 
+## 下载
+
+<a href="https://github.com/xiaoxing1992/JetDo-Android/releases/latest"><img alt="下载 APK" src="https://img.shields.io/github/v/release/xiaoxing1992/JetDo-Android?style=for-the-badge&logo=github&label=%E4%B8%8B%E8%BD%BD%20APK" /></a>
+
 ## 应用预览
 
 | | | |
