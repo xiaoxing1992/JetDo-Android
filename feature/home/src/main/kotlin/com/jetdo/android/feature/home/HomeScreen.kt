@@ -36,13 +36,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
@@ -108,7 +104,6 @@ internal fun HomeScreen(
     onTopicClick: (Long, Int?) -> Unit,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
-    onDebugClick: () -> Unit,
     onComposeClick: () -> Unit,
     isWebViewReady: Boolean = true,
     // 「点分类/标签快速筛选」：开关开着时行上的徽章可点（由 HomeRoute 判定并处理）。
@@ -210,7 +205,6 @@ internal fun HomeScreen(
                 categoryName = state.categories.firstOrNull { it.id == state.query.categoryId }?.name,
                 onMenuClick = onMenuClick,
                 onSearchClick = onSearchClick,
-                onDebugClick = onDebugClick,
                 colors = colors
             )
         },
@@ -330,7 +324,6 @@ private fun HomeTitleBar(
     categoryName: String?,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
-    onDebugClick: () -> Unit,
     colors: HomeVisualTokens
 ) {
     val lead = query.summaryLead()
@@ -386,7 +379,7 @@ private fun HomeTitleBar(
                 }
             }
         }
-        HomeBarButton(onClick = onSearchClick, contentDescription = stringResource(R.string.search_title), endMargin = 4.dp) {
+        HomeBarButton(onClick = onSearchClick, contentDescription = stringResource(R.string.search_title), endMargin = 0.dp) {
             // 挂共享元素的是图标自身、不是外面 40dp 的圆底：目的端（搜索条）那侧
             // 没有圆底可对应，挂按钮会让整个圆一起飞过去。见 SharedSearchTransition。
             FaIcon(
@@ -403,14 +396,8 @@ private fun HomeTitleBar(
         // 顶栏再放一枚头像是同一入口的第二次重复；且它此前既 push 独立个人页、
         // 又和底栏「我的」指向同一个 ProfileScreen，两条路并存只会让人以为
         // 它们是两个不同的"我"。现在底栏 tab 是唯一入口，未登录态由它承载。
-        HomeBarButton(onClick = onDebugClick, contentDescription = stringResource(R.string.debug_share_log), endMargin = 0.dp) {
-            Icon(
-                imageVector = Icons.Filled.BugReport,
-                contentDescription = stringResource(R.string.debug_share_log),
-                tint = colors.textTertiary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        // 调试日志入口**也不在这里**：「设置 → 诊断日志」是它的正式入口，
+        // 顶栏再放一枚虫子图标属于跨页面的重复入口，故已移除（Routes.DEBUG_LOG 保留）。
     }
 }
 

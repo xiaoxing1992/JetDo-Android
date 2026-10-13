@@ -38,7 +38,6 @@ fun HomeFeatureScreen(
     isWebViewReady: Boolean,
     onTopicClick: (Long, Int?) -> Unit,
     onSearchClick: () -> Unit,
-    onDebugClick: () -> Unit,
     onComposeClick: () -> Unit,
     onMenuClick: () -> Unit,
     viewModel: com.jetdo.android.feature.home.HomeViewModel
@@ -74,7 +73,6 @@ fun HomeFeatureScreen(
         incomingTopicEvent = incomingTopicEvent.value,
         onTopicClick = onTopicClick,
         onSearchClick = onSearchClick,
-        onDebugClick = onDebugClick,
         onComposeClick = onComposeClick,
         onMenuClick = onMenuClick,
         viewModel = viewModel
