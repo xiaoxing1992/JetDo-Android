@@ -183,11 +183,37 @@ internal object BottomBarDefaults {
     const val CapsulePressedScale = 78f / 56f
 
     /**
-     * 选中胶囊宽度:固定尺寸、居中于槽位(上游是整槽宽,但 4 tab 时槽宽近 96dp,
-     * 胶囊拉成 1.76:1 的横条不像胶囊;77×54 ≈ doer 实测比例 1.43,观感更"胶囊")。
+     * 选中胶囊宽度 = 槽宽 × 本比例,再夹在 [CapsuleMinWidth, CapsuleMaxWidth] 之间。
+     *
+     * 早先是写死的 77dp,那是按 **4 tab** 调的:槽宽约 90dp 时 77dp 占 86%,
+     * 胶囊几乎顶满槽位、两端只留 6.5dp,选中第一个/最后一个贴边很好看。
+     * 底栏从 4 tab 收成 3 tab 后槽宽涨到约 120dp,而 77dp 这个**绝对值**没跟着变,
+     * 占槽比例掉到 64%、两端各空出 21.5dp —— 选中左右端 tab 时胶囊孤零零浮在槽中央,
+     * 离容器边一大截,就是"左右没那么好看"的来源。
+     * 改成按槽宽取比例后,tab 数变化时胶囊自动跟着缩放,不再依赖当时是几个 tab。
+     *
+     * 上限压住的是横条观感:54dp 高配 100dp 宽 ≈ 1.85:1,再宽就成"横条"不像腰圆。
      */
-    val CapsuleMaxWidth = 77.dp
+    val CapsuleSlotFillRatio = 0.80f
+
+    /** 胶囊宽度下限:窄屏 + 多 tab 时也别缩成一颗圆点。 */
+    val CapsuleMinWidth = 68.dp
+
+    /** 胶囊宽度上限(理由见 [CapsuleSlotFillRatio])。 */
+    val CapsuleMaxWidth = 100.dp
 }
+
+/**
+ * 选中胶囊宽度:按槽宽取比例,夹在上下限内,且不超出槽宽本身
+ * (两侧各留 [BottomBarDefaults.ContentPadding],与胶囊和容器边缘的间隙同源)。
+ *
+ * internal 而非 private:几何是纯函数,单测 ([BottomBarCapsuleWidthTest]) 直接钉住,
+ * 免得"改 tab 数 → 胶囊宽度没跟着变"这类回归只能靠肉眼看出来。
+ */
+internal fun capsuleWidthFor(slotWidth: Dp): Dp =
+    (slotWidth * BottomBarDefaults.CapsuleSlotFillRatio)
+        .coerceIn(BottomBarDefaults.CapsuleMinWidth, BottomBarDefaults.CapsuleMaxWidth)
+        .coerceAtMost(slotWidth - BottomBarDefaults.ContentPadding * 2)
 
 /**
  * 胶囊层的最终缩放 = 按压缩放 × 速度果冻(X 随速度拉伸、Y 压扁,±20% 钳制)。
@@ -305,7 +331,7 @@ fun JetDoBottomBar(
             .padding(bottom = BottomBarDefaults.ContainerBottomGap)
     ) {
         val slotWidth = maxWidth / tabCount
-        val capsuleWidth = minOf(BottomBarDefaults.CapsuleMaxWidth, slotWidth - BottomBarDefaults.ContentPadding * 2)
+        val capsuleWidth = capsuleWidthFor(slotWidth)
         val containerWidthPx = with(density) { maxWidth.toPx() }
 
         // 直绘方案用:胶囊当前压着的槽位,可见行在这个槽位不画图标、胶囊内画它的选中态。
@@ -339,8 +365,9 @@ fun JetDoBottomBar(
         }
 
         // 手势宿主:各层(容器 / 可见行 / 采样行 / 胶囊)的共同父节点。
-        // 拖拽手势必须挂在父节点上:胶囊只有 77dp 宽,手势挂它自身会让"槽位边缘起拖"
-        // 变成无效点击(实测踩过:落到新 tab 后再拖没反应);挂在容器层也不行 ——
+        // 拖拽手势必须挂在父节点上:胶囊只占槽宽的 CapsuleSlotFillRatio(约 96dp < 槽宽 120dp),
+        // 手势挂它自身会让"槽位边缘起拖"变成无效点击(实测踩过:落到新 tab 后再拖没反应);
+        // 挂在容器层也不行 ——
         // 容器与 tab 行是兄弟,Compose 命中上层兄弟后不再测试下层兄弟。
         // 挂父节点后,槽内任意位置都能起拖;纯点击(未过 slop)仍落到 tab 的 onClick。
         Box(
@@ -627,7 +654,7 @@ private fun SolidFallbackBottomBar(
             }
     ) {
         val slotWidth = maxWidth / tabCount
-        val capsuleWidth = minOf(77.dp, slotWidth - BottomBarDefaults.ContentPadding * 2)
+        val capsuleWidth = capsuleWidthFor(slotWidth)
         val targetX = slotWidth * selectedIndex.coerceIn(0, tabCount - 1) + (slotWidth - capsuleWidth) / 2
         val capsuleX by animateDpAsState(
             targetValue = targetX,
