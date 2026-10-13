@@ -7,7 +7,7 @@
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-blue)](https://developer.android.com/jetpack/compose)
 [![Community](https://img.shields.io/badge/LINUX%20DO-社区-ffb003)](https://linux.do)
 
-JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户端，基于 Jetpack Compose 从零编写，1:1 对齐 HarmonyOS 版本的功能与体验。没有跨平台框架，没有妥协的渲染层——帖子里的一切都渲染成真正的原生视图。
+JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户端，基于 Jetpack Compose 从零编写。没有跨平台框架，没有妥协的渲染层——帖子里的一切都渲染成真正的原生视图。
 
 ## 应用预览
 
@@ -54,7 +54,7 @@ JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户�
 
 ### 适配
 
-- Material3 主题（蓝灰配色对齐鸿蒙版）
+- Material3 主题（蓝灰配色）
 - 三态深色模式：跟随系统 / 强制浅色 / 强制深色（资源级 values-night 兜底）
 - 平板 / 折叠屏横屏双栏、竖屏单栏、桌面姿态自适应
 - DoH 自定义 DNS（内置优选服务器，支持增删、切换、测速）
