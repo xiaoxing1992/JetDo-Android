@@ -393,7 +393,6 @@ fun RootTabScreen(
                         navController.navigate("${Routes.TOPIC_DETAIL}/$topicId$targetArg")
                     },
                     onSearchClick = { navController.navigate(Routes.SEARCH) },
-                    onDebugClick = { navController.navigate(Routes.DEBUG_LOG) },
                     onComposeClick = {
                         if (ensureComposerAccess(context)) {
                             val arg = homeViewModel.composeCategoryId?.let { "?categoryId=$it" } ?: ""
