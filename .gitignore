@@ -30,6 +30,10 @@ app/src/main/assets/relay-config.json
 ## Logs
 *.log
 
+## Python（server/ 中继）
+__pycache__/
+*.py[cod]
+
 ## Local workspace artifacts（APK 分发临时目录、AI 工作目录、验证截图）
 /.tmp/
 /.workbuddy/
