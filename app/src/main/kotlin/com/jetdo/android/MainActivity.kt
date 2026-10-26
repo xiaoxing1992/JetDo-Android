@@ -250,7 +250,7 @@ class MainActivity : ComponentActivity() {
                         // 「闪屏停留 + 弹窗悬浮」在所有 API 上视觉一致，且触摸派发
                         // 不经过系统 starting window（真机踩过按钮无响应）。
                         // 模态：onDismissRequest 留空 = 点外部/Back 不关闭，必须二选一。
-                        // 同意前 Bugly 未初始化（无远程采集），这是闸门的全部意义。
+                        // 同意前 ACRA 未初始化（无远程上报），这是闸门的全部意义。
                         if (privacyConsentNeeded) {
                             Dialog(
                                 onDismissRequest = { /* 必须明确选择，不接受关闭 */ },
@@ -303,8 +303,8 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 TextButton(onClick = {
                                                     com.jetdo.android.services.compliance.PrivacyConsentStore.agree(this@MainActivity)
-                                                    (application as JetDoApplication).initCrashReportIfAllowed()
-                                                    Timber.i("[JetDo][MainActivity] privacy consent given, crash report enabled")
+                                                    (application as JetDoApplication).initCrashReportingIfAllowed()
+                                                    Timber.i("[JetDo][MainActivity] privacy consent given, crash reporting enabled")
                                                     privacyConsentNeeded = false
                                                 }) { Text(stringResource(R.string.privacy_consent_agree)) }
                                             }

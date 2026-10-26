@@ -5,8 +5,8 @@ import android.content.Context
 /**
  * 首启隐私同意状态（工信部合规：个人信息处理须在用户同意后进行）。
  *
- * 唯一被此闸门约束的是腾讯 Bugly 崩溃上报（远程采集）：
- * 未同意前 `JetDoApplication.initCrashReportIfAllowed()` 不装 SDK；
+ * 唯一被此闸门约束的是崩溃上报（ACRA → 自建 relay 的 /crash）：
+ * 未同意前 `JetDoApplication.initCrashReportingIfAllowed()` 不初始化 ACRA；
  * MainActivity 首启弹窗拿到同意后才初始化。
  *
  * [POLICY_VERSION] 对应 docs/publish/privacy-policy.md 的实质内容版本：
@@ -17,8 +17,12 @@ object PrivacyConsentStore {
     private const val PREFS_NAME = "privacy_consent"
     private const val KEY_AGREED_VERSION = "agreed_version"
 
-    /** 当前政策版本。历史：1 = 首版（含 Bugly 崩溃上报声明）。 */
-    const val POLICY_VERSION = 1
+    /**
+     * 当前政策版本。历史：
+     * - 1 = 首版（崩溃上报走腾讯 Bugly，数据出境到第三方）
+     * - 2 = 崩溃上报改走 ACRA + 自建服务器，不再有第三方接收方（实质变更，老用户重签）
+     */
+    const val POLICY_VERSION = 2
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

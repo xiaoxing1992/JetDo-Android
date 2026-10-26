@@ -9,6 +9,7 @@ import com.jetdo.android.core.designsystem.TopicListStyleStore
 import com.jetdo.android.feature.home.BadgeFilterPrefs
 import com.jetdo.android.services.announce.VersionAnnouncePrefs
 import com.jetdo.android.services.challenge.ChallengeShortcutPrefs
+import com.jetdo.android.services.compliance.PrivacyConsentStore
 import com.jetdo.android.services.topic.LotteryTipPrefs
 import com.jetdo.android.services.topic.TwoPageReadingPrefs
 import com.jetdo.android.services.realtime.RealtimePostsPrefs
@@ -20,7 +21,15 @@ import com.jetdo.android.services.network.DohManager
 import com.jetdo.android.services.network.DohService
 import com.jetdo.android.services.session.LoginGate
 import dagger.hilt.android.HiltAndroidApp
+import org.acra.ACRA
+import org.acra.ReportField
+import org.acra.config.httpSender
+import org.acra.config.limiter
+import org.acra.data.StringFormat
+import org.acra.ktx.initAcra
+import org.acra.sender.HttpSender
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
@@ -59,17 +68,16 @@ class JetDoApplication : Application(), SingletonImageLoader.Factory {
             // chrome://inspect 直接看 WebView(含 Turnstile iframe)的 console/network,排障用。
             android.webkit.WebView.setWebContentsDebuggingEnabled(true)
         }
+        // 崩溃上报（ACRA）：必须赶在本地日志链路**之前**初始化。
+        // UncaughtExceptionHandler 是「谁后装谁在外层」的链式结构，ACRA 先装就处于内层——
+        // 崩溃时 DebugLogStore / FileLoggerDaemon 先落盘，再把异常交给 ACRA 上报。
+        // 这样网络不通、服务器挂了都不影响本地现场保全。
+        // 合规闸门：未同意隐私政策前不装（见 initCrashReportingIfAllowed）。
+        initCrashReportingIfAllowed()
         DebugLogStore.install(this)
         // 必须排在 DebugLogStore.install 之后：崩溃钩子是「包装上一个 handler」的链式结构，
         // 谁后装谁在外层。文件日志先刷盘，再交给内存缓冲那条去写 debug_log.txt。
         FileLoggerDaemon.init(this)
-
-        // 崩溃上报（腾讯 Bugly，P2-26）：必须装在日志崩溃链**之后**——UncaughtExceptionHandler
-        // 是「谁后装谁在外层」的链式结构，Bugly 在最外层先拿到崩溃、上报后再交给
-        // DebugLogStore/FileLoggerDaemon 落盘，两端现场都保得住。
-        // 合规闸门：工信部要求个人信息处理须在用户同意隐私政策后进行——未同意首启
-        // 弹窗前这里不装 SDK，MainActivity 拿到同意后回调同一入口（幂等）。
-        initCrashReportIfAllowed()
 
         Timber.i("[JetDo][Startup] Application.onCreate() ts=%d", System.currentTimeMillis())
 
@@ -113,31 +121,97 @@ class JetDoApplication : Application(), SingletonImageLoader.Factory {
     }
 
     @Volatile
-    private var crashReportInitialized = false
+    private var crashReportingInitialized = false
 
     /**
-     * 初始化 Bugly（幂等）。已同意隐私政策的用户在 onCreate 直接装 SDK；
-     * 未同意的新装用户等 MainActivity 首启弹窗拿到同意后再调这里。
-     * AppId 目前是官方演示值（BuildConfig.BUGLY_APP_ID），正式启用前替换；
-     * isDevEnable 跟 BuildConfig.DEBUG：debug 包崩溃时弹提交确认窗，release 包静默上报。
+     * 初始化崩溃上报（ACRA，幂等）。
+     *
+     * 三个前置条件，任一不满足就静默跳过：
+     * 1. `BuildConfig.ACRA_URI` 非空 —— 端点由编译期从 local.properties 注入，
+     *    F-Droid 构建机没有这个文件，产物自然不带任何远程上报。
+     * 2. 用户已同意隐私政策 —— 工信部要求个人信息处理须在同意后进行；未同意的新装
+     *    用户由 MainActivity 首启弹窗拿到同意后回调这里（幂等，重复调用无害）。
+     * 3. 尚未初始化过。
+     *
+     * 上报内容由下面的 reportContent 白名单显式限定：设备环境 + 堆栈 + 本进程 logcat 尾部。
+     * **不能依赖 ACRA 的默认字段集**——默认会带 SHARED_PREFERENCES / USER_EMAIL /
+     * INSTALLATION_ID / SETTINGS_SECURE，其中 SHARED_PREFERENCES 会把 app_settings 等
+     * prefs 文件整份打进去（登录态、DoH 配置都在里面），与隐私政策「不含账号与浏览记录」
+     * 的表述直接冲突，也会被 F-Droid 判为 Tracking。
      */
-    fun initCrashReportIfAllowed() {
-        if (crashReportInitialized) return
-        if (com.jetdo.android.services.compliance.PrivacyConsentStore.needsConsent(this)) {
-            Timber.i("[JetDo][Startup] Bugly deferred: privacy consent not given yet")
+    fun initCrashReportingIfAllowed() {
+        if (crashReportingInitialized) return
+        val endpoint = BuildConfig.ACRA_URI
+        if (endpoint.isBlank()) {
+            Timber.i("[JetDo][Startup] ACRA skipped: no endpoint configured in this build")
+            return
+        }
+        if (PrivacyConsentStore.needsConsent(this)) {
+            Timber.i("[JetDo][Startup] ACRA deferred: privacy consent not given yet")
             return
         }
         runCatching {
-            com.tencent.bugly.crashreport.CrashReport.initCrashReport(
-                this,
-                BuildConfig.BUGLY_APP_ID,
-                BuildConfig.DEBUG,
-            )
+            ACRA.DEV_LOGGING = BuildConfig.DEBUG
+            initAcra {
+                buildConfigClass = BuildConfig::class.java
+                reportFormat = StringFormat.JSON
+                // 显式白名单 = 隐私政策里声明的那几项，一项不多。
+                // 刻意排除：SHARED_PREFERENCES（含登录态）、SETTINGS_SECURE/GLOBAL（系统配置）、
+                // DEVICE_ID / INSTALLATION_ID（设备标识）、USER_EMAIL、USER_COMMENT、
+                // EVENTSLOG / RADIOLOG（系统日志）。
+                // LOGCAT 保留，但 ACRA 默认 logcatFilterByPid = true，只取本进程日志。
+                reportContent = listOf(
+                    ReportField.REPORT_ID,
+                    ReportField.APP_VERSION_CODE,
+                    ReportField.APP_VERSION_NAME,
+                    ReportField.PACKAGE_NAME,
+                    ReportField.BUILD_CONFIG,
+                    ReportField.STACK_TRACE,
+                    // 设备环境
+                    ReportField.PHONE_MODEL,
+                    ReportField.BRAND,
+                    ReportField.PRODUCT,
+                    ReportField.ANDROID_VERSION,
+                    ReportField.BUILD,
+                    ReportField.TOTAL_MEM_SIZE,
+                    ReportField.AVAILABLE_MEM_SIZE,
+                    ReportField.ENVIRONMENT,
+                    ReportField.DEVICE_FEATURES,
+                    // 崩溃现场
+                    ReportField.DISPLAY,
+                    ReportField.INITIAL_CONFIGURATION,
+                    ReportField.CRASH_CONFIGURATION,
+                    ReportField.LOGCAT,
+                    ReportField.USER_APP_START_DATE,
+                    ReportField.USER_CRASH_DATE,
+                    ReportField.CUSTOM_DATA,
+                )
+                httpSender {
+                    uri = endpoint
+                    httpMethod = HttpSender.Method.POST
+                    connectionTimeout = 8_000
+                    socketTimeout = 15_000
+                    // 报告含 logcat 尾部时可达数百 KB，压缩后通常 < 30 KB
+                    compress = true
+                }
+                limiter {
+                    // 单机每天最多 20 条 —— 客户端礼貌，也是服务器磁盘的第一道闸。
+                    // 崩溃循环（一启动就炸）时单次会话能触发几十次上报，
+                    // 没有这层限流，几分钟就能把服务器的 100MB 配额顶满。
+                    // 注意 ACRA 5.8+ 的 limiter 用「周期 + 总体上限」而非旧的
+                    // numberOfReportsPerDay（后者已不存在）。
+                    period = 1
+                    periodUnit = TimeUnit.DAYS
+                    overallLimit = 20
+                    // 同一堆栈只加重叠计数，不无限累计新上报
+                    stacktraceLimit = 5
+                }
+            }
         }
             .onSuccess {
-                crashReportInitialized = true
-                Timber.i("[JetDo][Startup] Bugly initialized appId=%s", BuildConfig.BUGLY_APP_ID)
+                crashReportingInitialized = true
+                Timber.i("[JetDo][Startup] ACRA initialized -> %s", endpoint)
             }
-            .onFailure { Timber.e(it, "[JetDo][Startup] Bugly init failed") }
+            .onFailure { Timber.e(it, "[JetDo][Startup] ACRA init failed") }
     }
 }

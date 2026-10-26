@@ -651,7 +651,7 @@
     <string name="push_channel_desc">Replies, mentions, likes and other community notifications</string>
     <string name="poll_named">Poll · %1$s</string>
     <string name="privacy_consent_title">Welcome to JetDo</string>
-    <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· When the app crashes, crash stacks and device environment info are reported via Tencent Bugly (no account or browsing data) for bug fixing only — this is enabled only after you agree.\n· Uninstalling the app deletes all local data.</string>
+    <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· When the app crashes, crash stacks and device environment info are sent to a server operated by the app developer (no third party, no account or browsing data) for bug fixing only — this is enabled only after you agree.\n· Uninstalling the app deletes all local data.</string>
     <string name="privacy_consent_agree">Agree and continue</string>
     <string name="privacy_consent_decline">Decline</string>
     <string name="privacy_consent_exit_title">Exit the app?</string>

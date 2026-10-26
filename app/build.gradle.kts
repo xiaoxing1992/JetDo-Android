@@ -26,20 +26,21 @@ android {
     namespace = "com.jetdo.android"
     compileSdk = 37
 
-    // release 签名：从 local.properties 读（该文件不入库）。
-    // 密钥文件也不放仓库里，避免误提交；两样都齐才启用签名，缺了就退回未签名（不挡别人构建）。
-    val keystoreProps = Properties().apply {
+    // 本地配置：签名密钥 + 崩溃上报端点，都从 local.properties 读（该文件不入库）。
+    // 缺了任意一项都不挡构建——密钥缺失产出未签名包，上报端点缺失只是关掉崩溃上报，
+    // F-Droid 构建机没有这个文件，正好得到「不带任何远程上报」的合规产物。
+    val localProps = Properties().apply {
         val f = rootProject.file("local.properties")
         if (f.exists()) f.inputStream().use { load(it) }
     }
-    val keystoreFile = keystoreProps.getProperty("jetdo.release.storeFile")?.let { rootProject.file(it) }
+    val keystoreFile = localProps.getProperty("jetdo.release.storeFile")?.let { rootProject.file(it) }
     signingConfigs {
         if (keystoreFile != null && keystoreFile.exists()) {
             create("release") {
                 storeFile = keystoreFile
-                storePassword = keystoreProps.getProperty("jetdo.release.storePassword")
-                keyAlias = keystoreProps.getProperty("jetdo.release.keyAlias")
-                keyPassword = keystoreProps.getProperty("jetdo.release.keyPassword")
+                storePassword = localProps.getProperty("jetdo.release.storePassword")
+                keyAlias = localProps.getProperty("jetdo.release.keyAlias")
+                keyPassword = localProps.getProperty("jetdo.release.keyPassword")
             }
         }
     }
@@ -54,9 +55,12 @@ android {
         buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // 腾讯 Bugly 崩溃上报 AppId（P2-26）。当前是官方文档演示 AppId，仅供 SDK 链路联调；
-        // ⚠️ 正式启用前到 bugly.qq.com 创建产品后替换，并在隐私政策中如实声明。
-        buildConfigField("String", "BUGLY_APP_ID", "\"900001573\"")
+        // 崩溃上报端点（ACRA → server/relay.py 的 POST /crash）。
+        // 取自 local.properties 的 jetdo.acra.uri；未配置时为空串，
+        // 运行时据 BuildConfig.ACRA_URI 是否为空决定要不要初始化 ACRA——
+        // F-Droid 构建机没有 local.properties，自然得到一个不做远程上报的产物。
+        val acraUri = localProps.getProperty("jetdo.acra.uri").orEmpty()
+        buildConfigField("String", "ACRA_URI", "\"$acraUri\"")
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -201,8 +205,11 @@ dependencies {
     // Timber
     implementation(libs.timber)
 
-    // Bugly 崩溃上报
-    implementation(libs.bugly.crashreport)
+    // 崩溃上报（ACRA，Apache-2.0）。替代原腾讯 Bugly：闭源 SDK 不被 F-Droid 接受，
+    // 且 Bugly 会把堆栈与设备信息传回腾讯服务器，而 ACRA 只发到自建 relay。
+    implementation(libs.acra.core)
+    implementation(libs.acra.http)
+    implementation(libs.acra.limiter)
 
     // Testing
     testImplementation(libs.junit)

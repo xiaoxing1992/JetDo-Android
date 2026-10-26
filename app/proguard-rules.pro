@@ -49,7 +49,11 @@
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
 
-# Bugly 崩溃上报
--keep class com.tencent.bugly.** { *; }
--keepclassmembers class com.tencent.bugly.** { *; }
--dontwarn com.tencent.bugly.**
+# ACRA 崩溃上报
+# ACRA 靠反射实例化 plugin builder 与 ReportField，R8 全模式下会被裁掉。
+# 官方建议保留 plugin 包与配置构建器；报告字段枚举也要留（序列化时按名字取值）。
+-keep class org.acra.** { *; }
+-keepclassmembers class org.acra.** { *; }
+-dontwarn org.acra.**
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

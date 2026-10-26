@@ -4,9 +4,16 @@
 # Location of the Android SDK. This is usually set automatically by Android Studio.
 sdk.dir=/path/to/Android/sdk
 
-# Signing configuration (for release builds)
+# ===== Release 签名（可选）=====
+# 不配也能构建：release 会产出未签名包，debug 不受影响。
 # Generate keystore with: keytool -genkey -v -keystore jetdo.jks -keyalg RSA -keysize 2048 -validity 10000 -alias jetdo
-KEYSTORE_FILE=/path/to/jetdo.jks
-KEYSTORE_PASSWORD=your_keystore_password
-KEY_ALIAS=jetdo
-KEY_PASSWORD=your_key_password
+jetdo.release.storeFile=/path/to/jetdo.jks
+jetdo.release.storePassword=your_keystore_password
+jetdo.release.keyAlias=jetdo
+jetdo.release.keyPassword=your_key_password
+
+# ===== 崩溃上报端点（可选）=====
+# ACRA 把崩溃报告 POST 到这里，对应 server/relay.py 的 POST /crash。
+# 不配则 BuildConfig.ACRA_URI 为空串，客户端整体跳过 ACRA 初始化 —— 
+# F-Droid 构建机没有本文件，正是靠这一点得到「不带远程上报」的合规产物。
+jetdo.acra.uri=https://your-relay.example.com/crash

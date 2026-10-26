@@ -1,6 +1,6 @@
 [versions]
 tbs = "44286"
-bugly = "4.1.9.3"
+acra = "5.13.1"
 androidx-browser = "1.8.0"
 androidx-webkit = "1.14.0"
 zxing-core = "3.5.3"
@@ -65,8 +65,13 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.r
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.4.0" }
 hilt-lifecycle-viewmodel-compose = { group = "androidx.hilt", name = "hilt-lifecycle-viewmodel-compose", version = "1.4.0" }
 tbssdk = { group = "com.tencent.tbs", name = "tbssdk", version.ref = "tbs" }
-# 崩溃上报（mavenCentral 最新 plain crashreport；4.x 起 jar+so 合一，无需 nativecrashreport）
-bugly-crashreport = { group = "com.tencent.bugly", name = "crashreport", version.ref = "bugly" }
+# 崩溃上报：ACRA（Apache-2.0，Maven Central）。替代原先的腾讯 Bugly（闭源，F-Droid 不收）。
+# 注意：Kotlin DSL（initAcra { }）从 5.8 起已并入 acra-core，独立的 acra-core-ktx
+# 停在 5.7.0 不再发布 —— 不要再加那个坐标，会 404。
+# http 是上报通道；limiter 限制单机上报频率，避免一台设备反复崩溃把服务器打满。
+acra-core = { group = "ch.acra", name = "acra-core", version.ref = "acra" }
+acra-http = { group = "ch.acra", name = "acra-http", version.ref = "acra" }
+acra-limiter = { group = "ch.acra", name = "acra-limiter", version.ref = "acra" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "androidx-browser" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "androidx-webkit" }
 # 扫码登录：zxing core 纯 Java 生成/解码（无 GMS 依赖，国产机可用）；CameraX 只取预览与逐帧分析
