@@ -1,6 +1,6 @@
 # 首页 UI 对齐鸿蒙版 —— 进度
 
-对照基准：`/Users/tongtong/JetDo` 的 `views/pages/HomePage.ets`（2217 行）
+对照基准：`~/JetDo` 的 `views/pages/HomePage.ets`（2217 行）
 与 `views/components/TopicListItem.ets` 及其徽章组件。
 
 > 上一版文档声称「1/8 任务完成」，与代码实际状态不符，已按 2026-09-02 的实测重写。

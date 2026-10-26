@@ -1,5 +1,12 @@
 # 部署中继（server/relay.py）
 
+> 本文中的 `<server-ip>` / `<relay-host>` / `<existing-host>` / `<nginx-container>` / `<project>`
+> 都是占位符 —— 换成你自己的服务器与域名。真实值只留在本地，不进仓库。
+>
+> 推荐：**中继域名单独用一个 zone**，不要和你有管理面板的域名同域。
+> 客户端 APK 里必然带着中继域名（`BuildConfig.ACRA_URI` 可以被 `strings` 提取），
+> 同域兄弟子域会被顺带枚举到；分开之后，泄漏一个域不会牵出后台。
+
 先判一件事：**这台机器的 80/443 是谁在听。**
 
 ```bash
@@ -11,7 +18,7 @@ sudo ss -lntp | grep -E ':(80|443)\b'
 | `nginx: master process /usr/sbin/nginx` | **A**：`deploy.sh` 一把梭 |
 | `docker-proxy` / 容器里的 nginx | **B**：配置必须进容器，见下 |
 
-`<existing-host>` 那台腾讯云（<server-ip>）属于 **B**：443 由 `<nginx-container>`
+`<existing-host>` 那台腾讯云（`<server-ip>`）属于 **B**：443 由 `<nginx-container>`
 容器占着，宿主机的 `nginx.service` 是 inactive。
 
 ---
@@ -87,6 +94,8 @@ sudo certbot certonly --webroot -w /opt/<project>/deploy/certbot/www \
 sudo docker cp docker-nginx/jetdo-relay.conf.template /tmp/jetdo-relay.conf
 # 把 ${DOLLAR} 还原成 $（容器 env 里 DOLLAR=$）
 sudo sed -i 's/\${DOLLAR}/$/g' /tmp/jetdo-relay.conf
+# 填自己的域名
+sudo sed -i 's/__RELAY_HOST__/<relay-host>/g' /tmp/jetdo-relay.conf
 sudo docker cp /tmp/jetdo-relay.conf <nginx-container>:/etc/nginx/conf.d/jetdo-relay.conf
 sudo docker exec <nginx-container> nginx -t
 sudo docker exec <nginx-container> nginx -s reload

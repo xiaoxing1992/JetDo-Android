@@ -163,7 +163,7 @@
 # ── 结构对比 ──
 ls entry/src/main/ets/services/                    # 鸿蒙 25 子域
 ls app/src/main/kotlin/com/jetdo/android/services/ # Android 20 + core/data 2 + feature/home 1
-ls /Users/tongtong/ArkDO/entry/src/main/ets/views/pages/ | wc -l   # 28 页
+ls ~/ArkDO/entry/src/main/ets/views/pages/ | wc -l   # 28 页
 
 # ── 判据 D：路由常量 vs 注册 ──
 rg -n "composable\(Routes|Routes\.CF_CHALLENGE|Routes\.LOGIN" -g '*.kt'   # 只命中定义处 = 悬空

@@ -5,7 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * 鸿蒙版语义色 token，逐条对齐 /Users/tongtong/JetDo 的 resources/{base,dark}/element/color.json。
+ * 鸿蒙版语义色 token，逐条对齐 ~/JetDo 的 resources/{base,dark}/element/color.json。
  *
  * 为什么不直接塞进 Material 的 ColorScheme：鸿蒙这套是语义命名（text_body / surface_muted /
  * border / ld_accent…），和 M3 的 onSurface / surfaceVariant / outline 不是一一对应关系。

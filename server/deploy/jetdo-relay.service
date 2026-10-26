@@ -11,7 +11,7 @@ Group=jetdo
 WorkingDirectory=/opt/jetdo-relay
 EnvironmentFile=/opt/jetdo-relay/.env
 
-# 端口 18080，**不要改成 8080**：这台机器上 <existing-host> 的 nginx 反代目标写着
+# 端口 18080，**不要改成 8080**：这台机器上已有站点的 nginx 反代目标写着
 # 127.0.0.1:8080（那个上游目前是死的，返回 {"code":50000,"msg":"服务异常"}）。
 # 中继一旦占了 8080，会顺带接管那个站点。
 #

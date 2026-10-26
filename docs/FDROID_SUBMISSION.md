@@ -1,7 +1,7 @@
 # JetDo 上架 F-Droid 差距分析
 
 > 对照 https://f-droid.org/zh_Hans/docs/Submitting_to_F-Droid_Quick_Start_Guide/
-> 审计对象：`/Users/tongtong/JetDo-Android`（分支 `feat/migrate-vertical-slice`，HEAD `683f2f8`）
+> 审计对象：本仓库（分支 `feat/migrate-vertical-slice`，HEAD `683f2f8`）
 > 审计日期：2026-10-26
 
 ## 结论

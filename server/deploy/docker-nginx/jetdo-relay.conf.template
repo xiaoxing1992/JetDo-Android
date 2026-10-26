@@ -5,13 +5,14 @@
 #
 # 用法见同目录 ../README.md 的 B 路径。关键点：
 #   1. ${DOLLAR} 是该容器的转义约定（容器 env 里有 DOLLAR=$），用于输出字面 $
-#   2. 反代目标写**宿主网关 IP**（本机 172.19.0.1），不是 127.0.0.1
-#   3. X-Forwarded-For 用 $remote_addr **覆盖**而不是 $proxy_add_x_forwarded_for 追加，
+#   2. __RELAY_HOST__ 是占位符，docker cp 前先 sed 成自己的域名
+#   3. 反代目标写**宿主网关 IP**（本机 172.19.0.1），不是 127.0.0.1
+#   4. X-Forwarded-For 用 $remote_addr **覆盖**而不是 $proxy_add_x_forwarded_for 追加，
 #      否则客户端自带一个 XFF 就能伪造来源 IP、绕过限流
 
 server {
     listen 80;
-    server_name <relay-host>;
+    server_name __RELAY_HOST__;
 
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
     location / { return 301 https://${DOLLAR}host${DOLLAR}request_uri; }
@@ -20,10 +21,10 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name <relay-host>;
+    server_name __RELAY_HOST__;
 
-    ssl_certificate     /etc/letsencrypt/live/<relay-host>/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/<relay-host>/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/__RELAY_HOST__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__RELAY_HOST__/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:jetdo_ssl:10m;
 
