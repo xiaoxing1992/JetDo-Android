@@ -1,14 +1,21 @@
-# 推送中继服务器
+# JetDo 自建服务器
 
-JetDo Android 的系统推送基于 **Web Push 标准（RFC 8291）** + **自建中继** + **Firebase Cloud Messaging (FCM)**。
+服务于 JetDo Android 的两条独立链路：
+
+1. **系统推送**：**Web Push 标准（RFC 8291）** + 自建中继 + **Firebase Cloud Messaging (FCM)**
+2. **崩溃上报**：ACRA `httpSender` → `POST /crash`（本地磁盘，有配额）
+
+两条链路互不依赖：推送的 VAPID 密钥或 Firebase 凭证缺失时，服务仍会启动，只是推送失效，
+崩溃上报照常工作。
 
 ## 架构
 
 ```
-LINUX DO ──Web Push（加密）──▶ 自建中继 ──解密──▶ FCM ──▶ Android 设备
+推送：LINUX DO ──Web Push（加密）──▶ 自建中继 ──解密──▶ FCM ──▶ Android 设备
+崩溃：JetDo + ACRA ──gzip JSON──▶ 自建中继 /crash ──▶ ./crashes/*.json（100MB 上限）
 ```
 
-**为什么需要中继？**
+**推送为什么需要中继？**
 
 1. Discourse 的 Web Push 订阅需要提供 `endpoint`（接收推送的 URL）
 2. Android 原生无法直接接收 Web Push（只有浏览器支持）
@@ -58,15 +65,45 @@ PORT=8080
 ALLOWED_ORIGINS=https://linux.do
 ```
 
+崩溃上报相关（全部有默认值，不配也能跑）：
+
+```bash
+# 报告存放目录
+CRASH_DIR=./crashes
+# 磁盘硬上限。超过就批量淘汰最旧的，删到 85% 为止
+CRASH_MAX_BYTES=104857600          # 100 MB
+# 单份报告上限（解压后），超了返回 413
+CRASH_MAX_REPORT_BYTES=2097152     # 2 MB
+# 每 IP 每分钟上报数上限，0 表示关闭
+CRASH_RATE_PER_MIN=30
+```
+
 ### 5. 启动中继
+
+开发机直接跑：
 
 ```bash
 python relay.py
 ```
 
-**生产环境建议使用 systemd 或 Docker**
+**生产环境用一键部署脚本**（Debian/Ubuntu + nginx，自动装 systemd unit、证书、反代）：
+
+```bash
+sudo bash deploy/deploy.sh relay.example.com
+```
+
+它只做加法：新增 `/opt/jetdo-relay`、一个 systemd unit、一个 `conf.d/jetdo-relay.conf`，
+不动任何已有站点，重复执行安全。域名 A 记录与安全组需要提前配好。
+
+> 生产务必走 `uvicorn --proxy-headers --forwarded-allow-ips=127.0.0.1`（脚本里的 unit 已包含）。
+> 否则 `request.client.host` 恒为 `127.0.0.1`，「每 IP 每分钟 N 条」会退化成一个全局桶，
+> 一台设备崩溃循环就能把所有人的上报 429 掉。
+>
+> nginx 侧还要注意 `client_max_body_size`：默认 1m，会在 ACRA 的报告到达 relay 之前就 413 掉。
 
 ### 6. 配置客户端
+
+推送中继（可选，崩溃上报不需要）：
 
 将中继地址和公钥填入 `app/src/main/assets/relay-config.json`：
 
@@ -76,6 +113,15 @@ python relay.py
   "relay_public_key": "从 vapid_public.pem 读取的 Base64 编码公钥"
 }
 ```
+
+崩溃上报：在项目 `local.properties` 里填端点，构建时写入 `BuildConfig.ACRA_URI`：
+
+```properties
+jetdo.acra.uri=https://relay.example.com/crash
+```
+
+留空则**完全跳过 ACRA 初始化**——F-Droid 构建机上没有 `local.properties`，
+拿到的就是不联网上报的产物。
 
 ## API 接口
 
@@ -131,6 +177,101 @@ python relay.py
   "fcm_token": "设备 FCM Token"
 }
 ```
+
+### POST /crash
+
+接收 ACRA 崩溃报告（客户端 `httpSender`）。默认 gzip + JSON，服务端不做格式强耦合——
+能解析成 JSON 就内嵌到信封里，解析不了就存原文。
+
+**请求体：** ACRA 报告，`Content-Encoding: gzip` 可选
+
+**响应：**
+
+```json
+{
+  "status": "ok",
+  "file": "crash-20261026T065411-5e3baba3.json",
+  "size": 18422,
+  "evicted": 0,
+  "total_bytes": 5242880,
+  "total_files": 51,
+  "max_bytes": 104857600
+}
+```
+
+**状态码：**
+
+| 码 | 含义 |
+|---|---|
+| 200 | 已落盘 |
+| 400 | 空体，或 Content-Encoding 解不开 |
+| 413 | 单份报告超过 `CRASH_MAX_REPORT_BYTES`，或超过配额的 1/2 |
+| 429 | 该 IP 超过 `CRASH_RATE_PER_MIN` |
+
+**磁盘保护是三层叠加的：**
+
+1. **每 IP 每分钟限流**（`RateLimiter`，滑动窗口）——崩溃循环时一台设备一分钟能发几十条，
+   客户端 ACRA 的 `limiter` 只是礼貌，服务端这份才是硬约束。
+2. **单份大小上限** —— 且不超过配额的 1/2。这条不只是防大包：单份报告若大于淘汰目标，
+   会触发「为了腾空间把其他报告全删掉」的极端情况，所以从入口就拒掉。
+3. **总量配额 + 批量淘汰** —— 见下。
+
+### GET /crash/stats
+
+查看占用情况，用来确认配额和淘汰是否按预期工作。
+
+```json
+{
+  "files": 51,
+  "total_bytes": 5242880,
+  "max_bytes": 104857600,
+  "trim_target_bytes": 89128960,
+  "usage_ratio": 0.05,
+  "oldest": "crash-20261020T110203-ab12cd34.json",
+  "evicted_since_start": 0
+}
+```
+
+## 崩溃报告的磁盘策略
+
+淘汰逻辑在 `crash_store.py`，不依赖任何第三方库。
+
+**为什么不用数据库**：崩溃报告是「一次写入、偶尔翻阅、按时间淘汰」的日志型数据。
+放文件系统里，出问题时 `ls` / `grep` / `scp` 直接拿走，不用先把服务跑起来查库。
+几千份以内没有索引不是问题。
+
+**弛豫区间**：配额 100MB，但淘汰目标是 85MB。
+
+```
+写入直到 100MB ──▶ 触发淘汰 ──▶ 批量删最旧的直到 ≤85MB ──▶ 再攒 15MB 才触发下一次
+```
+
+没有这个区间的话，配额一满就会变成「每来一份新报告都要删一批」，淘汰从例外变成常态，
+每次写入都附带一次 IO 风暴。
+
+**批量删**：每轮删掉当前文件数的 10%（至少 1 个），而不是一份一份 unlink。
+1000 份报告时一轮删 100 份。
+
+**永远不淘汰最新那份**：循环带 `len(entries) > 1` 的硬保护。
+否则单份报告一旦大于淘汰目标，循环会把目录删空——那不是腾空间，是把现场全丢了。
+
+进程重启会重新扫描目录重建索引，配额照样生效（启动时若已超限会先纠一次）。
+
+## 客户端配置崩溃上报
+
+崩溃上报端点在构建期从 `local.properties` 注入（该文件不入库）：
+
+```properties
+# local.properties
+jetdo.acra.uri=https://your-relay-server.com/crash
+```
+
+不配这一行 → `BuildConfig.ACRA_URI` 为空串 → 客户端整体跳过 ACRA 初始化，
+产物不带任何远程上报。F-Droid 构建机没有 `local.properties`，正是靠这一点
+天然得到合规产物。
+
+代码见 `JetDoApplication.initCrashReportingIfAllowed()`：端点为空、用户未同意隐私政策、
+已初始化过——三个条件任一命中就静默跳过。
 
 ## 安全注意事项
 

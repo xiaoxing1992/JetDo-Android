@@ -1,0 +1,49 @@
+[Unit]
+Description=JetDo relay (push + crash report sink)
+Documentation=https://github.com/xiaoxing1992/JetDo-Android
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetdo
+Group=jetdo
+WorkingDirectory=/opt/jetdo-relay
+EnvironmentFile=/opt/jetdo-relay/.env
+
+# 端口 18080，**不要改成 8080**：这台机器上 <existing-host> 的 nginx 反代目标写着
+# 127.0.0.1:8080（那个上游目前是死的，返回 {"code":50000,"msg":"服务异常"}）。
+# 中继一旦占了 8080，会顺带接管那个站点。
+#
+# 80/443 属于 Docker 容器 <nginx-container>（bridge 网络 <project>，
+# 网关 172.19.0.1），容器访问宿主要走网关 IP，所以这里必须监听 0.0.0.0 而不是 127.0.0.1。
+# 对外暴露由 ufw 兜住：18080 不在 ufw allow 列表里，公网进不来。
+#
+# --forwarded-allow-ips 为什么是 `*`：
+# uvicorn 0.27 的 ProxyHeadersMiddleware 只做**精确字符串匹配**，不支持 CIDR，
+# 写 172.19.0.0/16 不会命中容器 IP，X-Forwarded-For 会被忽略，
+# 于是 request.client.host 全是容器 IP，限流退化成全局桶。
+# 安全性由两层兜住：① ufw 只放行 br-<netid> 进 18080，公网进不来；
+# ② nginx 侧用 `X-Forwarded-For $remote_addr` **覆盖**而非追加，客户端伪造不了。
+ExecStart=/opt/jetdo-relay/.venv/bin/uvicorn relay:app \
+    --host 0.0.0.0 --port 18080 \
+    --proxy-headers --forwarded-allow-ips='*' \
+    --log-level info
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/jetdo-relay/crashes
+
+# 日志写 /var/log/jetdo-relay（由 systemd 创建并授权给 jetdo 用户）。
+# ProtectSystem=strict 下 /opt 是只读的，relay.py 若把 relay.log 写在 CWD 会直接
+# OSError: Read-only file system 起不来。
+LogsDirectory=jetdo-relay
+LogsDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target
