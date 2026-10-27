@@ -246,6 +246,20 @@ fun DohSettingsScreen(
                 }
             }
 
+            // 内置项来源说明。内置 DoH 是社区第三方公益服务（开发者不运营、不控制），
+            // 条目不可删除是刻意的：删掉后新装用户就没有可用解析器，DoH 会静默失效。
+            // 用户真正的退出路径是上方总开关「启用 DoH」—— 关掉后不再向任何第三方
+            // DNS 服务发送解析请求。这两点必须对用户可见，否则隐私声明与实际行为对不上。
+            Text(
+                text = stringResource(R.string.doh_builtin_note),
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = jetdoColors.textFaint,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = CardPadding, end = CardPadding, top = 10.dp)
+            )
+
             // 一键测速全部。
             Box(
                 modifier = Modifier

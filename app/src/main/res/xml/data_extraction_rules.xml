@@ -10,7 +10,7 @@
   策略：**只备份低敏的界面偏好，明确排除所有会话与内容数据。**
   - 排除 cookies / shared_prefs：登录态与设置都不外传
   - 排除 database / files / external：草稿、已读、缓存、图片全不外传
-  - 排除 no_backup：本就是 Android 约定「不进备份」的目录
+  - 排除 root：应用私有目录根（含 no_backup 子目录，Android 本身也不备份它）
   只保留 database 之外的少量偏好（theme/font 等），
   实际排除面由下方 <exclude> 逐条列出，未列出的仍会备份。
 
@@ -23,7 +23,6 @@
         <exclude domain="file" path="." />
         <exclude domain="external" path="." />
         <exclude domain="root" path="." />
-        <exclude domain="no_backup" path="." />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="." />
@@ -31,6 +30,5 @@
         <exclude domain="file" path="." />
         <exclude domain="external" path="." />
         <exclude domain="root" path="." />
-        <exclude domain="no_backup" path="." />
     </device-transfer>
 </data-extraction-rules>

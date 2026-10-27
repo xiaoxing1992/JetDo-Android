@@ -22,8 +22,10 @@ object PrivacyConsentStore {
      * - 1 = 首版（崩溃上报走腾讯 Bugly，数据出境到第三方）
      * - 2 = 崩溃上报改走 ACRA + 自建服务器，不再有第三方接收方
      * - 3 = 移除远程崩溃上报，应用不再向开发者上传任何数据（实质变更，老用户重签）
+     * - 4 = 如实披露内置 DoH：解析请求发往社区第三方 DNS 服务，且关闭 DoH 的路径
+     *      （原政策只写「你自行配置的解析器」，与默认开启且不可删的实际行为不符）
      */
-    const val POLICY_VERSION = 3
+    const val POLICY_VERSION = 4
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

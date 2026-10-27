@@ -284,6 +284,7 @@
     <string name="detail_two_page_desc">When half-folded, the topic lays out as two pages</string>
     <string name="detail_two_page_reading">Two-page reading</string>
     <string name="doh_add">Add DoH</string>
+    <string name="doh_builtin_note">The built-in DoH servers are provided by the LINUX DO community (public-benefit third parties, not operated or controlled by the developer). They only receive the domain being resolved — never your account or browsing content. They cannot be deleted, but you can turn off "Enable DoH" above to use your system DNS directly, or add your own resolver.</string>
     <string name="doh_config">DoH configuration</string>
     <string name="doh_delete">Delete DoH</string>
     <string name="doh_delete_confirm">Delete "%1$s"?</string>
@@ -651,7 +652,7 @@
     <string name="push_channel_desc">Replies, mentions, likes and other community notifications</string>
     <string name="poll_named">Poll · %1$s</string>
     <string name="privacy_consent_title">Welcome to JetDo</string>
-    <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics, and nothing is uploaded to the developer. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· Crash logs stay on your device and can be viewed or exported from Settings → Diagnostics. They are never sent automatically.\n· Uninstalling the app deletes all local data.</string>
+    <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics, and nothing is uploaded to the developer. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· Crash logs stay on your device and can be viewed or exported from Settings → Diagnostics. They are never sent automatically.\n· DoH (DNS pollution protection) is on by default: domain lookups are sent to community third-party DNS services (domain names only, no account or content). You can turn it off or switch to your own resolver in Settings → DoH.\n· Uninstalling the app deletes all local data.</string>
     <string name="privacy_consent_agree">Agree and continue</string>
     <string name="privacy_consent_decline">Decline</string>
     <string name="privacy_consent_exit_title">Exit the app?</string>

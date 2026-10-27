@@ -309,6 +309,7 @@
     <string name="detail_two_page_desc">折叠屏半折时，帖子详情排成左右两页</string>
     <string name="detail_two_page_reading">双页阅读</string>
     <string name="doh_add">添加 DoH</string>
+    <string name="doh_builtin_note">内置的 DoH 服务由 LINUX DO 社区提供（公益第三方，开发者不运营、不控制），只发送待解析的域名，不含你的账号与浏览内容。它们不可删除，但你可以随时关闭上方「启用 DoH」改为直连系统 DNS，或添加自己的解析器。</string>
     <string name="doh_config">DoH 配置</string>
     <string name="doh_delete">删除 DoH</string>
     <string name="doh_delete_confirm">确定删除「%1$s」吗？</string>
@@ -653,7 +654,7 @@
     <string name="weight_semibold">加粗</string>
     <string name="poll_named">投票 · %1$s</string>
     <string name="privacy_consent_title">欢迎使用 JetDo</string>
-    <string name="privacy_consent_body">在使用本应用前，请阅读并同意《隐私政策》与《用户协议》（完整内容见应用发布页）：\n\n· 本应用无广告、无埋点统计，也不向开发者上传任何数据；你的账号数据仅在你的设备与 LINUX DO 社区之间流转。\n· 网络权限用于访问社区；通知权限仅在你授权后用于消息提醒。\n· 崩溃日志只保存在本机，可在「设置 → 诊断日志」自行查看与导出，不会自动发送出去。\n· 卸载应用即可删除全部本地数据。</string>
+    <string name="privacy_consent_body">在使用本应用前，请阅读并同意《隐私政策》与《用户协议》（完整内容见应用发布页）：\n\n· 本应用无广告、无埋点统计，也不向开发者上传任何数据；你的账号数据仅在你的设备与 LINUX DO 社区之间流转。\n· 网络权限用于访问社区；通知权限仅在你授权后用于消息提醒。\n· 崩溃日志只保存在本机，可在「设置 → 诊断日志」自行查看与导出，不会自动发送出去。\n· DoH 抗污染默认开启，域名解析请求会发往社区第三方 DNS 服务（仅域名，不含账号与内容），可在「设置 → DoH 配置」随时关闭或换成自己的解析器。\n· 卸载应用即可删除全部本地数据。</string>
     <string name="privacy_consent_agree">同意并继续</string>
     <string name="privacy_consent_decline">不同意</string>
     <string name="privacy_consent_exit_title">退出应用？</string>

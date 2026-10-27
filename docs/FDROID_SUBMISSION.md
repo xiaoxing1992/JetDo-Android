@@ -6,26 +6,26 @@
 
 ## 结论
 
-### 2026-10-27 14:40 复核：闭源 SDK 已清零且**已推送**，还差 **1 个 P1 + 5 个 P2**
+### 2026-10-27 14:50 复核：闭源 SDK 已清零且**已推送**，还差 **4 个 P2**
 
 | 级别 | 项目 | 现状（已实测核实） | 处置 |
 |---|---|---|---|
-| ✅ P0 | 腾讯 TBS/X5 内核 | **已删净并已推送**：`libs.versions.toml` / `build.gradle.kts` / `LoginWebViewFactory.kt` 三处清理完毕，产物 `com/tencent/smtt` = **0** | 已完成 |
+| ✅ P0 | 腾讯 TBS/X5 内核 | **已删净并已推送**：`libs.versions.toml` / `build.gradle.kts` / `LoginWebViewFactory.kt` 三处清理完毕，产物 `com/tencent/smtt` = **0**；远端 `cb7b1b8` 实测 `tbs` 命中 = 0 | 已完成 |
 | ✅ P1 | fastlane 元数据缺失 | **已补齐**：`fastlane/metadata/android/{en-US,zh-CN}/` 含短描述、完整描述、`changelogs/2.txt`、`images/icon.png`（1024²）、6 张截图 | 已完成 |
+| ✅ P1 | `v1.0.0` tag 不含 LICENSE | **改打 `v1.0.1`** → `cb7b1b8`，已含 LICENSE + fastlane。**未移动 `v1.0.0`**（它已有 Release 与 6 次下载，移动会让旧链接指向不同内容） | 已完成 |
 | ✅ P1 | 版本号未 bump | 已升到 `versionCode = 2` / `versionName = "1.0.1"` | 已完成 |
-| 🟠 P1 | `v1.0.0` tag 不含 LICENSE | tag → `c8ef9c8`；LICENSE 在 `9d3239c` 才引入，**在 tag 之后** | **重打 tag**（建议 `v1.0.1`） |
-| 🟠 P1 | 隐私政策未披露内置 DoH | `DohManager.kt:24,29` 内置 `edge.47258.xyz` / `jetdo.ddd.oaifree.com`，**用户删不掉**（`removeServer()` 对 builtin 直接 return）；隐私政策第 30 行只说"你**自行配置**的" | **如实披露**或换公共 DoH |
+| ✅ P1 | 隐私政策未披露内置 DoH | **已如实披露**（详见 §2.4）：`privacy-policy.md` 新增「DNS 解析（DoH）」专节（两个社区第三方端点 + 发送内容 + 谁能看 + 如何关闭）、首启同意弹窗中英双版本新增 DoH 条、`POLICY_VERSION` 3→4、DoH 设置页新增来源说明 | 已完成 |
 | ✅ P2 | `BUILD_TIME = LocalDateTime.now()` | 已改为 `git log -1 --pretty=%cI`（提交时间），破坏可复现构建的问题消除 | 已完成 |
 | ✅ P2 | `mavenLocal()` | 已从 `settings.gradle.kts` 删除 | 已完成 |
 | ✅ P2 | `allowBackup="true"` 无规则 | 已补 `data_extraction_rules.xml`（API 31+）+ `backup_rules.xml`（API ≤ 30），排除 sharedpref/database/file/external/root/no_backup 全部域 | 已完成 |
+| ✅ P2 | 商店素材权限表缺 CAMERA | `store-listing.md` 权限表已补 CAMERA 一行 | 已完成 |
+| ✅ — | `store-listing.md` 虚假描述 | 原写"崩溃信息发送到开发者自建服务器"——移除远程上报后已不属实，改为"只写入设备本机" | 已完成 |
+| ✅ — | `androidx.browser` 悬空依赖 | 已删（全仓零 import）；`libs.versions.toml` 中的 version + library 一并清掉 | 已完成 |
+| ✅ — | firebase keep 规则残留 | `proguard-rules.pro` 中已无 firebase 依赖，keep 规则已删 | 已完成 |
 | 🟡 P2 | `compileSdk / targetSdk = 37` | buildserver 预装只到 `platforms;android-33` | 见 §2.3（可构建期下载，风险中） |
 | 🟡 P2 | 贴吧 / B 站 emoji 授权不明 | `assets/emoji_tieba_087.png`（贴吧「水果」表情）、`emoji_bili_057.png`（B 站柴犬），共 10 个 | 换 Twemoji 或申报 `NonFreeAssets` |
 | 🟡 P2 | `MIXED_CONTENT_ALWAYS_ALLOW` 6 处 | `ArkWebNetworkBridge.kt:296` / `WebViewPage.kt:354` / `LoginWebViewFactory.kt:34` / `CfChallengeScreen.kt:160` / `ConnectWebHost.kt:62` / `LdcCreditWebHost.kt:76` | **暂不改**：社区正文含 http 图片，改 NEVER_ALLOW 会裂图；属功能风险项，需单独评估 |
 | 🟡 P2 | `server/` 与 `relay-config.example.json` 是未接线的半成品 | APK 不依赖，但审阅者会看到 | 删掉或标 WIP |
-| ✅ — | `androidx.browser` 悬空依赖 | 已删（全仓零 import）；`libs.versions.toml` 中的 version + library 一并清掉 | 已完成 |
-| ✅ — | firebase keep 规则残留 | `proguard-rules.pro` 中已无 firebase 依赖，keep 规则已删 | 已完成 |
-| ✅ — | `store-listing.md` 虚假描述 | 原写"崩溃信息发送到开发者自建服务器"——移除远程上报后已不属实，改为"只写入设备本机" | 已完成 |
-| ✅ — | 权限表缺 CAMERA | `store-listing.md` 权限表已补 CAMERA 一行 | 已完成 |
 
 ### 2026-10-27 实测验证记录（可复现）
 
@@ -301,42 +301,52 @@ $ curl 'https://search.maven.org/solrsearch/select?q=g:org.mozilla.geckoview'
 
 ## 二、P1：会卡审核 / 卡构建
 
-### 2.1 `v1.0.0` 这个 tag 不能用
+### 2.1 `v1.0.0` 这个 tag 不能用 —— ✅ 已处置（改打 `v1.0.1`）
 
 ```
-v1.0.0 → ae606fb  2026-10-13 12:22  chore: 首发版本号定为 1.0.0
-683f2f8           2026-10-13 13:09  docs: 添加 MIT LICENSE 与徽章墙
+v1.0.0 → c8ef9c8  2026-10-13 12:22  chore: 首发版本号定为 1.0.0
+9d3239c           2026-10-13 13:09  docs: 添加 MIT LICENSE 与徽章墙
 ```
 
 tag 指向的提交里**没有 LICENSE 文件**。F-Droid 审核第一步就是"到源码库查看许可证文件"，用这个 commit 打包会以 "no license" 被打回。
 
-处置：删 P0 之后重新发一版，把 tag 打在新提交上：
+**处置结果**：**没有移动 `v1.0.0`**，而是新打 `v1.0.1`。
+
+原因：`v1.0.0` 已经发了 GitHub Release（`JetDo-v1.0.0.apk`，16.5 MB，已有 6 次下载）。
+移动已有 tag 会让已发布出去的下载链接指向不同内容（tag 是可变引用），属于破坏性操作。
+新打 tag 既让 F-Droid 有合规的构建点，又不动历史。
 
 ```bash
 # versionCode 1 → 2，versionName 1.0.0 → 1.0.1
-git tag -d v1.0.0 && git push --delete origin v1.0.0   # 若远端已推
-git tag -a v1.0.1 -m "JetDo 1.0.1"
+git tag -a v1.0.1 -m "v1.0.1 — F-Droid 上架整改版"
 git push origin v1.0.1
 ```
 
-F-Droid 要求每次 release 都有 tag，且 `AndroidManifest`/`build.gradle` 里的 `versionName` 要与 tag 对得上（`1.0.1` ↔ `v1.0.1`）。
+`v1.0.1` → `cb7b1b8`，已验证含 `LICENSE` / `fastlane/` / `data_extraction_rules.xml` / `tools/scan_apk_residue.py`，
+且 `com.tencent.smtt` 零命中。F-Droid 要求每次 release 都有 tag，且 `build.gradle` 里的 `versionName` 与 tag 对得上（`1.0.1` ↔ `v1.0.1`）—— 已对齐。
 
-### 2.2 fastlane 元数据（完全没有）
+### 2.2 fastlane 元数据 —— ✅ 已补齐
 
-这是 Quick Start 里唯一明确说「上架前应**始终**先添加」的东西。需要新建：
+这是 Quick Start 里唯一明确说「上架前应**始终**先添加」的东西。已新建：
 
 ```
-fastlane/metadata/android/en-US/short_description.txt      # < 80 字符，不能有句号结尾
+fastlane/metadata/android/en-US/short_description.txt      # 39 字符 < 80，结尾无句点 ✅
 fastlane/metadata/android/en-US/full_description.txt
-fastlane/metadata/android/en-US/changelogs/2.txt            # 对应 versionCode，< 500 字符
-fastlane/metadata/android/en-US/images/icon.png             # 512x512
-fastlane/metadata/android/en-US/images/phoneScreenshots/1.png … 8.png
-fastlane/metadata/android/zh-CN/…                            # 同名一套中文
+fastlane/metadata/android/en-US/changelogs/2.txt            # 对应 versionCode 2，< 500 字符
+fastlane/metadata/android/en-US/images/icon.png             # 1024×1024（取自 mipmap-xxhdpi）
+fastlane/metadata/android/en-US/images/phoneScreenshots/1..6.png  # 1212×2616
+fastlane/metadata/android/zh-CN/…                           # 同名一套中文
+fastlane/README.md                                          # 布局说明 + 发布前自查命令
 ```
 
-现成素材：`README.md` 的功能特性段落可直接裁成 full_description；`screenshots/*.png` 是 1212×2616，直接改名搬进 `phoneScreenshots/`（F-Droid 要求长边 ≥ 320，越接近 16:9 越好，这尺寸可用）。图标从 `mipmap-xxxhdpi/ic_launcher.png` 导出 512×512。
+素材来源：`README.md` 的功能特性段落裁成 full_description；`screenshots/*.png` 直接改名搬进 `phoneScreenshots/`
+（F-Droid 要求长边 ≥ 320，这尺寸可用）。图标从 `mipmap-xxhdpi/ic_launcher.png` 复制（本仓库最高密度就是 xxhdpi，
+但该文件本身就是 1024×1024，正好满足 F-Droid 的图标规格，不必再导出）。
 
-> 也可以放在 `metadata/en-US/` 而不用 `fastlane/metadata/android/`，两者等价。**放仓库里**（不是放 fdroiddata），这样以后改文案/翻译不用提 MR。
+> ⚠️ **截图纪律**：`screenshots/profile.png` 含开发者本人的社区账号名与统计数据，**没有**放进 fastlane 目录。
+> 收录的 6 张（首页 / 话题详情 / 消息 / 搜索 / 设置 / 筛选抽屉）均为公开社区内容，不含本人账号。
+>
+> 放仓库里（不是放 fdroiddata），这样以后改文案/翻译不用提 MR。
 
 ### 2.3 `compileSdk = 37` 是构建风险（已核实 buildserver 实际清单）
 
@@ -368,32 +378,83 @@ fastlane/metadata/android/zh-CN/…                            # 同名一套中
 
 顺带：`minSdk 26` 没问题，会直接显示为「Android 8.0+」。
 
+### 2.4 内置 DoH 未披露 —— ✅ 已如实披露（2026-10-27）
+
+**问题**：`DohManager.kt:24,29` 硬编码两条内置 DoH：
+
+```kotlin
+private const val DOH_EDGE_URL    = "https://edge.47258.xyz/linuxdo"
+private const val DOH_BUILTIN_URL = "https://jetdo.ddd.oaifree.com/query-dns"
+```
+
+`init()` 首次启动即写入 SharedPreferences 并**默认选中 `edge`**、默认**开启** DoH、默认 `SECURE_ONLY` 模式；
+`removeServer()` 对 builtin 直接 `return` —— 用户**删不掉**这两个条目。
+
+而原隐私政策第 30 行只写：
+
+> 你**自行配置**的 DNS-over-HTTPS 解析器 —— 仅发送 DNS 查询（域名解析请求），用于绕开 DNS 污染，不携带任何应用数据。
+
+**这不是"漏写"，是"声明与实际行为不符"**：绝大多数用户从安装到卸载，用的都是这两个**他们没配过**的解析器。
+F-Droid 审核员看隐私政策与代码对不上，会直接追问"这些 DNS 查询到底发给谁"。
+
+**两个内置端点的归属**（已核实）：
+
+| 端点 | 归属 | 性质 |
+|---|---|---|
+| `edge.47258.xyz` | LINUX DO 社区提供的解析节点 | 社区第三方公益服务 |
+| `jetdo.ddd.oaifree.com` | LINUX DO 社区成员共享的**泛域名证书**（`xxx.ddd.oaifree.com` 中 xxx 任意）下的公共 DoH | 社区第三方公益服务 |
+
+两者都**不是开发者运营或控制**的。这一点很关键：隐私政策里必须写明「谁在处理这些数据」，
+而不能含糊成"你自行配置的"。
+
+**处置（选择如实披露，而非移除功能）**：
+
+1. `docs/publish/privacy-policy.md` 新增「DNS 解析（DoH）」专节，列出两个服务商与地址，说明
+   **发送内容**（仅域名，不含账号/Cookie/内容）、**谁能看到**（服务运营方，非开发者）、**如何关闭**（设置里关总开关走系统 DNS）、**如何替换**（加自己的解析器）；
+2. 首启同意弹窗（`privacy_consent_body`，中英双版本）新增一条 DoH 说明 —— 这是用户实际读到并点击「同意」的内容，不能只改仓库里的 md；
+3. `PrivacyConsentStore.POLICY_VERSION` 3 → 4，老用户下次启动重新看到同意弹窗（政策实质变更必须递增）；
+4. DoH 设置页服务器列表下方新增说明文案（`doh_builtin_note`，中英双版本），说明内置项来源与不可删原因，
+   并指向「关闭启用 DoH」这个真正的退出路径 —— 让用户在 UI 里就能看到自己有哪些选择。
+
+**为什么保留功能而不是删掉**：DoH 是本项目「国内网络直连社区」的核心能力，删掉等于砍掉产品特性；
+而这两个端点都是社区公益服务、只收域名不收内容，与 ACRA/崩溃上报那种「把数据发给开发者」是完全不同的性质。
+**如实披露 + 给用户关闭开关**是合规且诚实的做法。
+
+> ⚠️ 一个容易踩的坑：如果只是把 DoH 关掉默认值，**仍然不合规** —— 因为代码里仍然硬编码着两个端点、
+> 用户一旦手动开启就会连过去；反过来如果保留默认开启又不披露，就是当前这个「声明不符」的状态。
+> 二者必须一起改。
+
 ---
 
 ## 三、P2：建议项
 
-### 3.1 仓库配置
+### 3.1 仓库配置 —— ✅ `mavenLocal()` 已删
 
-`settings.gradle.kts:17` 的 `mavenLocal()` 删掉 —— F-Droid 构建机没有 `~/.m2`，留着只会拖慢解析。
+`settings.gradle.kts:17` 的 `mavenLocal()` 已删除 —— F-Droid 构建机没有 `~/.m2`，留着只会拖慢解析。
 
-阿里云镜像本身不算违规（是 google/mavenCentral 的镜像），但 `google()` 和 `mavenCentral()` 已经在列表里（第 8-9 行、21-22 行），建议把官方源提到前面、镜像作为 fallback，这样审核人员本地复现时路径和你一致。**如果官网被墙导致你本地编不过，保持现状也行**，只要保证官方源可达即可。
+阿里云镜像本身不算违规（是 google/mavenCentral 的镜像），但 `google()` 和 `mavenCentral()` 已经在列表里，建议把官方源提到前面、镜像作为 fallback，这样审核人员本地复现时路径和你一致。**如果官网被墙导致你本地编不过，保持现状也行**，只要保证官方源可达即可。
 
-### 3.2 `BUILD_TIME` 会破坏可复现构建
+### 3.2 `BUILD_TIME` 会破坏可复现构建 —— ✅ 已改为提交时间
 
 ```kotlin
+// 改前：每次配置阶段取当前时间 → 同一 commit 每次构建产物都不同
 buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
+
+// 改后：取提交时间，同源码构建结果稳定
+val commitTime: String = run {
+    val proc = ProcessBuilder("git", "log", "-1", "--pretty=%cI")
+        .directory(rootProject.projectDir)
+        .redirectErrorStream(true)
+        .start()
+    val out = proc.inputStream.bufferedReader().use { it.readText().trim() }
+    proc.waitFor()
+    if (proc.exitValue() == 0 && out.isNotEmpty()) out else "unknown"
+}
+buildConfigField("String", "BUILD_TIME", "\"$commitTime\"")
 ```
 
-每次配置阶段取当前时间 → 同一个 commit 每次构建产物都不同 → 无法做 Reproducible Builds（F-Droid 强烈推荐，尤其新应用）。日志页要展示构建时间的话，改成从提交时间派生：
-
-```kotlin
-val gitCommitTime = providers.exec {
-    commandLine("git", "log", "-1", "--format=%cd", "--date=iso")
-}.standardOutput.asText.map { it.trim() }.orElse("unknown")
-buildConfigField("String", "BUILD_TIME", "\"${gitCommitTime.get()}\"")
-```
-
-（`providers.exec` 是配置缓存友好的写法，AGP 9 + Gradle 9 下不会报。）或者干脆删掉这个字段。
+日志页照常展示构建时间（`DebugLogScreen.kt:246`），但值来自 commit 而非构建时刻。git 不可用时退回 `"unknown"`，
+保证在无 `.git` 的环境（如 F-Droid 的源码 tarball）也能构建。
 
 ### 3.3 二进制/生成资产
 
@@ -459,29 +520,40 @@ CurrentVersionCode: 2
 
 ---
 
-## 五、执行顺序（2026-10-27 11:20 更新）
+## 五、执行顺序（2026-10-27 14:50 更新）
 
 | # | 动作 | 状态 |
 |---|---|---|
 | 1 | 删 Bugly（后续连 ACRA 一并移除，最终零远程上报） | ✅ 已完成 |
-| 2 | **删 TBS / X5**（4 处落点）→ 重新构建确认通过 | ✅ 已完成（工作区，待提交） |
-| 3 | **commit + push 5 个文件的 TBS 删除改动**（远端 `a1086b0` 里仍有 TBS） | ⬜ **待做 · 最优先** |
-| 4 | 改 `BUILD_TIME` 为提交时间、删 `mavenLocal()` | ⬜ 待做 |
-| 5 | `versionCode 2 / versionName 1.0.1` + 重打 `v1.0.1` tag（**必须打在新提交上**） | ⬜ 待做 |
-| 6 | 补 `fastlane/metadata/android/{en-US,zh-CN}/`（short_description / full_description / changelogs/2 / icon / phoneScreenshots） | ⬜ 待做 |
-| 7 | 隐私政策如实披露两个内置 DoH 端点（或换成公共 DoH） | ⬜ 待做 |
-| 8 | emoji 换 Twemoji 或申报 `NonFreeAssets`；补 `allowBackup` 规则；收窄 `MIXED_CONTENT`；`store-listing` 权限表补 CAMERA | ⬜ 待做 |
-| 9 | 删掉或标注 WIP：`server/`、`relay-config.example.json`、proguard 里的 firebase 残留规则 | ⬜ 待做 |
-| 10 | 提 fdroiddata MR（`New App` 标签），看 CI 试构建对 `compileSdk 37` 的裁决 | ⬜ 待做 |
-| 11 | 合并后 24–48h 出现在主仓库 | ⬜ 待做 |
+| 2 | **删 TBS / X5**（4 处落点）→ 重新构建确认通过 | ✅ 已完成 |
+| 3 | **commit + push TBS 删除改动**（远端原 `a1086b0` 里仍有 TBS） | ✅ 已完成（`cb7b1b8` 已推送，远端 `com.tencent.smtt` = 0） |
+| 4 | 改 `BUILD_TIME` 为提交时间、删 `mavenLocal()` | ✅ 已完成 |
+| 5 | `versionCode 2 / versionName 1.0.1` + 打 `v1.0.1` tag（含 LICENSE） | ✅ 已完成（tag → `cb7b1b8`，已推送） |
+| 6 | 补 `fastlane/metadata/android/{en-US,zh-CN}/` | ✅ 已完成（含 icon + 6 张截图 + changelogs/2） |
+| 7 | 隐私政策如实披露两个内置 DoH 端点 | ✅ 已完成（政策专节 + 首启弹窗 + `POLICY_VERSION` 3→4 + 设置页说明） |
+| 8 | 补 `allowBackup` 规则；`store-listing` 权限表补 CAMERA | ✅ 已完成 |
+| 9 | emoji 换 Twemoji 或申报 `NonFreeAssets` | ⬜ 待做 |
+| 10 | 收窄 `MIXED_CONTENT_ALWAYS_ALLOW`（6 处） | ⬜ 待做 · **有功能风险**，需单独评估 |
+| 11 | 删掉或标注 WIP：`server/`、`relay-config.example.json` | ⬜ 待做 |
+| 12 | 提 fdroiddata MR（`New App` 标签），看 CI 试构建对 `compileSdk 37` 的裁决 | ⬜ 待做 |
+| 13 | 合并后 24–48h 出现在主仓库 | ⬜ 待做 |
 
-> 注意第 5 步：`v1.0.0` 指向的 `c8ef9c8` 没有 LICENSE 文件（LICENSE 在 `9d3239c` 才引入，在 tag 之后），
-> **不能复用**。要么删掉重打，要么直接发 `v1.0.1`。
-> `UpdateCheckMode: Tags` 会让 F-Droid 抓「最靠后的 tag」，旧 tag 留着不影响新版本，但会留个坏样本，建议一并删。
+> 第 5 步补充：`v1.0.0` 指向 `c8ef9c8`，没有 LICENSE（LICENSE 在 `9d3239c` 才引入，在 tag 之后），**不能复用**。
+> 本次**没有移动 `v1.0.0`** —— 它已经发了 GitHub Release（`JetDo-v1.0.0.apk`，6 次下载），移动已有 tag 会让
+> 已发布出去的下载链接指向不同内容。改为新打 `v1.0.1`，F-Droid 的构建点用新 tag。
+>
+> 第 3 步补记：这一条当时是唯一还剩的 P0。远端 `origin/feat/migrate-vertical-slice` 已更新到 `cb7b1b8`，
+> 实测 `git show origin/feat/migrate-vertical-slice:gradle/libs.versions.toml | grep -c tbs` → **0**，
+> `LoginWebViewFactory.kt` 的 `com.tencent.smtt` 命中数 → **0**。
 
-> 注意第 3 步：F-Droid 是从 **GitHub 远端** 拉源码构建的。本地删了 TBS 不等于远端删了 ——
-> `git show origin/feat/migrate-vertical-slice:gradle/libs.versions.toml` 里 `tbs = "44286"` 还在。
-> **不 push 的话，审核员拉到的还是带 TBS 的版本。**
+### 5.1 剩下的 P2 里，哪一项值得先做
+
+| 项 | 风险 | 建议 |
+|---|---|---|
+| **emoji 授权**（10 个） | F-Droid 的 `NonFreeAssets` 负面特征，会被打标 | 换 Twemoji（CC-BY 4.0）一劳永逸；不换则申报打标 |
+| **`MIXED_CONTENT_ALWAYS_ALLOW`**（6 处） | 改成 `NEVER_ALLOW` 会让社区正文里的 http 图片裂图 | ⚠️ **不要顺手改**。社区图片走 http 是现实约束，需要单独评估（可考虑限定为仅 `linux.do` 主域放行） |
+| **`server/` 半成品** | 审阅者误以为 APK 依赖私有中继 | 删掉或 README 标 WIP，5 分钟的事 |
+| **`compileSdk 37`** | buildserver 可能拉不到 `platforms;android-37` | 提 MR 后看 CI 试构建结论，这是最快的判据 |
 
 ---
 
