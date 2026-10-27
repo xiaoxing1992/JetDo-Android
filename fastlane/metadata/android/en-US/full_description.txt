@@ -1,0 +1,15 @@
+Unofficial Android client for the LINUX DO community, built from scratch with Material 3 and Jetpack Compose.
+
+Browse and read: multi-tab topic streams (hot/latest/pinned); full Markdown rendering with code highlighting, floor anchors and a draggable scrubber for quick navigation in long topics; built-in media playback.
+
+Participate: reply, quote, like, bookmark and mark topics solved; drafts are saved locally without conflicting with the editor state; pick or shoot photos and upload directly to the community.
+
+Stay informed: in-app notifications, real-time messages, @mentions and quote replies, with optional system notifications.
+
+Local-first: bookmarks, drafts, read state and browsing history stay on your device; DoH (DNS over HTTPS) support for DNS pollution resistance; dark mode follows the system.
+
+Adaptive: two-pane layouts on tablets, foldable and tri-fold state adaptation, media split in desktop posture, and two-page reading in book posture.
+
+No ads, no analytics SDK, no remote crash reporting: crash logs are written to the device only and the developer has no remote collection channel. Sign-in happens on the official site.
+
+JetDo is not affiliated with LINUX DO. Community content remains the property of the community and its original authors.

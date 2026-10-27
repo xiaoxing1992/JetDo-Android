@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份规则（Android 12+ / API 31+）。
+
+  背景：应用 allowBackup="true"，但如果不给 dataExtractionRules，
+  系统会按默认行为把「几乎整个应用私有目录」打包进云备份/设备迁移 ——
+  这对一款论坛客户端是隐私问题：登录 Cookie、草稿、已读状态、个人资料缓存
+  都会跟着走。F-Droid 审核也会问这条。
+
+  策略：**只备份低敏的界面偏好，明确排除所有会话与内容数据。**
+  - 排除 cookies / shared_prefs：登录态与设置都不外传
+  - 排除 database / files / external：草稿、已读、缓存、图片全不外传
+  - 排除 no_backup：本就是 Android 约定「不进备份」的目录
+  只保留 database 之外的少量偏好（theme/font 等），
+  实际排除面由下方 <exclude> 逐条列出，未列出的仍会备份。
+
+  换机体验由「重新登录」补偿，而不是把会话整体搬过去。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="root" path="." />
+        <exclude domain="no_backup" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="root" path="." />
+        <exclude domain="no_backup" path="." />
+    </device-transfer>
+</data-extraction-rules>

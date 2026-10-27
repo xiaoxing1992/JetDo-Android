@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份规则 —— Android 11 及以下（API ≤ 30）走 fullBackupContent，
+  Android 12+ 走 dataExtractionRules.xml。两份规则保持一致。
+
+  背景：应用 allowBackup="true"，但如果不限定备份范围，系统会把
+  「几乎整个应用私有目录」打包进云备份/设备迁移 —— 对一款论坛客户端
+  是隐私问题：登录 Cookie、草稿、已读状态、个人资料缓存都会跟着走。
+  F-Droid 审核也会问这条。
+
+  策略：**只备份低敏的界面偏好，明确排除所有会话与内容数据。**
+  换机体验由「重新登录」补偿，而不是把会话整体搬过去。
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="external" path="." />
+    <exclude domain="root" path="." />
+    <exclude domain="no_backup" path="." />
+</full-backup-content>

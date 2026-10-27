@@ -1,4 +1,3 @@
-import java.time.LocalDateTime
 import java.util.Properties
 
 plugins {
@@ -49,10 +48,21 @@ android {
         applicationId = "com.jetdo.android"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         // 构建时间注入 BuildConfig：日志页顶部展示，用于确认设备上安装的是哪次构建。
-        buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
+        // 取「提交时间」而非 LocalDateTime.now()：后者每次构建都变，会破坏 F-Droid 要求的
+        // 可复现构建（同源码两次构建产物应一致）。git 不可用时退回固定值。
+        val commitTime: String = run {
+            val proc = ProcessBuilder("git", "log", "-1", "--pretty=%cI")
+                .directory(rootProject.projectDir)
+                .redirectErrorStream(true)
+                .start()
+            val out = proc.inputStream.bufferedReader().use { it.readText().trim() }
+            proc.waitFor()
+            if (proc.exitValue() == 0 && out.isNotEmpty()) out else "unknown"
+        }
+        buildConfigField("String", "BUILD_TIME", "\"$commitTime\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -111,9 +121,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
-    // 浏览器授权登录：Custom Tabs 拉起系统浏览器（共享 Chrome 登录态，避免 external
-    // 模式被 App Links 回弹）。无 GMS 依赖，任何实现 Custom Tabs 协议的浏览器都可用。
-    implementation(libs.androidx.browser)
     // 扫码登录（出示二维码 + 相机扫码）。zxing core 纯 Java，CameraX 无 GMS 依赖。
     implementation(libs.zxing.core)
     implementation(libs.androidx.camera.core)
@@ -170,9 +177,6 @@ dependencies {
     // OkHttp
     // cooked HTML 解析（PostRichContent 的块/行内节点树来源）
     implementation(libs.jsoup)
-    // 登录页 X5 内核对比实验(TBS)
-    implementation(libs.androidx.browser)
-    implementation(libs.tbssdk)
     // WebView 身份统一(UA Client Hints / X-Requested-With),见 WebSessionManager.applyUserAgent
     implementation(libs.androidx.webkit)
     // 帖内音视频播放(对齐鸿蒙 AVPlayer 播放器):ExoPlayer 引擎 + PlayerView 控制条

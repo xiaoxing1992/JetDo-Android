@@ -1,0 +1,4 @@
+· Full bilingual UI (Chinese/English following the system language)
+· New settings: quick Cloudflare challenge toggle, image-only mode
+· Large-screen support: media split in desktop posture, two-page reading in book posture
+· Stability fixes: Boost refresh, floor positioning

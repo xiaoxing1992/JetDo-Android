@@ -45,10 +45,6 @@
 -keep class coil.** { *; }
 -dontwarn coil.**
 
-# Firebase
--keep class com.google.firebase.** { *; }
--dontwarn com.google.firebase.**
-
 # 堆栈保留：崩溃日志里要能看出 类名:行号，否则线上反馈无从定位。
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

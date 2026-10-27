@@ -1,12 +1,59 @@
 # JetDo 上架 F-Droid 差距分析
 
 > 对照 https://f-droid.org/zh_Hans/docs/Submitting_to_F-Droid_Quick_Start_Guide/
-> 审计对象：本仓库（分支 `feat/migrate-vertical-slice`，HEAD `683f2f8`）
-> 审计日期：2026-10-26
+> 审计对象：本仓库（分支 `feat/migrate-vertical-slice`）
+> 审计日期：2026-10-26 / **最后复核 2026-10-27 14:40**
 
 ## 结论
 
-### 2026-10-26 17:25 复核：还差 **1 个硬阻断 + 5 个工程项**
+### 2026-10-27 14:40 复核：闭源 SDK 已清零且**已推送**，还差 **1 个 P1 + 5 个 P2**
+
+| 级别 | 项目 | 现状（已实测核实） | 处置 |
+|---|---|---|---|
+| ✅ P0 | 腾讯 TBS/X5 内核 | **已删净并已推送**：`libs.versions.toml` / `build.gradle.kts` / `LoginWebViewFactory.kt` 三处清理完毕，产物 `com/tencent/smtt` = **0** | 已完成 |
+| ✅ P1 | fastlane 元数据缺失 | **已补齐**：`fastlane/metadata/android/{en-US,zh-CN}/` 含短描述、完整描述、`changelogs/2.txt`、`images/icon.png`（1024²）、6 张截图 | 已完成 |
+| ✅ P1 | 版本号未 bump | 已升到 `versionCode = 2` / `versionName = "1.0.1"` | 已完成 |
+| 🟠 P1 | `v1.0.0` tag 不含 LICENSE | tag → `c8ef9c8`；LICENSE 在 `9d3239c` 才引入，**在 tag 之后** | **重打 tag**（建议 `v1.0.1`） |
+| 🟠 P1 | 隐私政策未披露内置 DoH | `DohManager.kt:24,29` 内置 `edge.47258.xyz` / `jetdo.ddd.oaifree.com`，**用户删不掉**（`removeServer()` 对 builtin 直接 return）；隐私政策第 30 行只说"你**自行配置**的" | **如实披露**或换公共 DoH |
+| ✅ P2 | `BUILD_TIME = LocalDateTime.now()` | 已改为 `git log -1 --pretty=%cI`（提交时间），破坏可复现构建的问题消除 | 已完成 |
+| ✅ P2 | `mavenLocal()` | 已从 `settings.gradle.kts` 删除 | 已完成 |
+| ✅ P2 | `allowBackup="true"` 无规则 | 已补 `data_extraction_rules.xml`（API 31+）+ `backup_rules.xml`（API ≤ 30），排除 sharedpref/database/file/external/root/no_backup 全部域 | 已完成 |
+| 🟡 P2 | `compileSdk / targetSdk = 37` | buildserver 预装只到 `platforms;android-33` | 见 §2.3（可构建期下载，风险中） |
+| 🟡 P2 | 贴吧 / B 站 emoji 授权不明 | `assets/emoji_tieba_087.png`（贴吧「水果」表情）、`emoji_bili_057.png`（B 站柴犬），共 10 个 | 换 Twemoji 或申报 `NonFreeAssets` |
+| 🟡 P2 | `MIXED_CONTENT_ALWAYS_ALLOW` 6 处 | `ArkWebNetworkBridge.kt:296` / `WebViewPage.kt:354` / `LoginWebViewFactory.kt:34` / `CfChallengeScreen.kt:160` / `ConnectWebHost.kt:62` / `LdcCreditWebHost.kt:76` | **暂不改**：社区正文含 http 图片，改 NEVER_ALLOW 会裂图；属功能风险项，需单独评估 |
+| 🟡 P2 | `server/` 与 `relay-config.example.json` 是未接线的半成品 | APK 不依赖，但审阅者会看到 | 删掉或标 WIP |
+| ✅ — | `androidx.browser` 悬空依赖 | 已删（全仓零 import）；`libs.versions.toml` 中的 version + library 一并清掉 | 已完成 |
+| ✅ — | firebase keep 规则残留 | `proguard-rules.pro` 中已无 firebase 依赖，keep 规则已删 | 已完成 |
+| ✅ — | `store-listing.md` 虚假描述 | 原写"崩溃信息发送到开发者自建服务器"——移除远程上报后已不属实，改为"只写入设备本机" | 已完成 |
+| ✅ — | 权限表缺 CAMERA | `store-listing.md` 权限表已补 CAMERA 一行 | 已完成 |
+
+### 2026-10-27 实测验证记录（可复现）
+
+```bash
+# ① 模拟 F-Droid 构建环境：干净副本 + 无 local.properties
+rsync -a --exclude='.git' --exclude='build/' --exclude='local.properties' ./ /tmp/jd-clean/
+cd /tmp/jd-clean && ./gradlew :app:assembleRelease
+# → BUILD SUCCESSFUL in 5m 49s
+# → 产物 app-release-unsigned.apk（15 MB，未签名，F-Droid 会自行重签 ✅）
+
+# ② 产物残留扫描（14 项全部 0）
+com/tencent/smtt = 0    tbssdk = 0        Lorg/acra = 0
+com/tencent/bugly = 0   com/google/firebase = 0
+com/google/android/gms = 0   androidx.browser = 0
+<个人邮箱前缀> = 0      <自建域名> = 0     <服务器 IP> = 0
+<开发者账号名> = 0      <第三方域名> = 0
+
+# 复现命令（工具在仓库内，私有词表在仓库外）
+python3 tools/scan_apk_residue.py \
+  /tmp/jd-clean/app/build/outputs/apk/release/app-release-unsigned.apk \
+  --patterns /tmp/jd-secret-patterns.txt
+# → ✅ 全部 0：产物中无闭源 SDK、无私有资产字面量（退出码 0）
+
+# ③ 权限：4 条，与隐私政策逐条对应
+INTERNET / ACCESS_NETWORK_STATE / POST_NOTIFICATIONS / CAMERA
+```
+
+### 2026-10-26 17:25 复核：还差 1 个硬阻断 + 5 个工程项
 
 | 级别 | 项目 | 现状（已核实） | 处置 |
 |---|---|---|---|
@@ -30,6 +77,8 @@
 - `local.properties` 已 gitignore；**构建产物不含任何上报端点/埋点** —— 崩溃现场只写本机日志 ✅
 - `versionCode` / `versionName` 在 `defaultConfig` 标准位置 ✅
 - 公开 GitHub 仓库 + Issue 跟踪，作者即提交者 ✅
+- 无 `local.properties` 也能构建 ✅（F-Droid 构建机没有该文件，已实测）
+- release 包 R8 混淆 + 资源压缩开启，`lintVitalRelease` 通过 ✅
 
 ---
 
@@ -72,29 +121,25 @@ F-Droid 政策原文：*"Firebase 和 GMS 是明确不被接受的非 FOSS 库�
 
 > 若出于商业考虑必须保留，唯一合法路径是给 F-Droid 单独做一个**不含 Bugly 的 productFlavor**（`foss`），用 `gradle: - foss` 指定。但只要最终 APK 里还有 Bugly 的字节，就过不了。建议直接删。
 
-### 1.2 腾讯 TBS / X5 —— ⚠️ 仍未处理（唯一的硬阻断）
+### 1.2 腾讯 TBS / X5 —— ✅ 已删除（2026-10-27）
 
 X5 内核闭源、运行时还会从腾讯服务器下载内核二进制 —— 命中「预编译二进制 blob」+「依赖非自由服务」两条。**这个更好办：代码里已经是死代码了。**
 
-已确认（2026-10-26 复核）：`LoginWebViewFactory.kt:27-43` 的 `build()` 无条件走 `SystemLoginWebViewFactory`，X5 分支整段被注释；`X5LoginSupport` **只有文件内自己的 3 处引用**（两行注释 + 定义本身），外部零调用。
+已确认（2026-10-26 复核）：`LoginWebViewFactory.kt` 的 `build()` 无条件走系统 WebView，X5 分支整段被注释；`X5LoginSupport` 外部零调用。
 
-现状落点（4 处）：
+**2026-10-27 已完成删除**（4 处 + 重构）：
 
-| 文件 | 位置 | 内容 |
-|---|---|---|
-| `gradle/libs.versions.toml` | 第 2 行 | `tbs = "44286"` |
-| `gradle/libs.versions.toml` | 第 67 行 | `tbssdk = { group = "com.tencent.tbs", ... }` |
-| `app/build.gradle.kts` | 第 181 行 | `implementation(libs.tbssdk)` |
-| `LoginWebViewFactory.kt` | 21 处 | `configureX5` / `setupX5Clients` / `X5KeyboardProxy` / `X5LoginSupport` 全部 `com.tencent.smtt.*` |
+- `gradle/libs.versions.toml`：删 `tbs = "44286"` version + `tbssdk` library
+- `app/build.gradle.kts:174-175`：删 `implementation(libs.androidx.browser)`（X5 实验块内重复声明，全项目零调用）+ `implementation(libs.tbssdk)`
+- `LoginWebViewFactory.kt`：整体重写为单一 `object LoginWebViewFactory.create(...)`，删除 `configureX5` / `setupX5Clients` / `X5KeyboardProxy` / `X5LoginSupport` 全部 `com.tencent.smtt.*` 引用；`LoginScreen.kt` 同步改为 `LoginWebViewFactory.create(ctx, ...)`
+- 收尾：`grep -rn "com.tencent" app/src gradle app/*.kts` 零命中
 
-删除清单：
+**验证**（2026-10-27 Debug 构建，华为 DCO-AL00 实机）：
+- `./gradlew :app:assembleDebug` BUILD SUCCESSFUL
+- APK 逐文件字节扫描 `com/tencent/smtt` = **0**（删除前为 777）、`tbssdk` = 0、`com/tencent/bugly` = 0、`Lorg/acra` = 0、自建域名 = 0
+- 实机 `adb install -r` 成功，应用启动无 FATAL EXCEPTION，进程常驻（前台 Activity = `com.jetdo.android/.MainActivity`）
 
-- `app/build.gradle.kts:181` 删 `implementation(libs.tbssdk)`；**第 180 行的 `implementation(libs.androidx.browser)` 也一起删** —— 全项目 grep `androidx.browser` / `CustomTabs` 零调用点，属于无用依赖
-- `gradle/libs.versions.toml` 删第 2 行 `tbs` version + 第 67 行 `tbssdk` library
-- `LoginWebViewFactory.kt` 删 45-115 行的 X5 分支（`configureX5` / `setupX5Clients` / `X5KeyboardProxy`）、117-153 行的 `X5LoginSupport` object、27-37 行被注释的 X5 调用块；类注释改成「系统 WebView 构造器」；顺带确认 `UserAgentProvider` / `View` 的 import 是否变成未使用
-- 收尾：`grep -rn "com.tencent" app/src gradle app/*.kts` 应该零命中
-
-> 删完记得同步删 `app/proguard-rules.pro` 里可能存在的 `com.tencent` keep 规则（当前已无）。
+> 注：登录页功能与删 TBS 前完全一致（X5 分支此前就是注释态，本就走系统 WebView）。
 
 ### 1.3 能不能不删？—— 官方允许的三条路
 
@@ -153,6 +198,104 @@ CustomTabsIntent.Builder().build().launchUrl(context, AppConstants.LOGIN_URL)
 
 再配合已有的 `jetdo://` 深链回传 cookie。系统浏览器内核 + 完整 cookie 环境，过盾成功率通常显著高于内嵌 WebView ——
 这也正是当初注释里写的那三个候选方向（换内核 / 换承载方式）里成本最低的一个。
+
+#### 1.5 复核补充：2026-10-27 的两个决定性事实
+
+上一节结论方向正确（不需要自带内核），但有两处依据需要修正 —— 都是在真机上实测出来的：
+
+**事实一：系统 WebView 本身就是 Chromium，「系统 WebView 能力差」不是引擎弱。**
+
+实测本项目主力测试机（华为 DCO-AL00）：
+
+```
+$ adb shell dumpsys webviewupdate
+Current WebView package (name, version): (com.huawei.webview, 132.0.6.309)
+Preferred WebView package (name, version): (com.huawei.webview, 132.0.6.309)
+    com.google.android.webview is NOT installed.
+```
+
+Chromium **132** —— 与桌面 Chrome 同期的主流版本，V8 引擎。真正的问题不是"引擎弱"，而是：
+
+| 真实症结 | 说明 |
+|---|---|
+| **国内 ROM 的 WebView 供给不均** | 这台机器只有华为自研的 `com.huawei.webview`，没有 Google WebView，且华为版本随 ROM 走、不随应用更新 |
+| **版本碎片化** | 应用装在不同厂商机器上，内核版本可能是 Chromium 80~140 不等，无法假设任何新 Web API 可用 |
+| **厂商魔改** | 华为/小米的内核有定制行为（UA 改写、注入脚本），与其他厂商不一致 |
+
+所以"换一款更快的 WebView"这个诉求，**真正对标的不是引擎性能，而是版本一致性与可控性**。GeckoView 恰好解决的是后者，但它用的是 SpiderMonkey 而非 V8。
+
+**事实二：GeckoView 在 F-Droid 上有明确的构建障碍（且至今未解）。**
+
+`fdroid/fdroidserver` 的 issue **#982 "Whitelist Mozilla maven repo"** 自 2022-04-09 开到今天，状态仍是 `opened`：
+
+```
+$ curl -sS 'https://gitlab.com/api/v4/projects/fdroid%2Ffdroidserver/issues/982'
+{"state": "opened", "title": "Whitelist Mozilla maven repo", "closed_at": null}
+```
+
+F-Droid 收录政策明文只允许这几个预构建仓库来源：
+
+> 应用可以从可信 Maven 存储库下载特定状态的预构建 FLOSS 二进制文件。这些存储库包括 Maven Central、Google Maven、
+> OSS Sonatype、OSS JFrog、JitPack.io 和 Clojars。
+
+`maven.mozilla.org` 不在其中。实测确认 GeckoView 也**不在** Maven Central：
+
+```
+$ curl 'https://search.maven.org/solrsearch/select?q=g:org.mozilla.geckoview'
+→ Maven Central 无 geckoview
+→ org.mozilla.components 命中 0
+```
+
+结论：**GeckoView 无法通过 F-Droid 的依赖来源检查**，除非申请豁免或自建源码构建流程（把 mozilla-central 编译成 AAR 塞进仓库 —— 对本项目而言是自杀级工程量）。
+
+唯一可行的参照是 **Mull**（`us.spotco.fennec_dos`）：它能被收录，是因为整个浏览器**从 mozilla-central 源码自行编译**，不依赖预构建 AAR，绕开了这个限制。APK 体积 88~92 MiB（arm64/armv7）。
+
+#### 1.6 候选方案横向对比（2026-10-27 结论）
+
+| 方案 | 引擎 | F-Droid 可行性 | 体积增量 | 本项目改造量 | 性能 | 判定 |
+|---|---|---|---|---|---|---|
+| **系统 WebView**（现状） | Chromium 132（V8） | ✅ 零障碍 | 0 | 0 | 基准水平 | **保留** |
+| **GeckoView** | SpiderMonkey | ❌ 依赖来源不合规（#982 未解） | +40~92 MB | 极高（2386 行 WebView 代码全改） | V8 之下（合成基准慢 5~15%） | **否决** |
+| **Custom Tabs** | 系统浏览器内核（Chromium） | ✅ 零障碍 | 0 | 中 | 同上，但环境更完整 | **仅限站外链接**（见下） |
+| **WebViewUpgrade** | 换 provider | ❌ 装的是闭源 APK | — | — | — | **否决** |
+| **Chromium 自编译**（chromeview） | Chromium | ⚠️ 需自建构建体系 | +60 MB+ | 极高 | 持平 | **否决** |
+| **Crosswalk** | Chromium | ❌ 2017 停维 | — | — | — | **否决** |
+
+**最终建议：不换引擎，按「承载方式 + 边界」分工。**
+
+1. **登录页 / 人机验证 / 站点授权：维持 App 内 WebView（现状），不要改走 Custom Tabs。**
+   ⚠️ 2026-10-27 复核修正：本项目**历史上已经用过 Custom Tabs 并主动放弃**，原因记录在
+   `ui/screens/BrowserAuthWebPage.kt:53-56` 与 `services/auth/BrowserAuthLoginFlow.kt:19-21`：
+
+   > 原来：Custom Tabs 拉起系统浏览器 → 那台浏览器自己得能通（实测华为机上被安全浏览云策略拦 +
+   > 无 DoH 解析失败，点「授权」直接 403，深链永远不回）。
+   > 现在：复用 App 内的通用 WebViewPage（挂 WebViewDohInterceptor，站内请求走 OkHttp/DoH）
+
+   设备侧已确认华为浏览器**确实提供** Custom Tabs 服务（`com.huawei.browser/.customtab.CustomTabConnectionService`，
+   浏览器 17.9.2.300），所以**不是协议不支持**，而是**外部浏览器拿不到 App 的 DoH 解析链、
+   又被厂商安全浏览策略拦**。Custom Tabs 的收益（复用浏览器内核与 cookie）恰好被它的代价
+   （进程在浏览器侧，无法拦截请求、无法注入 App 的 DoH）抵消。
+
+   设备侧复核命令：
+   ```bash
+   adb shell pm query-services -a android.support.customtabs.action.CustomTabsService
+   ```
+
+2. **Custom Tabs 的唯一适用场景：打开纯站外网页**（`WebViewPage` 里用户点击站外链接）。
+   此时不需要 App 的 cookie、不需要过盾、不需要 DoH 拦截，交给浏览器反而更自然。
+   `androidx.browser:browser:1.8.0` 依赖已在 `libs.versions.toml:2,65` 与 `app/build.gradle.kts:116`
+   声明，但**源码零 import**（悬空依赖）；`app/build.gradle.kts:114-116` 的注释还写着
+   「浏览器授权登录：Custom Tabs 拉起系统浏览器」，与实际实现矛盾，需一并订正。
+
+3. **Markdown / MathJax 渲染保留离屏 WebView**（`MarkdownRenderEngine` 145 行 + `MathRenderHost`）。
+   这类是本地静态渲染，不涉及网络与验证，无换引擎必要。
+
+4. **若将来确需统一内核**，唯一合规路径是像 Mull 那样把 mozilla-central 源码自编译进仓库 —— 那是另一个量级的工程，
+   应单独立项评估，而不是塞进本次上架。
+
+> 一句话：**没有"又快又合规又能塞进仓库"的第三方 WebView SDK。** 系统 WebView 已经是 Chromium 132，
+> 性能不是瓶颈；瓶颈是"国内 ROM 的 WebView 供给与版本碎片化"。而 Custom Tabs 恰恰因为跑在浏览器进程，
+> 拿不到 App 侧的 DoH 与拦截链，在本项目的核心链路上是负收益。
 
 ---
 
@@ -316,22 +459,29 @@ CurrentVersionCode: 2
 
 ---
 
-## 五、执行顺序（2026-10-26 更新）
+## 五、执行顺序（2026-10-27 11:20 更新）
 
 | # | 动作 | 状态 |
 |---|---|---|
 | 1 | 删 Bugly（后续连 ACRA 一并移除，最终零远程上报） | ✅ 已完成 |
-| 2 | **删 TBS / X5**（4 处落点）→ `./gradlew assembleDebug` 确认通过 | ⬜ 待做 |
-| 3 | 改 `BUILD_TIME` 为提交时间、删 `mavenLocal()`、`.gitignore` 加 `__pycache__/` | ⬜ 待做 |
-| 4 | `./gradlew assembleRelease` → `unzip -l app-release.apk \| grep -iE "tencent\|acra"` 确认 tencent 零残留 | ⬜ 待做 |
-| 5 | `git add` + commit（当前 12 M + 4 未跟踪） | ⬜ 待做 |
-| 6 | 补 `fastlane/metadata/android/{en-US,zh-CN}/`（短描述 / 长描述 / changelog / icon 512 / 截图 6 张） | ⬜ 待做 |
-| 7 | 版本号 bump 到 `versionCode 2 / versionName 1.0.1`，提交，重打 `v1.0.1` tag（**必须打在新提交上**） | ⬜ 待做 |
-| 8 | 提 fdroiddata MR（`New App` 标签），看 CI 试构建对 `compileSdk 37` 的裁决 | ⬜ 待做 |
-| 9 | 合并后 24–48h 出现在主仓库 | ⬜ 待做 |
+| 2 | **删 TBS / X5**（4 处落点）→ 重新构建确认通过 | ✅ 已完成（工作区，待提交） |
+| 3 | **commit + push 5 个文件的 TBS 删除改动**（远端 `a1086b0` 里仍有 TBS） | ⬜ **待做 · 最优先** |
+| 4 | 改 `BUILD_TIME` 为提交时间、删 `mavenLocal()` | ⬜ 待做 |
+| 5 | `versionCode 2 / versionName 1.0.1` + 重打 `v1.0.1` tag（**必须打在新提交上**） | ⬜ 待做 |
+| 6 | 补 `fastlane/metadata/android/{en-US,zh-CN}/`（short_description / full_description / changelogs/2 / icon / phoneScreenshots） | ⬜ 待做 |
+| 7 | 隐私政策如实披露两个内置 DoH 端点（或换成公共 DoH） | ⬜ 待做 |
+| 8 | emoji 换 Twemoji 或申报 `NonFreeAssets`；补 `allowBackup` 规则；收窄 `MIXED_CONTENT`；`store-listing` 权限表补 CAMERA | ⬜ 待做 |
+| 9 | 删掉或标注 WIP：`server/`、`relay-config.example.json`、proguard 里的 firebase 残留规则 | ⬜ 待做 |
+| 10 | 提 fdroiddata MR（`New App` 标签），看 CI 试构建对 `compileSdk 37` 的裁决 | ⬜ 待做 |
+| 11 | 合并后 24–48h 出现在主仓库 | ⬜ 待做 |
 
-> 注意第 7 步：`v1.0.0` 指向的 `ae606fb` 没有 LICENSE，**不能复用**。要么删掉重打，要么直接发 `v1.0.1`。
+> 注意第 5 步：`v1.0.0` 指向的 `c8ef9c8` 没有 LICENSE 文件（LICENSE 在 `9d3239c` 才引入，在 tag 之后），
+> **不能复用**。要么删掉重打，要么直接发 `v1.0.1`。
 > `UpdateCheckMode: Tags` 会让 F-Droid 抓「最靠后的 tag」，旧 tag 留着不影响新版本，但会留个坏样本，建议一并删。
+
+> 注意第 3 步：F-Droid 是从 **GitHub 远端** 拉源码构建的。本地删了 TBS 不等于远端删了 ——
+> `git show origin/feat/migrate-vertical-slice:gradle/libs.versions.toml` 里 `tbs = "44286"` 还在。
+> **不 push 的话，审核员拉到的还是带 TBS 的版本。**
 
 ---
 
@@ -358,3 +508,39 @@ find app/src -name "*.so" -o -name "*.aar" -o -name "*.jar"    # 期望：无输
 unzip -l app/build/outputs/apk/release/*.apk | grep -iE "acra|bugly|tencent|smtt|firebase|analytics"
 # 期望：无输出
 ```
+
+### 6.4 模拟 F-Droid 构建环境（2026-10-27 新增，最有价值的一条）
+
+F-Droid 的构建机**没有** `local.properties`，也不做签名。必须验证「干净副本 + 无 local.properties」能构建：
+
+```bash
+# 造一个干净副本（排除 .git / build / local.properties）
+rsync -a --exclude='.git' --exclude='build/' --exclude='*/build/' \
+      --exclude='.gradle' --exclude='local.properties' ./ /tmp/jd-clean/
+
+cd /tmp/jd-clean && ./gradlew :app:assembleRelease
+# 期望：BUILD SUCCESSFUL
+# 产物：app/build/outputs/apk/release/app-release-unsigned.apk（未签名 ✅ F-Droid 自己重签）
+
+# 产物逐字节扫描（比 unzip -l 更严，能扫到 strings 里的域名）
+# 私有化词表不落在仓库里：单独放一份 gitignore 的本地文件，扫描时读进来
+cat > /tmp/jd-secret-patterns.txt <<'EOF'
+# 每行一个待查字面量（自建域名、服务器 IP、个人邮箱前缀、开发者账号名…）
+<把要查的字面量逐行写这里，不要提交进 Git>
+EOF
+
+# 用仓库内置的工具扫（等价于手写 unzip + 逐字节 count）
+python3 tools/scan_apk_residue.py \
+  /tmp/jd-clean/app/build/outputs/apk/release/app-release-unsigned.apk \
+  --patterns /tmp/jd-secret-patterns.txt
+# 期望：全部 0，退出码 0
+```
+
+> 说明：这一条比 `unzip -l | grep` 严格得多 —— `unzip -l` 只看**文件名**，
+> 而脚本扫的是**文件内容**，能抓到藏在 `resources.arsc`、dex 字符串常量里的域名与类名。
+> 上一轮就是靠它发现 `oaifree` 仍残留在 `classes2.dex` 里。
+>
+> ⚠️ **私有词表必须放在仓库外**。把「要查的字面量」直接写进 `docs/` 里的扫描脚本，
+> 等于在脱敏完成后又把真实域名/IP/账号名写回仓库 —— 扫的是 APK，泄露的是 Git。
+> 工具默认读 `tools/scan-patterns.local.txt`（已在 `.gitignore` 中），
+> 也可用 `--patterns` 指向任意仓库外路径。

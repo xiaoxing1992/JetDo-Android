@@ -38,3 +38,8 @@ __pycache__/
 /.tmp/
 /.workbuddy/
 /artifacts/
+
+## 私有资产扫描词表（含真实域名/IP/账号名，禁止入库）
+/tools/scan-patterns.local.txt
+*.scan-patterns.local.txt
+jd-secret-patterns.txt

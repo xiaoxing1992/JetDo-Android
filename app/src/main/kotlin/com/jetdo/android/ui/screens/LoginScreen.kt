@@ -428,8 +428,8 @@ fun signalLoginSuccess(source: String, url: String) {
                     .fillMaxWidth()
                     .weight(1f),
                 factory = { ctx ->
-                    // X5 可用则用 X5,否则回落系统 WebView(见 LoginWebViewFactory)。
-                    val f = LoginWebViewFactory(
+                    val wv = LoginWebViewFactory.create(
+                        ctx,
                         onPageFinished = { url ->
                             Timber.i("%s page end url=%s", LOG_TAG, url)
                             scope.launch { WebSessionManager.saveCookies("LoginPage") }
@@ -455,8 +455,7 @@ fun signalLoginSuccess(source: String, url: String) {
                         },
                         onHideKeyboard = { hideNativeKeyboard() }
                     )
-                    val wv = f.build(ctx)
-                    webViewRef = wv as? WebView
+                    webViewRef = wv
                     wv
                 }
             )
