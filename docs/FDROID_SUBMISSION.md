@@ -500,7 +500,7 @@ Repo: https://github.com/xiaoxing1992/JetDo-Android.git
 Builds:
   - versionName: 1.0.1
     versionCode: 2
-    commit: <完整 40 位 commit hash>   # 官方要求用齐全 hash，别用 tag 名
+    commit: 8c05e69d3e335b8f7b3ea23b1a0efe1d7f0c7129   # v1.0.1 tag 指向的 commit（完整 40 位，官方要求用齐全 hash，别用 tag 名）
     gradle:
       - yes
 
@@ -515,6 +515,17 @@ CurrentVersionCode: 2
 - `gradle: - yes` 表示无 flavor，跑 `assembleRelease`；
 - `UpdateCheckMode: Tags` 依赖你每次 release 打 tag，正则默认匹配 `v1.0.1` 这类；
 - **不要**写 `sdks` / `androidbuildtoolsversion`，字段不存在。
+
+> ⚠️ **提 MR 前务必在干净副本上跑一次 `assembleRelease`** —— F-Droid 构建机跑的就是这个任务，
+> 它包含 `lintVitalRelease`，而 `assembleDebug` **不跑** lint。本次就是靠这一步抓到的：
+> 备份规则里写了 `<exclude domain="no_backup" .../>`，`no_backup` 不是合法的 `domain` 值，
+> Debug 构建绿灯、Release 构建直接 BUILD FAILED。如果只验过 Debug 就提 MR，CI 会替你发现，
+> 但那要等一整轮 CI。
+>
+> ```bash
+> git clone --depth 1 --branch v1.0.1 https://github.com/xiaoxing1992/JetDo-Android.git /tmp/jd-fdroid-sim
+> cd /tmp/jd-fdroid-sim && ./gradlew :app:assembleRelease
+> ```
 
 提交流程：fork `gitlab.com/fdroid/fdroiddata` → 新分支 `com.jetdo.android` → 加上述文件 → `git commit -m "New App: com.jetdo.android"` → 推到自己的 fork（GitLab CI 会自动 lint + 试构建）→ 提 MR 并打 **`New App`** 标签。
 
