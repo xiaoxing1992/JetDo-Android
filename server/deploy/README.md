@@ -4,7 +4,7 @@
 > 都是占位符 —— 换成你自己的服务器与域名。真实值只留在本地，不进仓库。
 >
 > 推荐：**中继域名单独用一个 zone**，不要和你有管理面板的域名同域。
-> 客户端 APK 里必然带着中继域名（`BuildConfig.ACRA_URI` 可以被 `strings` 提取），
+> 客户端一旦启用推送，`relay-config.json` 里的中继地址会编进 APK（`strings` 可提取），
 > 同域兄弟子域会被顺带枚举到；分开之后，泄漏一个域不会牵出后台。
 
 先判一件事：**这台机器的 80/443 是谁在听。**
@@ -33,7 +33,7 @@ sudo bash deploy/deploy.sh <域名> [端口]
 签证书（已有证书 / certbot webroot / acme.sh dns_cf 三选一）→ 正式 443 配置 → 公网自检。
 只往 `conf.d` 加一个文件，不动任何已有站点。
 
-不用推送功能可以完全不管 VAPID / Firebase：`relay.py` 缺配置会降级为「只收崩溃」。
+不用推送功能可以完全不管 VAPID / Firebase：缺配置时 `relay.py` 只告警不退出。
 
 ## B. 80/443 在容器里
 
@@ -127,15 +127,12 @@ sudo certbot certificates --config-dir /opt/<project>/deploy/certbot/conf | grep
 | `unknown directive "http2"` | 该指令要 nginx ≥ 1.25.1，Ubuntu 24.04 自带的是 1.24 | 写 `listen 443 ssl http2;`（容器是 1.27，两种都行） |
 
 另外两个环境结论：**别用 8080**（本机 `<existing-host>` 的反代指向 `127.0.0.1:8080`，
-中继占了会顺带接管那个站点）；nginx 默认 `client_max_body_size 1m`，必须放到 8m，
-否则 ACRA 的报告在到达 relay 之前就被 413 掉。
+中继占了会顺带接管那个站点）。
 
 ## 验证清单
 
 ```bash
 curl -s https://<域名>/health            # 应为 {"status":"ok",...}，不是别的服务的 JSON
-curl -s -o /dev/null -w '%{http_code}\n' https://<域名>/crash/stats   # 403
-curl -s -X POST https://<域名>/crash -H 'Content-Type: application/json' -d '{"REPORT_ID":"t1"}'
-curl -s http://127.0.0.1:18080/crash/stats        # files 应为 1
-sudo journalctl -u jetdo-relay -n 5 --no-pager    # 客户端 IP 应是真实公网 IP，不是容器 IP
+curl -s -o /dev/null -w '%{http_code}\n' https://<域名>/crash   # 404（该端点已不存在）
+sudo journalctl -u jetdo-relay -n 5 --no-pager                  # 无 error/panic
 ```

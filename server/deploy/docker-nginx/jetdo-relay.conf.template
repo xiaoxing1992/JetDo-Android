@@ -1,14 +1,14 @@
-# JetDo 崩溃上报中继 —— 跑在「容器里的 nginx」时用的站点配置
+# JetDo 推送中继 —— 跑在「容器里的 nginx」时用的站点配置
 #
-# 场景：80/443 由 Docker 容器占用（本机是 <nginx-container>），宿主机 nginx 处于
+# 场景：80/443 由 Docker 容器占用（<nginx-container>），宿主机 nginx 处于
 # inactive，那么 deploy.sh 那套「装到 /etc/nginx/conf.d」完全不生效——必须配置进容器。
 #
 # 用法见同目录 ../README.md 的 B 路径。关键点：
 #   1. ${DOLLAR} 是该容器的转义约定（容器 env 里有 DOLLAR=$），用于输出字面 $
-#   2. __RELAY_HOST__ 是占位符，docker cp 前先 sed 成自己的域名
-#   3. 反代目标写**宿主网关 IP**（本机 172.19.0.1），不是 127.0.0.1
+#   2. __RELAY_HOST__ / __HOST_GATEWAY__ 是占位符，docker cp 前先 sed 成实际值
+#   3. 反代目标写**宿主网关 IP**，不是 127.0.0.1 —— 容器里回不到宿主的回环地址
 #   4. X-Forwarded-For 用 $remote_addr **覆盖**而不是 $proxy_add_x_forwarded_for 追加，
-#      否则客户端自带一个 XFF 就能伪造来源 IP、绕过限流
+#      否则客户端自带一个 XFF 就能伪造来源 IP，服务端日志与限流都会失真
 
 server {
     listen 80;
@@ -28,25 +28,8 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:jetdo_ssl:10m;
 
-    client_max_body_size 8m;
-
-    location = /crash {
-        proxy_pass http://172.19.0.1:18080;
-        proxy_set_header Host              ${DOLLAR}host;
-        proxy_set_header X-Real-IP         ${DOLLAR}remote_addr;
-        proxy_set_header X-Forwarded-For   ${DOLLAR}remote_addr;
-        proxy_set_header X-Forwarded-Proto ${DOLLAR}scheme;
-        proxy_read_timeout 30s;
-    }
-
     location = /health {
-        proxy_pass http://172.19.0.1:18080;
-        proxy_set_header Host ${DOLLAR}host;
-    }
-
-    location = /crash/stats {
-        deny all;
-        proxy_pass http://172.19.0.1:18080;
+        proxy_pass http://__HOST_GATEWAY__:18080;
         proxy_set_header Host ${DOLLAR}host;
     }
 

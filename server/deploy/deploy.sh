@@ -48,8 +48,7 @@ python3 -c 'import ensurepip' 2>/dev/null || die "缺 python3-venv：
 
 # ---------------------------------------------------------------- 2. 目录与代码
 id -u "$APP_USER" >/dev/null 2>&1 || { log "创建系统用户 $APP_USER"; useradd -r -s /usr/sbin/nologin "$APP_USER"; }
-mkdir -p "$APP_DIR/crashes"
-install -m 644 "$SRC_DIR/relay.py" "$SRC_DIR/crash_store.py" "$SRC_DIR/requirements.txt" "$APP_DIR/"
+install -m 644 "$SRC_DIR/relay.py" "$SRC_DIR/requirements.txt" "$APP_DIR/"
 
 if [[ ! -d "$APP_DIR/.venv" ]]; then
     log "创建 venv 并安装依赖（首次约 1-2 分钟）"
@@ -65,19 +64,11 @@ if [[ -f "$APP_DIR/.env" ]]; then
 else
     log "写入 $APP_DIR/.env"
     cat > "$APP_DIR/.env" <<ENV
-# ---- 崩溃上报 ----
-CRASH_DIR=$APP_DIR/crashes
-# 磁盘硬上限 100MB，超限批量淘汰最旧的，删到 85MB 为止
-CRASH_MAX_BYTES=104857600
-# 单份报告上限（解压后）
-CRASH_MAX_REPORT_BYTES=2097152
-# 每 IP 每分钟上报数上限
-CRASH_RATE_PER_MIN=30
 PORT=$RELAY_PORT
 # 日志目录。/opt 在 ProtectSystem=strict 下只读，别把 relay.log 落到 CWD。
 LOG_DIR=/var/log/jetdo-relay
 
-# ---- 推送中继（不用推送可留空，relay.py 会降级为「只收崩溃」）----
+# ---- 推送中继（不配则服务仍可启动，只是推送不可用）----
 # FIREBASE_CREDENTIALS_PATH=$APP_DIR/service-account.json
 # VAPID_PRIVATE_KEY_PATH=$APP_DIR/vapid_private.pem
 # VAPID_PUBLIC_KEY_PATH=$APP_DIR/vapid_public.pem
@@ -194,9 +185,7 @@ echo
 cat <<EOF
 
 下一步：
-  1) 项目 local.properties 里填：
-       jetdo.acra.uri=https://$DOMAIN/crash
-  2) 崩溃存储统计（公网 /crash/stats 已被 nginx deny）：
-       curl -s http://127.0.0.1:$RELAY_PORT/crash/stats
-  3) 日志：journalctl -u $SVC_NAME -f
+  1) 客户端若要接入推送，把 relay-config.json 里的 relay_endpoint 指到
+       https://$DOMAIN/subscribe
+  2) 日志：journalctl -u $SVC_NAME -f
 EOF

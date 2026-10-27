@@ -27,7 +27,7 @@
 - 无 GMS / Firebase / 友盟 / 极光 / 高德 / 百度等闭源 SDK ✅ 全量 grep 零命中
 - 无 `.so`、无 `jniLibs`、无入库 `.aar`（仅剩 `.gradle/jugg/jugg-runtime.jar` 本地工具产物，不入库）✅
 - 4 个权限全部有明确用途（INTERNET / ACCESS_NETWORK_STATE / POST_NOTIFICATIONS / CAMERA）✅
-- `local.properties` 已 gitignore，ACRA 端点在 F-Droid 构建机缺省为空串 → 天然产出「无远程上报」产物 ✅
+- `local.properties` 已 gitignore；**构建产物不含任何上报端点/埋点** —— 崩溃现场只写本机日志 ✅
 - `versionCode` / `versionName` 在 `defaultConfig` 标准位置 ✅
 - 公开 GitHub 仓库 + Issue 跟踪，作者即提交者 ✅
 
@@ -37,7 +37,7 @@
 
 | 级别 | 项目 | 现状 | 处置 |
 |---|---|---|---|
-| 🔴 P0 | 腾讯 Bugly 崩溃上报 | ~~`com.tencent.bugly:crashreport:4.1.9.3`，`JetDoApplication.kt:131` 实际调用~~ | ✅ **已删除，改用 ACRA → 自建 `/crash`**（2026-10-26） |
+| 🔴 P0 | 腾讯 Bugly 崩溃上报 | ~~`com.tencent.bugly:crashreport:4.1.9.3`，`JetDoApplication.kt:131` 实际调用~~ | ✅ **已删除**（2026-10-26）；后续连 ACRA 也一并移除，最终**不做任何远程上报** |
 
 ---
 
@@ -45,10 +45,14 @@
 
 ### 1.1 腾讯 Bugly —— ✅ 已处理（2026-10-26）
 
-> 处置方式：选路径 B（换 FLOSS 替代）。已删除 Bugly，接入 **ACRA 5.13.1**（Apache-2.0，Maven Central），
-> 报告发送到自建 `server/relay.py` 的 `POST /crash`，服务端有 100MB 配额与批量淘汰。
-> 客户端端点由 `local.properties` 的 `jetdo.acra.uri` 在编译期注入，缺省为空串时整体跳过 ACRA 初始化——
-> 这让 F-Droid 构建机（无 `local.properties`）天然产出「不带远程上报」的合规产物。
+> 处置方式：最初选了路径 B（换 FLOSS 替代，接入 ACRA 5.13.1 上报到自建 `/crash`）；
+> **2026-10-26 晚进一步整体移除**，改为「崩溃现场只写本机日志」。
+>
+> 移除理由：ACRA 方案要求把中继域名写进隐私政策、并通过 `BuildConfig` 编进 APK。
+> 该域名与作者的其他服务（AI 网关管理面板）同属一个域名区，APK 分发即等于公开基础设施拓扑，
+> 同域兄弟子域可被顺带枚举。权衡后放弃远程崩溃监控，换取零上报面。
+>
+> 副产品：连带的 `POST /crash` 无鉴权、gzip 解压无上限两个 P0 级服务端风险一并消失。
 > 保留本节作为决策记录。
 
 F-Droid 政策原文：*"Firebase 和 GMS 是明确不被接受的非 FOSS 库的典型例子"*，判定标准是**闭源 + 远端采集**。Bugly 两者都占：闭源 SDK，崩溃时上传堆栈 + 设备环境到腾讯服务器，还会命中 `AntiFeatures: Tracking`。
@@ -103,10 +107,10 @@ Inclusion Policy 原文：
 | 路径 | 做法 | 代价 | 适用 |
 |---|---|---|---|
 | A. 直接删 | 删依赖 + 删调用 | 近乎为零（见下） | ✅ 本项目推荐 |
-| B. FLOSS 替代 | 换 ACRA（Apache-2.0） | 半天接一次 | ✅ Bugly 可选 |
+| B. FLOSS 替代 | 换 ACRA（Apache-2.0） | 半天接一次 | ⚠️ 接完又移除了，见 §1.1 |
 | C. 单独 flavour | `fossImplementation` / source set 分离 | 每个含闭源 SDK 的点都要抽接口 + 两套实现，且 `versionCode` 需保证不冲突 | ⚠️ 本项目不划算 |
 
-**为什么 B 比 C 划算**：旧版政策文档里 F-Droid 自己点名推荐过 ACRA（*"either using a FLOSS analytics software like ACRA or by removing non-free dependencies completely"*）。ACRA 支持自定义 HTTP 上报端点 —— 你 `server/relay.py` 那套 FastAPI 直接加个 `/crash` 路由就能收，崩溃监控一点不丢，还不用维护两套构建。
+**为什么最终连 B 也放弃**：ACRA 本身合规（Apache-2.0、F-Droid 官方点名推荐过），问题不在库而在**部署**——自建接收端的域名必须写进隐私政策并被编进 APK，等于公开基础设施拓扑。若将来要恢复崩溃监控，正确做法是**中继单独用一个域名区**，不要和任何带管理面板的域名同域。
 
 **为什么 C 不划算**：`JetDoApplication.kt` 的 Bugly 调用、`proguard-rules.pro` 的 keep 规则、`strings.xml` 的隐私文案都得按 source set 切两套，工程复杂度上去了；而收益只是"F-Droid 用户那点量也能在你腾讯后台看到"。TBS 更是完全是死代码，为它单独拆 flavor 毫无意义。
 
@@ -316,7 +320,7 @@ CurrentVersionCode: 2
 
 | # | 动作 | 状态 |
 |---|---|---|
-| 1 | 删 Bugly + 接 ACRA | ✅ 已完成（改动尚未 commit） |
+| 1 | 删 Bugly（后续连 ACRA 一并移除，最终零远程上报） | ✅ 已完成 |
 | 2 | **删 TBS / X5**（4 处落点）→ `./gradlew assembleDebug` 确认通过 | ⬜ 待做 |
 | 3 | 改 `BUILD_TIME` 为提交时间、删 `mavenLocal()`、`.gitignore` 加 `__pycache__/` | ⬜ 待做 |
 | 4 | `./gradlew assembleRelease` → `unzip -l app-release.apk \| grep -iE "tencent\|acra"` 确认 tencent 零残留 | ⬜ 待做 |
@@ -349,7 +353,8 @@ grep -c "uses-permission" app/src/main/AndroidManifest.xml
 # 4. 无原生产物
 find app/src -name "*.so" -o -name "*.aar" -o -name "*.jar"    # 期望：无输出
 
-# 5. ACRA 端点缺省行为（模拟 F-Droid 构建机无 local.properties）
-mv local.properties /tmp/lp.bak && ./gradlew :app:compileReleaseKotlin; mv /tmp/lp.bak local.properties
-# 期望：能编过，且 BuildConfig.ACRA_URI == ""
+# 5. 产物里不应出现任何上报/统计组件
+#    （期望：acra / bugly / tencent / firebase / analytics 全部无输出）
+unzip -l app/build/outputs/apk/release/*.apk | grep -iE "acra|bugly|tencent|smtt|firebase|analytics"
+# 期望：无输出
 ```

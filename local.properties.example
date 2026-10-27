@@ -12,8 +12,6 @@ jetdo.release.storePassword=your_keystore_password
 jetdo.release.keyAlias=jetdo
 jetdo.release.keyPassword=your_key_password
 
-# ===== 崩溃上报端点（可选）=====
-# ACRA 把崩溃报告 POST 到这里，对应 server/relay.py 的 POST /crash。
-# 不配则 BuildConfig.ACRA_URI 为空串，客户端整体跳过 ACRA 初始化 —— 
-# F-Droid 构建机没有本文件，正是靠这一点得到「不带远程上报」的合规产物。
-jetdo.acra.uri=https://your-relay.example.com/crash
+# ===== 推送中继（可选）=====
+# 推送走 app/src/main/assets/relay-config.json（endpoint + VAPID 公钥），不在这里配。
+# 本应用不做任何远程崩溃上报：崩溃现场只写本机日志，「设置 → 诊断日志」可查看/导出。

@@ -8,7 +8,7 @@
 - [ ] 签名配置（`app/build.gradle.kts` 尚无 `signingConfigs`）
 - [x] CI（GitHub Actions：`.github/workflows/ci.yml`，push/PR 跑 assembleDebug + 全模块单测）
 - [x] androidTest 骨架（app/src/androidTest 3 类 7 用例，connectedDebugAndroidTest 模拟器 7/7 通过）
-- [x] 崩溃上报（ACRA 5.13.1 已接入，替代原腾讯 Bugly；端点在 `local.properties` 的 `jetdo.acra.uri`，服务端见 `server/relay.py` 的 `/crash`）
+- [x] 崩溃现场：仅本机落盘（`DebugLogStore` + `FileLoggerDaemon`，设置→诊断日志可查看/导出）；**不做任何远程上报**（原 Bugly → ACRA → 2026-10-26 整体移除，隐私政策同步）
 - [x] 隐私政策 / 用户协议 / 商店素材（docs/publish/ 三份；联系方式占位待补，隐私政策需发布为网页链接）
 - [x] 多语言（UI 文案抽取进 strings.xml 并翻译；679 条 + values-en 全量，locales_config 声明 zh-CN / en-US）
 - [ ] 真机回归：折叠屏桌面姿态媒体分区、composer 拍照入口

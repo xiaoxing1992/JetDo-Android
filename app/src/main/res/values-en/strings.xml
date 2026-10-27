@@ -651,11 +651,11 @@
     <string name="push_channel_desc">Replies, mentions, likes and other community notifications</string>
     <string name="poll_named">Poll · %1$s</string>
     <string name="privacy_consent_title">Welcome to JetDo</string>
-    <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· When the app crashes, crash stacks and device environment info are sent to a server operated by the app developer (no third party, no account or browsing data) for bug fixing only — this is enabled only after you agree.\n· Uninstalling the app deletes all local data.</string>
+    <string name="privacy_consent_body">Before using this app, please read and accept the Privacy Policy and User Agreement (full text on the app release page):\n\n· No ads, no analytics, and nothing is uploaded to the developer. Your account data only flows between your device and the LINUX DO community.\n· Network permission is used to access the community; notifications are used only after you grant permission.\n· Crash logs stay on your device and can be viewed or exported from Settings → Diagnostics. They are never sent automatically.\n· Uninstalling the app deletes all local data.</string>
     <string name="privacy_consent_agree">Agree and continue</string>
     <string name="privacy_consent_decline">Decline</string>
     <string name="privacy_consent_exit_title">Exit the app?</string>
-    <string name="privacy_consent_exit_body">Crash reporting cannot be enabled in compliance mode without your consent, so the app will exit. You can reopen it later to decide again.</string>
+    <string name="privacy_consent_exit_body">The app cannot continue without your consent, so it will exit. You can reopen it later to decide again.</string>
     <string name="privacy_consent_exit_confirm">Exit</string>
     <string name="privacy_consent_exit_cancel">Stay</string>
 </resources>

@@ -1,5 +1,5 @@
 [Unit]
-Description=JetDo relay (push + crash report sink)
+Description=JetDo push relay
 Documentation=https://github.com/xiaoxing1992/JetDo-Android
 After=network-online.target
 Wants=network-online.target
@@ -37,7 +37,6 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/jetdo-relay/crashes
 
 # 日志写 /var/log/jetdo-relay（由 systemd 创建并授权给 jetdo 用户）。
 # ProtectSystem=strict 下 /opt 是只读的，relay.py 若把 relay.log 写在 CWD 会直接

@@ -55,12 +55,6 @@ android {
         buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // 崩溃上报端点（ACRA → server/relay.py 的 POST /crash）。
-        // 取自 local.properties 的 jetdo.acra.uri；未配置时为空串，
-        // 运行时据 BuildConfig.ACRA_URI 是否为空决定要不要初始化 ACRA——
-        // F-Droid 构建机没有 local.properties，自然得到一个不做远程上报的产物。
-        val acraUri = localProps.getProperty("jetdo.acra.uri").orEmpty()
-        buildConfigField("String", "ACRA_URI", "\"$acraUri\"")
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -204,12 +198,6 @@ dependencies {
 
     // Timber
     implementation(libs.timber)
-
-    // 崩溃上报（ACRA，Apache-2.0）。替代原腾讯 Bugly：闭源 SDK 不被 F-Droid 接受，
-    // 且 Bugly 会把堆栈与设备信息传回腾讯服务器，而 ACRA 只发到自建 relay。
-    implementation(libs.acra.core)
-    implementation(libs.acra.http)
-    implementation(libs.acra.limiter)
 
     // Testing
     testImplementation(libs.junit)
