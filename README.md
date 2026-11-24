@@ -11,6 +11,7 @@
 [![Issues](https://img.shields.io/github/issues/xiaoxing1992/JetDo-Android?color=red)](https://github.com/xiaoxing1992/JetDo-Android/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/xiaoxing1992/JetDo-Android/pulls)
 [![Community](https://img.shields.io/badge/LINUX%20DO-社区-ffb003)](https://linux.do)
+[![MiniApp](https://img.shields.io/badge/微应用-小程序引擎-ff69b4)](https://github.com/linux-do/mapp-developer-guide)
 
 JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户端，基于 Jetpack Compose 从零编写。没有跨平台框架，没有妥协的渲染层——帖子里的一切都渲染成真正的原生视图。
 
@@ -26,8 +27,10 @@ JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户�
 | **首页** | **话题详情** | **消息（通知 / 私信）** |
 | ![个人主页](screenshots/profile.png) | ![筛选抽屉](screenshots/drawer.png) | ![搜索](screenshots/search.png) |
 | **个人主页** | **筛选抽屉** | **搜索** |
-| ![设置](screenshots/settings.png) | ![深色首页](screenshots/home-dark.png) | ![深色详情](screenshots/topic-detail-dark.png) |
-| **设置** | **深色模式** | **深色阅读** |
+| ![设置](screenshots/settings.png) | ![深色首页](screenshots/home-dark.png) | ![深色消息](screenshots/messages-dark.png) |
+| **设置** | **深色首页** | **深色消息** |
+| ![微应用广场](screenshots/miniapp-square.png) | ![微应用广场·深色](screenshots/miniapp-square-dark.png) | ![微应用运行](screenshots/miniapp-run.png) |
+| **微应用广场** | **深色模式** | **微应用运行（小游戏）** |
 
 ## 功能特性
 
@@ -52,6 +55,13 @@ JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户�
 - 个人主页、用户动态（我的话题 / 回复 / 点赞）、徽章墙
 - 等级进度（读取 connect.linux.do 的升级要求）
 - 通知中心与角标，覆盖 30+ 种通知类型（含 Boost、Follow）
+
+### 微应用
+
+- 底部独立「微应用」Tab，聚合 LINUX DO 社区小程序，广场分页面板浏览（上拉加载更多 / 下拉刷新，共 177 款应用）
+- 自建小程序宿主引擎：双层 iframe 沙箱隔离 + 同源 Worker 委托解密，论坛只做后端
+- `globalThis.miniApp` SDK 冻结注入、权限闸门按审核结果放通，未实现能力显式降级而非静默成功
+- 原生能力按需桥接（存储隔离 / HTTP / WS / 剪贴板 / 分享 / 屏幕常亮），横竖屏切换视口自动同步
 
 ### 阅读体验
 
@@ -80,6 +90,12 @@ JetDo 是为 [LINUX DO](https://linux.do) 社区打造的 Android 原生客户�
 LINUX DO 有 Cloudflare 防护，原生 HTTP 栈发的请求会被拦。使用常驻隐藏 WebView 承载会话，所有接口请求都注入 JS 用浏览器侧的 `fetch` 发出，Cookie（`_t` / `cf_clearance`）由 WebView 自己管，JSON 回传给 Compose 渲染成原生界面。
 
 > 核心文件：`app/src/main/kotlin/com/jetdo/android/services/network/ArkWebNetworkBridge.kt`
+
+### 微应用引擎
+
+不套论坛网页版，而是在 App 里自建小程序运行时，论坛退化成只提供登录态、同源 origin、解密 Worker 和包文件的纯后端。宿主页用 `https://linux.do` 作 base URL 加载以拿到同源 origin；内层用 `sandbox="allow-scripts"`（不给 `allow-same-origin`）的 opaque origin iframe 跑微应用，隔离是浏览器强制的——内层读不到外层的 Cookie / DOM / localStorage。跨源调用走两段独立的 Promise/id 桥（内层 `postMessage` → 外层 `@JavascriptInterface` → 原生 dispatch → `evaluateJavascript` 逐层回传），权限以启动下发的审核结果为准。包是私有 DMA 容器，验签解密交给站点下发的同源 Worker，release 原文透传。
+
+> 核心文件：`app/src/main/assets/miniapp/host.html`、`app/src/main/kotlin/com/jetdo/android/services/miniapp/MiniAppHostRuntime.kt`
 
 ### Cloudflare 挑战的静默恢复
 
