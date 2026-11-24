@@ -359,6 +359,7 @@
     <string name="err_endorse_categories_json">Endorse-categories response is not valid JSON.</string>
     <string name="err_host_not_ready">The web host isn\'t ready yet.</string>
     <string name="err_http_status">linux.do returned HTTP %1$s.</string>
+    <string name="err_login_required">Sign in to linux.do first, then retry.</string>
     <string name="err_ldc_parse">Failed to parse LDC account info.</string>
     <string name="err_ldc_request">The LDC request failed.</string>
     <string name="err_new_topic_empty">Empty new-topic response.</string>
@@ -424,6 +425,7 @@
     <string name="home_messages">Messages</string>
     <string name="home_pick_topic">Select a topic on the left to start reading</string>
     <string name="home_profile">Me</string>
+    <string name="mini_app_square_title">Mini Apps</string>
     <string name="home_push_summary">Replies, PMs and mentions</string>
     <string name="home_realtime_desc">Get notified of new replies while reading</string>
     <string name="home_realtime_topics_desc">Show a bar at the top when new topics arrive; tap to insert</string>

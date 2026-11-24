@@ -56,6 +56,7 @@ import com.jetdo.android.common.layout.rememberBookPosture
 import com.jetdo.android.ui.components.ContentEmptyPane
 import com.jetdo.android.ui.drafts.DraftResume
 import com.jetdo.android.ui.drafts.DraftsScreen
+import com.jetdo.android.ui.miniapp.MiniAppRunScreen
 import com.jetdo.android.ui.screens.DebugLogScreen
 import com.jetdo.android.ui.screens.ExperimentalSettingsScreen
 import com.jetdo.android.ui.qr.QrScanScreen
@@ -577,8 +578,19 @@ fun JetDoNavHost(
             )
         }
 
-        composable(Routes.BOOKMARKS) {
-            BookmarksScreen(
+        // 微应用运行页：承载宿主引擎（沙箱 iframe + miniApp 桥）。
+        composable(
+            route = "${Routes.MINI_APP_RUN}/{appId}",
+            arguments = listOf(navArgument("appId") { type = NavType.StringType })
+        ) { entry ->
+            val appId = entry.arguments?.getString("appId").orEmpty()
+            MiniAppRunScreen(
+                appId = appId,
+                onExit = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.BOOKMARKS) {            BookmarksScreen(
                 username = CurrentUserHolder.currentUser.value?.username.orEmpty(),
                 onNavigateBack = { navController.popBackStack() },
                 onOpenTopic = { topicId, title, postNumber ->
@@ -766,6 +778,12 @@ object Routes {
     const val SEARCH = "search"
     const val NOTIFICATION = "notification"
     const val PROFILE = "profile"
+
+    /** 底部第 4 Tab：微应用广场。 */
+    const val MINI_APP_SQUARE = "mini_app_square"
+
+    /** 微应用运行页（带 appId 参数）。 */
+    const val MINI_APP_RUN = "mini_app_run"
 
     const val TOPIC_DETAIL = "topic_detail"
     const val USER_PROFILE = "user_profile"

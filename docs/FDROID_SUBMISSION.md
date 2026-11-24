@@ -27,6 +27,19 @@
 | 🟡 P2 | `MIXED_CONTENT_ALWAYS_ALLOW` 6 处 | `ArkWebNetworkBridge.kt:296` / `WebViewPage.kt:354` / `LoginWebViewFactory.kt:34` / `CfChallengeScreen.kt:160` / `ConnectWebHost.kt:62` / `LdcCreditWebHost.kt:76` | **暂不改**：社区正文含 http 图片，改 NEVER_ALLOW 会裂图；属功能风险项，需单独评估 |
 | 🟡 P2 | `server/` 与 `relay-config.example.json` 是未接线的半成品 | APK 不依赖，但审阅者会看到 | 删掉或标 WIP |
 
+### 2026-11-20 新增：站点微应用（mapp）宿主引擎的上架影响
+
+新增底部「微应用」Tab，运行 LINUX DO 站点下发的微应用包。F-Droid 审阅要点：
+
+| 审阅点 | 实际情况 | 处置 |
+|---|---|---|
+| 运行时加载远程代码 | 微应用包从站点 CDN 下载（自定义 DMA 容器），由**论坛下发的同源 Worker** 解密，解出的 `app.js` 在 sandbox iframe 内执行 | 全部来自用户已登录的 linux.do 站点、无闭源 SDK、无预编译二进制；代码不在 APK 内。属「连接到自有服务」范畴，与既有 WebView 浏览论坛同源同质 |
+| 权限模型 | 微应用能用的能力受 `release.permissions`（站点审核结果）约束，宿主同步判权；未实现能力显式 `API_UNSUPPORTED` 降级 | 不新增 Android 权限；微应用拿不到宿主 DOM/Cookie/存储（sandbox iframe 隔离） |
+| 隐私政策一致性 | 微应用请求发往站点自身端点（`mini-app-api/*`）与开发者声明的端点，宿主注入的 `runtime_token` 是站点签发的短时 JWT | **待确认**：若隐私政策未提及「微应用」这一功能形态，需补一句说明（数据仍发给 linux.do，与登录浏览一致），并视情况递增 `PrivacyConsentStore.POLICY_VERSION` |
+| 网络行为 | 广场列表 `/mini-app-api/apps.json`、启动 `/mini-app-api/production/<uuid>/launch`、Worker 脚本、包 CDN；全部走既有同源 WebView 通道 | 无新增第三方域名；DoH / Cookie 策略与全局一致 |
+
+> 说明：微应用代码**不在构建产物里**（运行时下载），因此 `scan_apk_residue.py` 扫描不到它；这符合 F-Droid 要求（不打包不可审计的二进制），但仍需隐私政策如实披露功能存在。
+
 ### 2026-10-27 实测验证记录（可复现）
 
 ```bash

@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+  /* 宿主文档本身不显示任何东西：真正的微应用跑在下面这层 sandbox iframe 里。 */
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  #stage { position: fixed; left: 0; top: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; }
+  /* iframe 必须给出真实的像素级高度：srcdoc + sandbox 下 height:100% 会解析成 0，
+     内层 window.innerHeight=0 会让微应用创建的离屏 canvas 宽高为 0，drawImage 直接抛错。 */
+  #app-frame { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+               border: 0; display: block; background: transparent; }
+  #boot { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+         font: 14px/1.6 -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif; color: #666; }
+</style>
+</head>
+<body>
+<!--
+  微应用宿主页面（JetDo 原生宿主引擎）。
+
+  职责：
+  1. 在本页内跑论坛下发的 package-worker，把加密 DMA 包解成文件表；
+  2. 建一层 sandbox iframe（无 same-origin 权限）承载微应用本体；
+  3. 在 iframe 内注入 globalThis.miniApp —— 官方 SDK 的 getSDK() 就是取这个全局；
+  4. 与原生侧通过 window.JetDoMiniApp.<method>(...) 通信。
+
+  为什么要有「外层同源 + 内层 sandbox」两层：
+  外层与论坛同源，才能加载同源 Worker、拿到 CDN 包、执行带 CORS 的业务请求；
+  内层去掉 same-origin，微应用拿不到外层的 DOM、Cookie 与存储，隔离才成立。
+
+  协议依据：github.com/linux-do/mapp-developer-guide
+-->
+<div id="stage">
+  <iframe id="app-frame"
+          sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-pointer-lock allow-downloads allow-presentation"
+          allow="fullscreen; autoplay; camera; microphone"
+          referrerpolicy="no-referrer"></iframe>
+</div>
+<div id="boot">加载中…</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // =====================================================================
+  // 外层状态
+  // =====================================================================
+  var OUTER_ORIGIN = window.location.origin;   // https://linux.do（宿主必须与论坛同源）
+  var frame = document.getElementById("app-frame");
+  var boot = document.getElementById("boot");
+
+  /** 解密后的包文件表：path -> {encoding: "utf8"|"base64", data: string} */
+  var packageFiles = Object.create(null);
+  /** 原生下发的策略快照（权限、媒体、端点白名单…），页面侧据此做本地快筛。 */
+  var policy = { permissions: [], media: {}, endpoints: {}, websockets: {}, links: [], calls: [], code: {}, remoteAssets: {} };
+  /** 原生下发的启动信息。 */
+  var launchInfo = null;
+
+  var nativeSeq = 0;
+  var nativePending = Object.create(null);
+  /** 外层维护的 WebSocket：id -> WebSocket */
+  var sockets = Object.create(null);
+  /** 外层维护的 HTTP 流：id -> {abort: AbortController} */
+  var streams = Object.create(null);
+
+  function mkErr(code, message) {
+    var err = new Error(message || code);
+    err.code = code;
+    return err;
+  }
+
+  function showBoot(text) {
+    boot.textContent = text || "加载中…";
+    boot.style.display = "flex";
+  }
+
+  function hideBoot() {
+    boot.style.display = "none";
+  }
+
+  // =====================================================================
+  // 视口同步（横竖屏 / 分屏 / 折叠屏）
+  // =====================================================================
+  // Activity 声明了 configChanges=orientation|screenSize，旋转时不会重建，
+  // 外层 WebView 会变成新尺寸，但内层 iframe 若停留在 mount 时写死的像素值，
+  // 微应用就会一直拿到旧 viewport（竖屏时的 360x800），表现为「竖屏提示要横屏、
+  // 转到横屏后布局仍是竖屏 / canvas 尺寸不对」。这里在每次视口变化时重算尺寸。
+  // 改 iframe 像素尺寸会让内层 window 自动收到 resize，微应用据此重排。
+  function syncFrameSize() {
+    var vw = window.innerWidth || document.documentElement.clientWidth || 360;
+    var vh = window.innerHeight || document.documentElement.clientHeight || 640;
+    frame.style.width = vw + "px";
+    frame.style.height = vh + "px";
+    return vw + "x" + vh;
+  }
+
+  var lastViewport = "";
+  function onViewportChange() {
+    var size = syncFrameSize();
+    if (size !== lastViewport) {
+      lastViewport = size;
+      callNative("host.log", { level: "info", message: "outer viewport -> " + size });
+    }
+  }
+  // resize 用 rAF 等 WebView 布局稳定后再量；orientationchange 部分机型早于布局，
+  // 额外补两次延时兜底（100/400ms），覆盖横竖屏切换与折叠展开。
+  window.addEventListener("resize", function () {
+    if (window.requestAnimationFrame) requestAnimationFrame(onViewportChange);
+    else onViewportChange();
+  });
+  window.addEventListener("orientationchange", function () {
+    setTimeout(onViewportChange, 100);
+    setTimeout(onViewportChange, 400);
+  });
+
+  // =====================================================================
+  // 外层 → 原生 桥
+  // =====================================================================
+  function callNative(method, params) {
+    return new Promise(function (resolve, reject) {
+      var native = window.JetDoMiniApp;
+      if (!native || typeof native.request !== "function") {
+        reject(mkErr("API_UNSUPPORTED", "native bridge unavailable"));
+        return;
+      }
+      var id = "n_" + (Date.now().toString(36)) + "_" + (nativeSeq++).toString(36);
+      nativePending[id] = { resolve: resolve, reject: reject };
+      try {
+        native.request(id, method, JSON.stringify(params || {}));
+      } catch (e) {
+        delete nativePending[id];
+        reject(mkErr("API_UNSUPPORTED", String(e && e.message || e)));
+      }
+    });
+  }
+
+  // 原生侧回调：成功给结果，失败给 {code,message}
+  window.__miniAppResolve = function (id, payload) {
+    var p = nativePending[id];
+    if (!p) return;
+    delete nativePending[id];
+    var parsed;
+    try { parsed = JSON.parse(payload); } catch (e) { parsed = payload; }
+    if (parsed && parsed.__error) {
+      p.reject(mkErr(parsed.__error.code || "UNKNOWN", parsed.__error.message));
+    } else {
+      p.resolve(parsed);
+    }
+  };
+
+  // =====================================================================
+  // 包下载与解密
+  // =====================================================================
+  /**
+   * 解密 Worker：论坛下发的同源脚本，负责解密 / 验签 / 校验哈希。
+   * 这里不自己实现加密算法 —— 协议未公开，且论坛一改就碎。
+   */
+  function decryptPackage(workerUrl, buffer, release) {
+    return new Promise(function (resolve, reject) {
+      var worker;
+      try {
+        worker = new Worker(workerUrl);
+      } catch (e) {
+        reject(mkErr("API_UNSUPPORTED", "cannot create worker: " + e));
+        return;
+      }
+      worker.onmessage = function (event) {
+        var data = event.data || {};
+        if (data.type === "complete") {
+          worker.terminate();
+          resolve(data.files || {});
+        } else if (data.type === "error") {
+          worker.terminate();
+          reject(mkErr("REMOTE_ASSET_INVALID", data.message || data.code || "package error"));
+        }
+        // type === "progress" 时忽略：进度只是提示，不影响挂载。
+      };
+      worker.onerror = function (e) {
+        worker.terminate();
+        reject(mkErr("REMOTE_ASSET_INVALID", "worker error: " + (e.message || "unknown")));
+      };
+      worker.postMessage({ buffer: buffer, release: release });
+    });
+  }
+
+  /**
+   * 把 Worker 给出的文件表规范化。
+   *
+   * Worker 返回的值可能是三种形态：文本字符串、二进制（ArrayBuffer / TypedArray）、
+   * 或者已经是 base64 的字符串。统一成 {encoding, data}，
+   * 这样原生侧和内层都能按同一套规则取字节。
+   */
+  function normalizeFiles(raw) {
+    var out = Object.create(null);
+    Object.keys(raw || {}).forEach(function (path) {
+      var value = raw[path];
+      if (typeof value === "string") {
+        out[path] = { encoding: "utf8", data: value };
+        return;
+      }
+      if (value instanceof ArrayBuffer) {
+        out[path] = { encoding: "base64", data: bufferToBase64(value) };
+        return;
+      }
+      if (ArrayBuffer.isView(value)) {
+        out[path] = { encoding: "base64", data: bufferToBase64(value.buffer) };
+        return;
+      }
+      if (value && typeof value === "object" && typeof value.base64 === "string") {
+        out[path] = { encoding: "base64", data: value.base64 };
+        return;
+      }
+      if (value && typeof value === "object" && typeof value.text === "string") {
+        out[path] = { encoding: "utf8", data: value.text };
+        return;
+      }
+      out[path] = { encoding: "utf8", data: String(value == null ? "" : value) };
+    });
+    return out;
+  }
+
+  function bufferToBase64(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var binary = "";
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+
+  function base64ToBuffer(text) {
+    var binary = atob(text);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  /** 取包内文件的字节（utf8 文件按 UTF-8 编码回字节）。 */
+  function packageBytes(path) {
+    var file = packageFiles[path];
+    if (!file) return null;
+    if (file.encoding === "base64") return base64ToBuffer(file.data);
+    return new TextEncoder().encode(file.data).buffer;
+  }
+
+  function packageText(path) {
+    var file = packageFiles[path];
+    if (!file) return null;
+    return file.encoding === "base64" ? base64ToBuffer(file.data) : file.data;
+  }
+
+  // =====================================================================
+  // 挂载微应用到内层 iframe
+  // =====================================================================
+  // 把可能含脚本结束标记的内容安全地嵌进 script 块。
+  // 注意：注释里绝不能出现字面的结束标记，否则 HTML 解析器会提前关闭本脚本块。
+  function escapeScript(source) {
+    return String(source).replace(/<\/script/gi, "<\\/script");
+  }
+
+  function escapeStyle(source) {
+    return String(source).replace(/<\/style/gi, "<\\/style");
+  }
+
+  // 内层是 sandbox 无 same-origin 的，父页面拿不到它的 DOM，
+  // 所以只能用 srcdoc 把包内容与宿主桥一起写进同一份文档。
+  //
+  // 注入顺序很重要：先装 globalThis.miniApp，再跑 app.js ——
+  // 官方 app.js 是 Vite 打的 IIFE，进去就 getSDK()，SDK 必须已经就位。
+  function mountIntoFrame() {
+    // SDK 源码块在本文档的下方，必须等 DOM 解析到才取得到。
+    var sdkNode = document.getElementById("miniapp-sdk");
+    var sdkSource = sdkNode ? sdkNode.textContent : "";
+    if (!sdkSource) throw mkErr("SDK_UNAVAILABLE", "host sdk source missing");
+
+    var html = fileText("index.html");
+    var css = fileText("app.css");
+    var js = fileText("app.js");
+    var strings = fileText("strings.json");
+
+    if (typeof html !== "string") {
+      throw mkErr("ASSET_NOT_FOUND", "package missing index.html");
+    }
+
+    var policyJson = JSON.stringify(policy);
+    var doc = "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" +
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">" +
+      (typeof css === "string" ? "<style>" + escapeStyle(css) + "</style>" : "") +
+      "</head><body>" +
+      html +
+      "<scr" + "ipt>window.__miniAppOuterOrigin=" + JSON.stringify(OUTER_ORIGIN) + ";" +
+      "window.__miniAppPolicy=" + policyJson + ";" +
+      "window.__miniAppStrings=" + JSON.stringify(strings || {}) + ";" +
+      // 内层错误诊断：转发到外层，由外层写进原生日志（真机白屏排查用）。
+      "function __log(level,args){try{parent.postMessage({__miniApp:true,type:'log',level:level," +
+      "message:Array.prototype.map.call(args,function(a){try{return typeof a==='string'?a:JSON.stringify(a)}catch(e){return String(a)}}).join(' ')}," +
+      "window.__miniAppOuterOrigin)}catch(e){}}" +
+      "__log('info',['viewport',window.innerWidth+'x'+window.innerHeight,'dpr='+window.devicePixelRatio," +
+      "'doc='+(document.documentElement&&document.documentElement.clientWidth)+'x'+(document.documentElement&&document.documentElement.clientHeight)]);" +
+      // 横竖屏切换：外层改 iframe 像素尺寸会触发内层 resize，这里把新视口回报出来用于验证。
+      "window.addEventListener('resize',function(){__log('info',['viewport-resized',window.innerWidth+'x'+window.innerHeight])});" +
+      "window.onerror=function(m,s,l,c,err){__log('error',[m+' @'+l+':'+c,err&&err.stack||'']);return false};" +
+      "window.onunhandledrejection=function(e){__log('error',['unhandled rejection:',e.reason&&(e.reason.stack||e.reason.message)||e.reason])};" +
+      "['log','warn','error'].forEach(function(k){var o=console[k];console[k]=function(){__log(k,arguments);try{o.apply(console,arguments)}catch(e){}}});" +
+      "</scr" + "ipt>" +
+      "<scr" + "ipt>" + escapeScript(sdkSource) + "</scr" + "ipt>" +
+      (typeof js === "string" ? "<scr" + "ipt>" + escapeScript(js) + "</scr" + "ipt>" : "") +
+      "</body></html>";
+
+    // 双保险：按外层实际视口显式给 iframe 像素尺寸。
+    // 某些 WebView 里 iframe 的 height:100% 在 srcdoc sandbox 下解析成 0，
+    // 内层 innerHeight 随之变 0，微应用创建的离屏 canvas 宽高为 0 → drawImage 抛错。
+    // mount 与后续横竖屏切换共用同一个同步函数，避免两处逻辑漂移。
+    syncFrameSize();
+    frame.srcdoc = doc;
+  }
+
+  /** 取包内文件的文本内容；二进制文件返回 null。 */
+  function fileText(path) {
+    var file = packageFiles[path];
+    if (!file || file.encoding !== "utf8") return null;
+    return file.data;
+  }
+
+  // =====================================================================
+  // 外层 ↔ 内层 消息转发
+  // =====================================================================
+  window.addEventListener("message", function (ev) {
+    var d = ev.data;
+    if (!d || d.__miniApp !== true) return;
+    // 只接受内层 iframe 发来的消息，避免被同页其它脚本伪造。
+    if (ev.source !== frame.contentWindow) return;
+
+    // 内层 console/error 诊断：写到原生日志。
+    if (d.type === "log") {
+      callNative("host.log", { level: d.level, message: d.message });
+      return;
+    }
+
+    if (d.type === "request") {
+      callNative(d.method, d.params).then(function (result) {
+        frame.contentWindow.postMessage({ __miniApp: true, type: "response", id: d.id, result: result }, "*");
+      }, function (err) {
+        frame.contentWindow.postMessage({
+          __miniApp: true, type: "response", id: d.id,
+          error: { code: err.code || "UNKNOWN", message: err.message || String(err) }
+        }, "*");
+      });
+      return;
+    }
+
+    // 外层通道：HTTP/WS/包文件读取都在这里执行（外层与论坛同源，能带正确 CORS 行为）。
+    if (d.type === "outer") {
+      handleOuter(d).then(function (result) {
+        frame.contentWindow.postMessage({ __miniApp: true, type: "outerResponse", id: d.id, result: result }, "*");
+      }, function (err) {
+        frame.contentWindow.postMessage({
+          __miniApp: true, type: "outerResponse", id: d.id,
+          error: { code: err.code || "UNKNOWN", message: err.message || String(err) }
+        }, "*");
+      });
+      return;
+    }
+
+    // Worker 里的 SDK 调用：Worker 把请求发给宿主窗口，这里转给原生再回给 Worker。
+    if (d.type === "workerRequest") {
+      callNative(d.method, d.params).then(function (result) {
+        postToWorker(ev.source, { __miniAppWorker: true, type: "workerResponse", id: d.id, result: result });
+      }, function (err) {
+        postToWorker(ev.source, {
+          __miniAppWorker: true, type: "workerResponse", id: d.id,
+          error: { code: err.code || "UNKNOWN", message: err.message || String(err) }
+        });
+      });
+    }
+  });
+
+  function postToWorker(target, payload) {
+    if (target && typeof target.postMessage === "function") {
+      try { target.postMessage(payload, "*"); } catch (e) { /* Worker 已终止 */ }
+    }
+  }
+
+  // =====================================================================
+  // 外层通道实现
+  // =====================================================================
+
+  /**
+   * HTTP 请求。
+   *
+   * 端点地址、方法、动态 query、请求头全部由原生侧按 manifest 校验后给出，
+   * 外层只负责「按批下来的形状把请求发出去」，不自己解析 manifest。
+   *
+   * credentials 用 "omit" —— 开发者服务不接收论坛 Cookie，站点规范也明确要求。
+   */
+  function handleOuter(d) {
+    var method = d.method;
+    var params = d.params || {};
+
+    if (method === "http.request") return outerHttpRequest(params);
+    if (method === "http.stream") return outerHttpStream(params);
+    if (method === "http.streamCancel") return outerHttpStreamCancel(params);
+    if (method === "webSocket.connect") return outerSocketConnect(params);
+    if (method === "webSocket.send") return outerSocketSend(params);
+    if (method === "webSocket.close") return outerSocketClose(params);
+    if (method === "package.read") return outerPackageRead(params);
+    if (method === "assets.remote") return outerRemoteAsset(params);
+
+    return Promise.reject(mkErr("API_UNSUPPORTED", method + " is not supported on this host"));
+  }
+
+  function outerHttpRequest(params) {
+    return callNative("http.request", params).then(function (endpoint) {
+      var init = buildFetchInit(endpoint, params.options || {});
+      return fetch(endpoint.url, init).then(function (response) {
+        var headers = {};
+        response.headers.forEach(function (v, k) { headers[k] = v; });
+        var type = (params.options && params.options.responseType) || "json";
+        var reader = type === "bytes"
+          ? response.arrayBuffer()
+          : (type === "text" ? response.text() : response.json().catch(function () { return null; }));
+        return reader.then(function (body) {
+          return { status: response.status, headers: headers, body: body };
+        });
+      });
+    }).catch(function (e) {
+      if (e && e.code) throw e;
+      throw mkErr("NETWORK_FAILURE", String(e && e.message || e));
+    });
+  }
+
+  function buildFetchInit(endpoint, options) {
+    var init = {
+      method: (options.method || endpoint.method || "GET").toUpperCase(),
+      credentials: "omit",
+      redirect: "manual",
+      headers: Object.assign({}, endpoint.headers || {})
+    };
+    if (options.json !== undefined) {
+      init.body = JSON.stringify(options.json);
+      if (!hasHeader(init.headers, "content-type")) init.headers["Content-Type"] = "application/json";
+    } else if (typeof options.body === "string") {
+      init.body = options.body;
+    }
+    if (options.signalAborted) {
+      init.signal = options.signalAborted;
+    }
+    return init;
+  }
+
+  function hasHeader(headers, name) {
+    var lower = name.toLowerCase();
+    return Object.keys(headers).some(function (k) { return k.toLowerCase() === lower; });
+  }
+
+  /**
+   * 流式响应（SSE / 字节流）。
+   *
+   * 原生侧先校验端点，再由外层发起 fetch；响应头一到就把 streamId 交回内层，
+   * 正文分块通过 {type:"stream"} 消息推送。
+   */
+  function outerHttpStream(params) {
+    return callNative("http.request", params).then(function (endpoint) {
+      var init = buildFetchInit(endpoint, params.options || {});
+      var controller = new AbortController();
+      var streamId = "st_" + (Date.now().toString(36)) + "_" + (nativeSeq++).toString(36);
+      streams[streamId] = controller;
+
+      return fetch(endpoint.url, init).then(function (response) {
+        var headers = {};
+        response.headers.forEach(function (v, k) { headers[k] = v; });
+        var isEvents = params.mode === "events";
+        var info = { status: response.status, headers: headers, streamId: streamId, mode: isEvents ? "events" : "bytes" };
+        pumpStream(streamId, response, isEvents);
+        return info;
+      }).catch(function (e) {
+        delete streams[streamId];
+        if (e && e.code) throw e;
+        throw mkErr("NETWORK_FAILURE", String(e && e.message || e));
+      });
+    });
+  }
+
+  function pumpStream(streamId, response, isEvents) {
+    if (!response.body) {
+      postStream(streamId, { event: "end" });
+      delete streams[streamId];
+      return;
+    }
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var pendingText = "";
+
+    function postStream(event, payload) {
+      postToFrame({ __miniApp: true, type: "stream", streamId: streamId, event: event, payload: payload || null });
+    }
+
+    (function read() {
+      reader.read().then(function (result) {
+        if (result.done) {
+          if (isEvents && pendingText.length) {
+            postStream("event", { event: "message", data: pendingText, id: "" });
+          }
+          postStream("end");
+          delete streams[streamId];
+          return;
+        }
+        if (isEvents) {
+          pendingText += decoder.decode(result.value, { stream: true });
+          var frames = pendingText.split(/\r\n\r\n|\n\n|\r\r/);
+          pendingText = frames.pop();
+          frames.forEach(function (frame) {
+            var parsed = parseSseFrame(frame);
+            if (parsed) postStream("event", parsed);
+          });
+        } else {
+          var buf = result.value.buffer.slice(result.value.byteOffset, result.value.byteOffset + result.value.byteLength);
+          postStream("chunk", { bytes: buf });
+        }
+        read();
+      }).catch(function (e) {
+        postStream("error", { code: "NETWORK_FAILURE", message: String(e && e.message || e) });
+        delete streams[streamId];
+      });
+    })();
+  }
+
+  /** 极简 SSE 帧解析：只取 event/data/id/retry，够官方 SDK 的事件流用。 */
+  function parseSseFrame(frame) {
+    if (!frame || frame.charAt(0) === ":") return null;
+    var event = "message";
+    var dataLines = [];
+    var id = "";
+    var retry = null;
+    frame.split(/\r\n|\n|\r/).forEach(function (line) {
+      if (!line) return;
+      var colon = line.indexOf(":");
+      var field = colon < 0 ? line : line.slice(0, colon);
+      var value = colon < 0 ? "" : line.slice(colon + 1);
+      if (value.charAt(0) === " ") value = value.slice(1);
+      if (field === "event") event = value;
+      else if (field === "data") dataLines.push(value);
+      else if (field === "id") id = value;
+      else if (field === "retry") { var n = parseInt(value, 10); if (!isNaN(n)) retry = n; }
+    });
+    if (!dataLines.length && event === "message" && !id) return null;
+    var out = { event: event, data: dataLines.join("\n"), id: id };
+    if (retry !== null) out.retry = retry;
+    return out;
+  }
+
+  function outerHttpStreamCancel(params) {
+    var controller = streams[params.streamId];
+    if (controller) {
+      try { controller.abort(); } catch (e) { /* ignore */ }
+      delete streams[params.streamId];
+    }
+    return Promise.resolve(null);
+  }
+
+  // ---------------------------------------------------------------------
+  // WebSocket
+  // ---------------------------------------------------------------------
+  function outerSocketConnect(params) {
+    return callNative("webSocket.connect", params).then(function (info) {
+      var id = "ws_" + (Date.now().toString(36)) + "_" + (nativeSeq++).toString(36);
+      var socket;
+      try {
+        socket = info.protocols && info.protocols.length
+          ? new WebSocket(info.url, info.protocols)
+          : new WebSocket(info.url);
+      } catch (e) {
+        throw mkErr("NETWORK_FAILURE", String(e && e.message || e));
+      }
+      sockets[id] = socket;
+
+      socket.onopen = function () { postToFrame({ __miniApp: true, type: "ws", id: id, event: "open" }); };
+      socket.onmessage = function (ev) { postToFrame({ __miniApp: true, type: "ws", id: id, event: "message", data: ev.data }); };
+      socket.onclose = function (ev) {
+        delete sockets[id];
+        postToFrame({ __miniApp: true, type: "ws", id: id, event: "close", code: ev.code, reason: ev.reason });
+      };
+      socket.onerror = function () { postToFrame({ __miniApp: true, type: "ws", id: id, event: "error", code: "NETWORK_FAILURE" }); };
+
+      return { id: id, url: info.url };
+    });
+  }
+
+  function outerSocketSend(params) {
+    var socket = sockets[params.id];
+    if (!socket) return Promise.reject(mkErr("SOCKET_CLOSED", "socket not found"));
+    try {
+      socket.send(params.text);
+    } catch (e) {
+      return Promise.reject(mkErr("NETWORK_FAILURE", String(e && e.message || e)));
+    }
+    return Promise.resolve(null);
+  }
+
+  function outerSocketClose(params) {
+    var socket = sockets[params.id];
+    if (!socket) return Promise.resolve(null);
+    try {
+      socket.close(params.code || 1000, params.reason || "");
+    } catch (e) { /* ignore */ }
+    delete sockets[params.id];
+    return Promise.resolve(null);
+  }
+
+  // ---------------------------------------------------------------------
+  // 包内文件与远程素材
+  // ---------------------------------------------------------------------
+  function outerPackageRead(params) {
+    var path = params.path || "";
+    var file = packageFiles[path];
+    if (!file) return Promise.reject(mkErr("ASSET_NOT_FOUND", "资源不存在：" + path));
+    return Promise.resolve(file);
+  }
+
+  /**
+   * 远程素材：完整下载后校验大小与 SHA-256，再交付。
+   *
+   * 校验失败没有「忽略哈希」的回退 —— 这是审核制的硬要求，
+   * 论坛 origin 的 CORS GET 是 CDN 的义务。
+   */
+  function outerRemoteAsset(params) {
+    var path = params.path || "";
+    var declaration = policy.remoteAssets && policy.remoteAssets[path];
+    if (!declaration) return Promise.reject(mkErr("ASSET_NOT_FOUND", "远程素材未声明：" + path));
+    if (policy.permissions.indexOf("assets.remote") < 0) {
+      return Promise.reject(mkErr("PERMISSION_DENIED", "未获授权：assets.remote"));
+    }
+    return fetch(declaration.url, { credentials: "omit" }).then(function (response) {
+      if (!response.ok) throw mkErr("REMOTE_ASSET_FAILED", "http " + response.status);
+      return response.arrayBuffer();
+    }).then(function (buffer) {
+      var bytes = new Uint8Array(buffer);
+      if (declaration.size && bytes.length !== declaration.size) {
+        throw mkErr("REMOTE_ASSET_INVALID", "size mismatch: " + bytes.length + " != " + declaration.size);
+      }
+      return crypto.subtle.digest("SHA-256", buffer).then(function (digest) {
+        var hex = Array.prototype.map.call(new Uint8Array(digest), function (b) {
+          return ("0" + b.toString(16)).slice(-2);
+        }).join("");
+        if (declaration.sha256 && hex.toLowerCase() !== declaration.sha256.toLowerCase()) {
+          throw mkErr("REMOTE_ASSET_INVALID", "sha256 mismatch");
+        }
+        return { encoding: "base64", data: bufferToBase64(buffer) };
+      });
+    }).catch(function (e) {
+      if (e && e.code) throw e;
+      throw mkErr("REMOTE_ASSET_FAILED", String(e && e.message || e));
+    });
+  }
+
+  function postToFrame(payload) {
+    try {
+      frame.contentWindow.postMessage(payload, "*");
+    } catch (e) { /* 内层已卸载 */ }
+  }
+
+  // =====================================================================
+  // 启动
+  // =====================================================================
+  // 原生侧在拿到启动接口响应后调用本函数，把启动信息交给页面。
+  window.__miniAppSetLaunch = function (info) {
+    launchInfo = info;
+    policy = info.policy || policy;
+    try {
+      if (window.JetDoMiniAppHost) {
+        window.JetDoMiniAppHost.start(info);
+      }
+    } catch (e) {
+      showBoot("启动失败：" + (e && e.message || e));
+    }
+  };
+
+  window.JetDoMiniAppHost = {
+    start: function (launch) {
+      showBoot("正在下载应用包…");
+      return fetch(launch.packageUrl, { credentials: "omit" })
+        .then(function (r) {
+          if (!r.ok) throw mkErr("REMOTE_ASSET_FAILED", "package http " + r.status);
+          return r.arrayBuffer();
+        })
+        .then(function (buffer) {
+          showBoot("正在校验应用包…");
+          return decryptPackage(launch.workerUrl, buffer, launch.release);
+        })
+        .then(function (raw) {
+          packageFiles = normalizeFiles(raw);
+          showBoot("正在启动应用…");
+          mountIntoFrame();
+          hideBoot();
+          // 把解密后的文件表交给原生侧，留档与排查用。
+          if (window.JetDoMiniApp && window.JetDoMiniApp.onPackageReady) {
+            try {
+              window.JetDoMiniApp.onPackageReady(JSON.stringify({
+                count: Object.keys(packageFiles).length,
+                paths: Object.keys(packageFiles)
+              }));
+            } catch (e) { /* ignore */ }
+          }
+          return { mounted: true };
+        })
+        .catch(function (e) {
+          showBoot("加载失败：" + (e && e.message || e));
+          throw e;
+        });
+    }
+  };
+
+  // 通知原生侧：宿主页面已就绪，并带上当前文档 origin 供诊断。
+  // origin 必须是 https://linux.do —— 解密 Worker 与宿主页面必须同源，
+  // 否则包永远解不开；这里把 origin 报上去，原生侧可据此直接报错而不是让用户干等。
+  (function reportReady() {
+    if (!window.JetDoMiniApp || typeof window.JetDoMiniApp.onHostReady !== "function") return;
+    try {
+      window.JetDoMiniApp.onHostReady(JSON.stringify({
+        origin: OUTER_ORIGIN,
+        href: location.href,
+        userAgent: navigator.userAgent
+      }));
+    } catch (e) { /* ignore */ }
+  })();
+})();
+</script>
+
+<!--
+  内层运行时源码。
+  以 text/plain 形式内嵌，由外层读出后注入 sandbox iframe 的 srcdoc。
+  这样写比把 SDK 拼成 JS 字符串可读得多，也便于校对官方契约。
+-->
+<script type="text/plain" id="miniapp-sdk">
+(function () {
+  "use strict";
+
+  // 官方契约：github.com/linux-do/mapp-developer-guide（sdk/index.d.ts）
+  // 权限是**同步**的 —— permissions.list() 返回数组，has() 返回布尔。
+  // 所以宿主必须在注入 SDK 之前就知道已批准权限，本宿主由原生侧下发。
+  var OUTER_ORIGIN = window.__miniAppOuterOrigin || "*";
+  var POLICY = window.__miniAppPolicy || {};
+  var PERMS = Array.isArray(POLICY.permissions) ? POLICY.permissions : [];
+
+  var pending = Object.create(null);
+  var outerPending = Object.create(null);
+  var seq = 0;
+
+  function mkErr(code, msg) {
+    var e = new Error(msg || code);
+    e.code = code;
+    return e;
+  }
+
+  function call(method, params) {
+    return new Promise(function (res, rej) {
+      var id = "i_" + (Date.now().toString(36)) + "_" + (seq++).toString(36);
+      pending[id] = { resolve: res, reject: rej };
+      try {
+        parent.postMessage({ __miniApp: true, type: "request", id: id, method: method, params: params || {} }, OUTER_ORIGIN);
+      } catch (e) {
+        delete pending[id];
+        rej(mkErr("API_UNSUPPORTED", String(e && e.message || e)));
+      }
+    });
+  }
+
+  /** 外层通道：HTTP/WS/包文件必须由外层同源页面执行。 */
+  function outerCall(method, params) {
+    return new Promise(function (res, rej) {
+      var id = "o_" + (Date.now().toString(36)) + "_" + (seq++).toString(36);
+      outerPending[id] = { resolve: res, reject: rej };
+      try {
+        parent.postMessage({ __miniApp: true, type: "outer", id: id, method: method, params: params || {} }, OUTER_ORIGIN);
+      } catch (e) {
+        delete outerPending[id];
+        rej(mkErr("API_UNSUPPORTED", String(e && e.message || e)));
+      }
+    });
+  }
+
+  window.addEventListener("message", function (ev) {
+    var d = ev.data;
+    if (!d || d.__miniApp !== true) return;
+
+    if (d.type === "response") {
+      var p = pending[d.id];
+      if (!p) return;
+      delete pending[d.id];
+      if (d.error) p.reject(mkErr(d.error.code || "UNKNOWN", d.error.message));
+      else p.resolve(d.result);
+      return;
+    }
+
+    if (d.type === "outerResponse") {
+      var q = outerPending[d.id];
+      if (!q) return;
+      delete outerPending[d.id];
+      if (d.error) q.reject(mkErr(d.error.code || "UNKNOWN", d.error.message));
+      else q.resolve(d.result);
+      return;
+    }
+
+    if (d.type === "ws") {
+      emitSocketEvent(d);
+      return;
+    }
+
+    if (d.type === "stream") {
+      emitStreamEvent(d);
+      return;
+    }
+
+    if (d.type === "theme") {
+      emitTheme(d.theme);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // 权限守卫
+  // ---------------------------------------------------------------------
+  function has(permission) {
+    return PERMS.indexOf(permission) >= 0;
+  }
+
+  function guard(permission, fn) {
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      if (!has(permission)) {
+        return Promise.reject(mkErr("PERMISSION_DENIED", "permission denied: " + permission));
+      }
+      try {
+        return Promise.resolve(fn.apply(null, args));
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    };
+  }
+
+  function unsupported(name) {
+    return function () {
+      return Promise.reject(mkErr("API_UNSUPPORTED", name + " is not supported on this host"));
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // 流式响应桥
+  // ---------------------------------------------------------------------
+  var streamControllers = Object.create(null);
+
+  function emitStreamEvent(d) {
+    var ctl = streamControllers[d.streamId];
+    if (!ctl) return;
+    if (d.event === "chunk") {
+      ctl.push(new Uint8Array(d.payload.bytes));
+    } else if (d.event === "event") {
+      ctl.push(d.payload);
+    } else if (d.event === "end") {
+      ctl.close();
+    } else if (d.event === "error") {
+      ctl.fail(mkErr(d.payload.code || "NETWORK_FAILURE", d.payload.message));
+    }
+  }
+
+  function makeStream(mode) {
+    var chunks = [];
+    var waiters = [];
+    var finished = false;
+    var failure = null;
+
+    function flush() {
+      while (waiters.length && chunks.length) {
+        var w = waiters.shift();
+        w.resolve(chunks.shift());
+      }
+      if (failure && waiters.length) {
+        var wf = waiters.shift();
+        wf.reject(failure);
+      }
+    }
+
+    var ctl = {
+      push: function (value) { chunks.push(value); flush(); },
+      close: function () { finished = true; flush(); },
+      fail: function (e) { failure = e; finished = true; flush(); },
+      next: function () {
+        if (chunks.length) return Promise.resolve({ done: false, value: chunks.shift() });
+        if (failure) return Promise.reject(failure);
+        if (finished) return Promise.resolve({ done: true, value: undefined });
+        return new Promise(function (resolve, reject) { waiters.push({ resolve: resolve, reject: reject }); });
+      }
+    };
+
+    var stream = new ReadableStream({
+      pull: function (controller) {
+        ctl.next().then(function (r) {
+          if (r.done) { try { controller.close(); } catch (e) {} }
+          else controller.enqueue(r.value);
+        }, function (e) {
+          try { controller.error(e); } catch (err) {}
+        });
+      }
+    });
+
+    return { stream: stream, ctl: ctl, mode: mode };
+  }
+
+  // ---------------------------------------------------------------------
+  // WebSocket 事件
+  // ---------------------------------------------------------------------
+  var socketHandlers = Object.create(null);
+  /** 每个套接字的 textMode：auto（自动 JSON 解析）/ text（保留原文）。 */
+  var socketTextMode = Object.create(null);
+
+  function emitSocketEvent(d) {
+    var handlers = socketHandlers[d.id];
+    if (!handlers) return;
+    var payload;
+    if (d.event === "message") {
+      payload = d.data;
+      if (socketTextMode[d.id] !== "text" && typeof payload === "string") {
+        // 默认自动解析 JSON；解析不了就保持原文。
+        try { payload = JSON.parse(payload); } catch (e) { /* 保留原文 */ }
+      }
+    } else if (d.event === "close") {
+      payload = { code: d.code, reason: d.reason || "" };
+    } else if (d.event === "error") {
+      payload = { code: d.code || "UNKNOWN" };
+    } else {
+      payload = d;
+    }
+    var list = handlers[d.event] || [];
+    for (var i = 0; i < list.length; i++) {
+      try { list[i](payload); } catch (e) { /* 单个订阅者出错不影响其它 */ }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 主题变更
+  // ---------------------------------------------------------------------
+  var themeListeners = [];
+
+  function emitTheme(theme) {
+    for (var i = 0; i < themeListeners.length; i++) {
+      try { themeListeners[i](theme); } catch (e) { /* ignore */ }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 模块注册表
+  //
+  // 官方打包器（sdk/pack.mjs）产出的模块包会检查：
+  //   globalThis.miniApp 必须冻结，
+  //   miniApp.modules.__registerBundle 必须不可写、不可配置且是函数。
+  // 少一条，模块包直接抛 SDK_UNAVAILABLE。
+  // ---------------------------------------------------------------------
+  var moduleRegistry = Object.create(null);
+
+  Object.defineProperty(moduleRegistry, "__registerBundle", {
+    value: function (entries) {
+      Object.keys(entries || {}).forEach(function (key) {
+        Object.defineProperty(moduleRegistry, key, {
+          value: entries[key], writable: true, configurable: true, enumerable: true
+        });
+      });
+    },
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+
+  Object.defineProperty(moduleRegistry, "import", {
+    value: function (path) { return importModule(path); },
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+
+  var moduleBundleLoaded = false;
+
+  function importModule(path) {
+    var code = POLICY.code || {};
+    if (code.moduleBundle) {
+      if (moduleBundleLoaded) return Promise.resolve(moduleRegistry[path] || moduleRegistry);
+      moduleBundleLoaded = true;
+      return readPackageText(code.moduleBundle).then(function (source) {
+        var url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+        return import(url).then(function () {
+          return moduleRegistry[path] || moduleRegistry;
+        });
+      });
+    }
+    // 没有 moduleBundle 时需要 import map 才能解析 @mini-app/<路径>，
+    // 这条路径要求运行时就支持多 import map，先按官方能力显式降级。
+    return Promise.reject(mkErr("API_UNSUPPORTED", "code.modules 未声明 moduleBundle"));
+  }
+
+  // ---------------------------------------------------------------------
+  // 包内文件读取
+  // ---------------------------------------------------------------------
+  function readPackageFile(path) {
+    return outerCall("package.read", { path: path });
+  }
+
+  function readPackageText(path) {
+    return readPackageFile(path).then(function (file) {
+      if (file.encoding === "base64") {
+        var binary = atob(file.data);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      }
+      return file.data;
+    });
+  }
+
+  function readPackageBytes(path) {
+    return readPackageFile(path).then(function (file) {
+      if (file.encoding === "base64") {
+        var binary = atob(file.data);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+      }
+      return new TextEncoder().encode(file.data);
+    });
+  }
+
+  function readAssetBytes(path) {
+    var remote = POLICY.remoteAssets && POLICY.remoteAssets[path];
+    if (remote) {
+      if (!has("assets.remote")) {
+        return Promise.reject(mkErr("PERMISSION_DENIED", "permission denied: assets.remote"));
+      }
+      return outerCall("assets.remote", { path: path }).then(function (file) {
+        var binary = atob(file.data);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+      });
+    }
+    return readPackageBytes(path);
+  }
+
+  // ---------------------------------------------------------------------
+  // SDK 主体
+  // ---------------------------------------------------------------------
+  var readyResolve;
+  var readyPromise = new Promise(function (res) { readyResolve = res; });
+  /** 播放句柄表：handle -> { el, url } */
+  var audioHandles = Object.create(null);
+  var audioSeq = 0;
+
+  var sdk = {
+    /** 与官方一致：runtime 只能是 "app" 或 "worker"。 */
+    runtime: "app",
+
+    permissions: {
+      list: function () { return PERMS.slice(); },
+      has: function (permission) { return has(permission); }
+    },
+
+    capabilities: {
+      get: function (options) { return call("capabilities.get", options || {}); }
+    },
+
+    lifecycle: {
+      ready: function () { return call("lifecycle.ready", {}); }
+    },
+
+    user: {
+      getCurrent: guard("user.read", function (options) { return call("user.getCurrent", options || {}); }),
+      getById: guard("user.lookup", function (userId, options) {
+        return call("user.getById", Object.assign({ userId: userId }, options || {}));
+      })
+    },
+
+    launch: {
+      getParameters: guard("launch.read", function () { return call("launch.getParameters", {}); })
+    },
+
+    theme: {
+      get: guard("theme.read", function () { return call("theme.get", {}); }),
+      onChange: guard("theme.read", function (listener) {
+        themeListeners.push(listener);
+        return function () {
+          var i = themeListeners.indexOf(listener);
+          if (i >= 0) themeListeners.splice(i, 1);
+        };
+      })
+    },
+
+    localStorage: {
+      getItem: guard("storage.read", function (key) { return call("localStorage.getItem", { key: String(key) }); }),
+      setItem: guard("storage.write", function (key, value) {
+        return call("localStorage.setItem", { key: String(key), value: String(value) });
+      }),
+      removeItem: guard("storage.write", function (key) { return call("localStorage.removeItem", { key: String(key) }); }),
+      clear: guard("storage.write", function () { return call("localStorage.clear", {}); }),
+      exportData: guard("storage.read", function (options) { return call("localStorage.exportData", options || {}); }),
+      importData: guard("storage.write", function (snapshot, options) {
+        return call("localStorage.importData", {
+          snapshot: snapshot,
+          replace: !!(options && options.replace)
+        });
+      })
+    },
+
+    cookies: {
+      get: guard("cookies.read", function (name) { return call("cookies.get", { name: name }); }),
+      set: guard("cookies.write", function (name, value, options) {
+        return call("cookies.set", { name: name, value: value, maxAge: options && options.maxAge });
+      }),
+      remove: guard("cookies.write", function (name) { return call("cookies.remove", { name: name }); })
+    },
+
+    clipboard: {
+      readText: guard("clipboard.read", function () { return call("clipboard.readText", {}); }),
+      writeText: guard("clipboard.write", function (text) { return call("clipboard.writeText", { text: text }); })
+    },
+
+    fullscreen: {
+      // 全屏是真实的浏览器行为：内层带 allow="fullscreen"，且用户手势就在内层，
+      // 所以由页面侧直接调用原生 API，再把真实状态回报给宿主。
+      request: guard("fullscreen", function () {
+        var el = document.documentElement;
+        if (!el.requestFullscreen) {
+          return Promise.reject(mkErr("BROWSER_UNSUPPORTED", "fullscreen unsupported"));
+        }
+        return el.requestFullscreen().then(function () {
+          return call("fullscreen.request", {}).then(function () {
+            return { active: document.fullscreenElement !== null };
+          });
+        }, function (e) {
+          throw mkErr("USER_CANCELLED", String(e && e.message || e));
+        });
+      }),
+      exit: guard("fullscreen", function () {
+        if (!document.fullscreenElement) return Promise.resolve({ active: false });
+        return document.exitFullscreen().then(function () {
+          return call("fullscreen.exit", {}).then(function () {
+            return { active: document.fullscreenElement !== null };
+          });
+        });
+      })
+    },
+
+    audio: {
+      // 媒体在 manifest.media 里以 ID 声明；这里按声明取包内文件后用 Audio 播放。
+      // 播放失败（缺用户手势 / 浏览器拒绝）如实抛错，不假装成功。
+      play: guard("audio.play", function (asset, options) {
+        var media = (POLICY.media || {})[asset];
+        if (!media) return Promise.reject(mkErr("ASSET_NOT_FOUND", "媒体未声明：" + asset));
+        return readPackageBytes(media.path).then(function (bytes) {
+          var url = URL.createObjectURL(new Blob([bytes], { type: media.mime || "application/octet-stream" }));
+          var el = new Audio(url);
+          if (options && typeof options.volume === "number") el.volume = options.volume;
+          el.loop = !!(options && options.loop);
+          var handle = "audio_" + (++audioSeq);
+          audioHandles[handle] = { el: el, url: url };
+          return el.play().then(function () {
+            return { handle: handle };
+          }, function (e) {
+            delete audioHandles[handle];
+            URL.revokeObjectURL(url);
+            throw mkErr("API_UNSUPPORTED", String(e && e.message || e));
+          });
+        });
+      }),
+      stop: guard("audio.play", function (handle) {
+        var entry = audioHandles[handle];
+        if (!entry) return Promise.reject(mkErr("INVALID_ARGUMENTS", "未知播放句柄"));
+        entry.el.pause();
+        entry.el.removeAttribute("src");
+        URL.revokeObjectURL(entry.url);
+        delete audioHandles[handle];
+        return Promise.resolve(null);
+      })
+    },
+
+    audioWorklet: {
+      // 处理器是页面内的 AudioContext 资源，只能在页面侧加载；
+      // 声明与哈希校验由原生侧（manifest.code.worklets）把关。
+      addModule: guard("audio.worklet", function (context, path, options) {
+        return readPackageText(path).then(function (source) {
+          var url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+          return context.audioWorklet.addModule(url).then(function () {
+            URL.revokeObjectURL(url);
+            return null;
+          });
+        });
+      })
+    },
+
+    video: {
+      play: guard("video.play", function (asset, options) {
+        return call("video.play", { asset: asset, options: options || {} });
+      }),
+      stop: guard("video.play", function (handle) { return call("video.stop", { handle: handle }); }),
+      requestPictureInPicture: guard("video.play", function (handle) {
+        return call("video.requestPictureInPicture", { handle: handle });
+      }),
+      exitPictureInPicture: guard("video.play", function () { return call("video.exitPictureInPicture", {}); }),
+      // 直播时间线 / 分片播放：需要 video.stream 与分片校验，本宿主暂未接通。
+      playProgram: unsupported("video.playProgram"),
+      playSegments: unsupported("video.playSegments"),
+      state: unsupported("video.state"),
+      seek: unsupported("video.seek"),
+      setVariant: unsupported("video.setVariant"),
+      selectAudioTrack: unsupported("video.selectAudioTrack"),
+      selectTextTrack: unsupported("video.selectTextTrack"),
+      updateProgram: unsupported("video.updateProgram")
+    },
+
+    http: {
+      request: guard("network.request", function (endpoint, options) {
+        var opts = options || {};
+        return outerCall("http.request", { endpoint: endpoint, options: opts }).then(function (r) {
+          var body = r.body;
+          if (body instanceof ArrayBuffer) body = new Uint8Array(body);
+          return { status: r.status, headers: r.headers || {}, body: body };
+        });
+      }),
+
+      stream: guard("network.request", function (endpoint, options) {
+        return outerCall("http.stream", { endpoint: endpoint, options: options || {}, mode: "bytes" })
+          .then(function (info) {
+            var bridge = makeStream("bytes");
+            streamControllers[info.streamId] = bridge.ctl;
+            return { status: info.status, headers: info.headers || {}, body: bridge.stream };
+          });
+      }),
+
+      events: guard("network.request", function (endpoint, options) {
+        return outerCall("http.stream", { endpoint: endpoint, options: options || {}, mode: "events" })
+          .then(function (info) {
+            var bridge = makeStream("events");
+            streamControllers[info.streamId] = bridge.ctl;
+            return { status: info.status, headers: info.headers || {}, body: bridge.stream };
+          });
+      })
+    },
+
+    webSocket: {
+      connect: guard("network.websocket", function (endpoint, options) {
+        var opts = options || {};
+        return outerCall("webSocket.connect", { endpoint: endpoint, options: opts }).then(function (info) {
+          var id = info.id;
+          var handlers = { message: [], error: [], close: [], open: [] };
+          socketHandlers[id] = handlers;
+          socketTextMode[id] = opts.textMode || "auto";
+          var state = "connecting";
+          var readyResolveSocket;
+          var readySocket = new Promise(function (res) { readyResolveSocket = res; });
+          // 内部状态跟踪：官方只暴露 readyState 与 ready，具体状态由事件驱动。
+          handlers.open.push(function () { state = "open"; readyResolveSocket(); });
+          handlers.close.push(function () { state = "closed"; readyResolveSocket(); });
+          handlers.error.push(function () { state = "closed"; readyResolveSocket(); });
+
+          return {
+            id: id,
+            ready: readySocket,
+            get readyState() {
+              return state;
+            },
+            send: function (data, sendOptions) {
+              return outerCall("webSocket.send", { id: id, text: JSON.stringify(data) });
+            },
+            sendText: function (text, sendOptions) {
+              return outerCall("webSocket.send", { id: id, text: text });
+            },
+            close: function (code, reason) {
+              return outerCall("webSocket.close", { id: id, code: code, reason: reason });
+            },
+            on: function (event, listener) {
+              if (!handlers[event]) handlers[event] = [];
+              handlers[event].push(listener);
+              return function () {
+                var list = handlers[event];
+                var i = list.indexOf(listener);
+                if (i >= 0) list.splice(i, 1);
+              };
+            }
+          };
+        });
+      })
+    },
+
+    /**
+     * 网络恢复工具（官方 NetworkTools）。
+     *
+     * 语义要点：不重放已发送的写入；每次重连都重新取一次授权；
+     * 退避参数可由调用方覆盖。
+     */
+    network: {
+      reconnectSocket: function (endpoint, options) {
+        var opts = options || {};
+        var retry = opts.retry || {};
+        var initialDelay = typeof retry.initialDelayMs === "number" ? retry.initialDelayMs : 500;
+        var maxDelay = typeof retry.maxDelayMs === "number" ? retry.maxDelayMs : 30000;
+        var factor = typeof retry.factor === "number" ? retry.factor : 2;
+        var jitter = typeof retry.jitter === "number" ? retry.jitter : 0.2;
+        var state = "connecting";
+        var socket = null;
+        var stopped = false;
+        var attempt = 0;
+        var readyResolve, readyReject, doneResolve, doneReject;
+        var ready = new Promise(function (res, rej) { readyResolve = res; readyReject = rej; });
+        var done = new Promise(function (res, rej) { doneResolve = res; doneReject = rej; });
+        var listeners = { message: [], error: [], close: [], open: [] };
+
+        function emit(event, value) {
+          var list = listeners[event] || [];
+          for (var i = 0; i < list.length; i++) {
+            try { list[i](value); } catch (e) { /* ignore */ }
+          }
+        }
+
+        function connect() {
+          if (stopped) return;
+          state = "connecting";
+          sdk.webSocket.connect(endpoint, opts).then(function (next) {
+            if (stopped) { next.close(); return; }
+            socket = next;
+            state = "open";
+            attempt = 0;
+            next.on("message", function (value) {
+              var parsed = value;
+              if (opts.textMode === "text") parsed = value;
+              else if (typeof value === "string") {
+                try { parsed = JSON.parse(value); } catch (e) { parsed = value; }
+              }
+              emit("message", parsed);
+            });
+            next.on("error", function (err) { emit("error", err); });
+            next.on("close", function (info) {
+              emit("close", info);
+              if (stopped) { doneResolve(); return; }
+              scheduleReconnect();
+            });
+            if (opts.onOpen) opts.onOpen(next, { reconnected: attempt > 0, signal: opts.signal });
+            readyResolve();
+          }, function (err) {
+            if (stopped) { doneReject(err); return; }
+            emit("error", { code: err && err.code ? err.code : "NETWORK_FAILURE" });
+            scheduleReconnect();
+          });
+        }
+
+        function scheduleReconnect() {
+          if (stopped) return;
+          state = "waiting";
+          attempt++;
+          var delay = Math.min(initialDelay * Math.pow(factor, attempt - 1), maxDelay);
+          delay = delay * (1 - jitter + Math.random() * jitter);
+          if (retry.onRetry) {
+            try { retry.onRetry({ attempt: attempt, delayMs: delay, error: null }); } catch (e) { /* ignore */ }
+          }
+          setTimeout(connect, Math.max(0, Math.round(delay)));
+        }
+
+        connect();
+
+        return {
+          get state() { return state; },
+          ready: ready,
+          done: done,
+          send: function (data, sendOptions) {
+            if (!socket) return Promise.reject(mkErr("SOCKET_CLOSED", "socket not ready"));
+            return socket.send(data, sendOptions);
+          },
+          sendText: function (text, sendOptions) {
+            if (!socket) return Promise.reject(mkErr("SOCKET_CLOSED", "socket not ready"));
+            return socket.sendText(text, sendOptions);
+          },
+          close: function () {
+            stopped = true;
+            state = "closed";
+            if (socket) socket.close();
+            doneResolve();
+            return Promise.resolve();
+          },
+          on: function (event, listener) {
+            if (!listeners[event]) listeners[event] = [];
+            listeners[event].push(listener);
+            return function () {
+              var list = listeners[event];
+              var i = list.indexOf(listener);
+              if (i >= 0) list.splice(i, 1);
+            };
+          }
+        };
+      },
+
+      reconnectEvents: function (endpoint, options) {
+        var opts = options || {};
+        var state = "connecting";
+        var controller = null;
+        var lastEventId = opts.lastEventId || "";
+        var doneResolve, doneReject;
+        var done = new Promise(function (res, rej) { doneResolve = res; doneReject = rej; });
+        var bridge = null;
+
+        function open() {
+          state = "connecting";
+          var request = { query: {} };
+          if (opts.lastEventIdQuery && lastEventId) request.query[opts.lastEventIdQuery] = lastEventId;
+          sdk.http.events(endpoint, request).then(function (response) {
+            bridge = makeStream("events");
+            state = "open";
+            var reader = response.body.getReader();
+            (function pump() {
+              reader.read().then(function (result) {
+                if (result.done) { state = "closed"; doneResolve(); return; }
+                var event = result.value;
+                if (event && typeof event.id === "string") lastEventId = event.id;
+                bridge.ctl.push(event);
+                pump();
+              }, function (e) { state = "closed"; doneReject(e); });
+            })();
+          }, function (err) {
+            state = "closed";
+            doneReject(err);
+          });
+        }
+
+        open();
+
+        return {
+          get state() { return state; },
+          get lastEventId() { return lastEventId; },
+          get body() { return bridge ? bridge.stream : null; },
+          done: done,
+          close: function () {
+            state = "closed";
+            if (controller) controller.abort();
+            doneResolve();
+            return Promise.resolve();
+          }
+        };
+      },
+
+      uploadChunks: function (source, options) {
+        var opts = options || {};
+        var chunkSize = typeof opts.chunkSize === "number" ? opts.chunkSize : 1024 * 1024;
+        var offset = typeof opts.resumeOffset === "number" ? opts.resumeOffset : 0;
+        var total = typeof opts.total === "number" ? opts.total : (source && source.size);
+        var reader = null;
+
+        function nextChunk() {
+          if (source && typeof source.slice === "function") {
+            var part = source.slice(offset, offset + chunkSize);
+            return part.size ? Promise.resolve(part) : Promise.resolve(null);
+          }
+          if (reader) {
+            return reader.read().then(function (r) {
+              return r.done ? null : r.value;
+            });
+          }
+          return Promise.resolve(null);
+        }
+
+        function step() {
+          return nextChunk().then(function (part) {
+            if (!part) return { confirmedOffset: offset };
+            return Promise.resolve(opts.send({
+              chunk: part,
+              offset: offset,
+              end: offset + part.size,
+              total: total,
+              signal: opts.signal
+            })).then(function (result) {
+              var confirmed = result && typeof result.confirmedOffset === "number"
+                ? result.confirmedOffset
+                : offset + part.size;
+              if (opts.onProgress) opts.onProgress({ confirmedOffset: confirmed, total: total });
+              if (confirmed <= offset) throw mkErr("NETWORK_FAILURE", "upload did not advance");
+              offset = confirmed;
+              return step();
+            });
+          });
+        }
+
+        return step();
+      }
+    },
+
+    links: {
+      open: guard("links.open", function (url, options) {
+        return call("links.open", { url: url, options: options || {} });
+      })
+    },
+
+    files: {
+      save: guard("files.save", function (name, data) {
+        return call("files.save", { name: name, data: data });
+      })
+    },
+
+    sharing: {
+      share: guard("sharing.share", function (data, options) {
+        return call("sharing.share", { data: data || {} });
+      })
+    },
+
+    screen: {
+      setKeepAwake: guard("screen.keepAwake", function (enabled, options) {
+        return call("screen.setKeepAwake", { enabled: !!enabled });
+      })
+    },
+
+    gamepad: {
+      get: function () {
+        if (!has("gamepad.read")) return [];
+        try {
+          var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+          return Array.prototype.slice.call(pads || []);
+        } catch (e) {
+          return [];
+        }
+      }
+    },
+
+    notifications: {
+      request: guard("notifications", function (templateId, request, options) {
+        return call("notifications.request", {
+          templateId: templateId,
+          request: request || {},
+          options: options || {}
+        });
+      })
+    },
+
+    app: {
+      call: guard("app.call", function (appId, query, options) {
+        return call("app.call", { appId: appId, query: query || {} });
+      }),
+      return: guard("app.call", function (appId, query, options) {
+        return call("app.return", { appId: appId, query: query || {} });
+      })
+    },
+
+    modules: moduleRegistry,
+
+    scripts: {
+      load: guard("code.load", function (path) {
+        return readPackageText(path).then(function (source) {
+          var element = document.createElement("script");
+          element.textContent = source;
+          document.head.appendChild(element);
+          return null;
+        });
+      })
+    },
+
+    workers: {
+      create: guard("workers.create", function (path, options) {
+        return readPackageText(path).then(function (source) {
+          var blob = new Blob([WORKER_BOOTSTRAP, "\n", source], { type: "text/javascript" });
+          var url = URL.createObjectURL(blob);
+          return new Worker(url, options && options.name ? { name: options.name } : undefined);
+        });
+      })
+    },
+
+    assets: {
+      readBytes: function (path, options) {
+        return readAssetBytes(path);
+      },
+      readText: function (path, options) {
+        return readAssetBytes(path).then(function (bytes) {
+          return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        });
+      },
+      readJson: function (path, options) {
+        return readAssetBytes(path).then(function (bytes) {
+          return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+        });
+      }
+    },
+
+    wasm: {
+      instantiate: function (path, imports) {
+        return readAssetBytes(path).then(function (bytes) {
+          return WebAssembly.instantiate(bytes, imports || {});
+        });
+      }
+    },
+
+    /** 设备类能力：本宿主暂未接通硬件，显式报不支持而不是假装成功。 */
+    media: {
+      capture: unsupported("media.capture"),
+      nextFrame: unsupported("media.nextFrame"),
+      readRecording: unsupported("media.readRecording"),
+      finishRecording: unsupported("media.finishRecording"),
+      readAudio: unsupported("media.readAudio"),
+      finishAudio: unsupported("media.finishAudio"),
+      stop: unsupported("media.stop")
+    },
+    location: {
+      get: unsupported("location.get")
+    },
+    usb: {
+      request: unsupported("usb.request"),
+      selectConfiguration: unsupported("usb.selectConfiguration"),
+      claimInterface: unsupported("usb.claimInterface"),
+      releaseInterface: unsupported("usb.releaseInterface"),
+      selectAlternateInterface: unsupported("usb.selectAlternateInterface"),
+      clearHalt: unsupported("usb.clearHalt"),
+      read: unsupported("usb.read"),
+      write: unsupported("usb.write"),
+      isochronousRead: unsupported("usb.isochronousRead"),
+      isochronousWrite: unsupported("usb.isochronousWrite"),
+      controlTransferIn: unsupported("usb.controlTransferIn"),
+      controlTransferOut: unsupported("usb.controlTransferOut"),
+      close: unsupported("usb.close")
+    },
+    bluetooth: {
+      request: unsupported("bluetooth.request"),
+      connect: unsupported("bluetooth.connect"),
+      read: unsupported("bluetooth.read"),
+      write: unsupported("bluetooth.write"),
+      startNotifications: unsupported("bluetooth.startNotifications"),
+      nextNotification: unsupported("bluetooth.nextNotification"),
+      stopNotifications: unsupported("bluetooth.stopNotifications"),
+      close: unsupported("bluetooth.close")
+    },
+
+    /** 低层 RPC：官方允许按方法名直调。 */
+    request: function (method, params, options) {
+      return call(method, params || {});
+    },
+
+    /** 通信通道就绪 —— 原生桥确认可用后 resolve。 */
+    ready: readyPromise
+  };
+
+  // ---------------------------------------------------------------------
+  // Worker 内的 SDK 引导
+  //
+  // 官方约定 Worker 里有只读的 miniApp，runtime 为 "worker"。
+  // Worker 通过 postMessage 把请求发给宿主窗口，宿主转发给原生再回话。
+  // ---------------------------------------------------------------------
+  var WORKER_BOOTSTRAP = [
+    "(function(){",
+    "'use strict';",
+    "var seq=0,pending=Object.create(null);",
+    "function mkErr(code,msg){var e=new Error(msg||code);e.code=code;return e;}",
+    "function request(method,params){",
+    "  return new Promise(function(res,rej){",
+    "    var id='w_'+(Date.now().toString(36))+'_'+(seq++).toString(36);",
+    "    pending[id]={resolve:res,reject:rej};",
+    "    self.postMessage({__miniAppWorker:true,type:'workerRequest',id:id,method:method,params:params||{}},'*');",
+    "  });",
+    "}",
+    "self.addEventListener('message',function(ev){",
+    "  var d=ev.data;",
+    "  if(!d||d.__miniAppWorker!==true||d.type!=='workerResponse')return;",
+    "  var p=pending[d.id];if(!p)return;delete pending[d.id];",
+    "  if(d.error)p.reject(mkErr(d.error.code||'UNKNOWN',d.error.message));else p.resolve(d.result);",
+    "});",
+    "globalThis.miniApp=Object.freeze({",
+    "  runtime:'worker',",
+    "  request:function(m,p){return request(m,p);}",
+    "});",
+    "})();"
+  ].join("\n");
+
+  // ---------------------------------------------------------------------
+  // 安装 SDK
+  // ---------------------------------------------------------------------
+  Object.defineProperty(globalThis, "miniApp", {
+    value: Object.freeze(sdk),
+    writable: false,
+    configurable: false,
+    enumerable: true
+  });
+
+  // 与宿主通道握手：确认原生桥活着再 resolve ready。
+  call("host.ping", {}).then(function () {
+    readyResolve();
+  }, function () {
+    readyResolve();
+  });
+})();
+</script>
+</body>
+</html>

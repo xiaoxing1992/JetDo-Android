@@ -384,6 +384,7 @@
     <string name="err_endorse_categories_json">站点认可分类响应不是有效 JSON。</string>
     <string name="err_host_not_ready">ArkWeb 宿主尚未就绪。</string>
     <string name="err_http_status">Linux.do 返回 HTTP %1$s。</string>
+    <string name="err_login_required">请先登录 Linux.do 后重试。</string>
     <string name="err_ldc_parse">LDC 账户信息解析失败。</string>
     <string name="err_ldc_request">LDC 请求失败。</string>
     <string name="err_new_topic_empty">站点发帖响应为空。</string>
@@ -449,6 +450,7 @@
     <string name="home_messages">消息</string>
     <string name="home_pick_topic">从左侧选择一个帖子开始阅读</string>
     <string name="home_profile">我的</string>
+    <string name="mini_app_square_title">微应用</string>
     <string name="home_push_summary">论坛回复、私信与提及提醒</string>
     <string name="home_realtime_desc">看帖时自动接收他人的新回复</string>
     <string name="home_realtime_topics_desc">首页顶部提示有新话题，点一下插进列表</string>

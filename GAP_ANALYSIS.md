@@ -9,7 +9,7 @@
 
 ## 一、结论先行
 
-**还剩 4 项。**
+**还剩 5 项。**
 
 ### 1.1 缺口分布
 
@@ -19,8 +19,9 @@
 | P1 | 1 | 功能不完整，用起来别扭 |
 | 半截 | 1 | 差一次接通（H1 搜索一镜到底接线）|
 | 能力缺失 | 0 | 目录级对比看不出来的缺失（N1/N5/N6 已全部落地）|
+| 新平台能力 | 1 | 站点微应用（mapp）宿主引擎 —— 见 §二·二（**非鸿蒙对标**，站点新增的平台能力）|
 | P2 | 1 | 工程化与发布 |
-| **合计** | **4** | 上表逐项相加（1+1+1+0+1）|
+| **合计** | **5** | 上表逐项相加（1+1+1+1+0+1）|
 | 死代码 | 0 | 4 组已全部清理（逐符号复核后删除）|
 | 微清理 | 0 | M1/M2/M3 已全部清理 |
 
@@ -47,6 +48,48 @@
 | # | 要做什么 | 现在是什么样 | 关键证据 |
 |---|---|---|---|
 | H1 | **搜索「放大镜一镜到底」共享元素转场接线** | 基建已写好未挂载：`SharedSearchTransition.kt`（CompositionLocal + `SEARCH_ICON_SHARED_KEY` + `Modifier.searchIconSharedElement()`，注释连两端路径都写明），但三个关键符号全库零引用。鸿蒙两端已接：首页标题栏放大镜（`HomePage.ets:1276`）与搜索页搜索条放大镜（`SearchOverlay.ets:201`）共用同一 `geometryTransition` id。Android 要接三处：NavHost 包 `SharedTransitionLayout` + `rememberSharedContentState` + 下发 `LocalSharedSearchTransition`；源端 `HomeBarButton` 放大镜、目的端 `SearchScreen` 搜索条放大镜各挂 `Modifier.searchIconSharedElement()`。装饰器空值退化已设计好，未接线不影响功能，纯视觉打磨 | `core/designsystem/SharedSearchTransition.kt` 全文件；反查 `searchIconSharedElement\|SEARCH_ICON_SHARED_KEY\|LocalSharedSearchTransition` 零命中 |
+
+---
+
+## 二·二、新平台能力 · 站点微应用（mapp）宿主引擎（1 项）
+
+> **不属于鸿蒙对标范畴**——鸿蒙版无此功能。LINUX DO 站点 2026-11 新增「微应用（mapp）」平台，
+> 官方明确「本来这个功能是给 app 做的，想给 app 里塞个小程序引擎」，网页版先行、App 侧引擎未提供。
+> 本项目要**自建原生宿主引擎**（用户 2026-11-20 决策：路线 B + 底部第 4 Tab）。
+
+| # | 要做什么 | 现在是什么样 | 关键证据 |
+|---|---|---|---|
+| M1 | **微应用宿主引擎**：双层 iframe 沙箱 + 包解密 + `globalThis.miniApp` 宿主桥 + 底部第 4 Tab 广场 | **已完成 + 真机验证通过**（2026-11-20）。领域模型 `core/model/MiniAppModels.kt`、数据层 `core/data/miniapp/*`、宿主页面 `app/src/main/assets/miniapp/host.html`、原生运行时 `app/src/main/kotlin/com/jetdo/android/services/miniapp/MiniAppHostRuntime.kt`、广场页与运行页 `app/src/main/kotlin/com/jetdo/android/ui/miniapp/*`、第 4 Tab 与路由 `RootTabScreen.kt` / `JetDoNavHost.kt`。真机（vivo V2241A）实测：广场列表**分页加载全部 177 应用（5 页，page=0~4）** → 点入「清明上河图」→ DMA 解密 `package ready files=6` → 完整渲染并可交互（开场卷轴 → 虹桥渡口漫游场景）。广场列表接口已固化为 `GET /mini-app-api/apps.json?page=N` | 站点协议：广场 `GET /mini-app-api/apps.json?page=N` → `{apps, page, total=177, per_page=40, sort, query, favorite, tag, untagged}`，**0-based 分页，服务端把越界 page clamp 到末页**；hasMore 必须以 `total` 判定（末页 17 个不足 per_page，按条数判断会误判成还有下一页）。早期只读 `apps` 数组漏了分页元数据，仅显示第一页 40 个，已修复：`MiniAppListPage` 承载分页元数据 + ViewModel `loadMore()` 上拉加载 + footer + `PullToRefreshBox` 下拉刷新（重置到第一页）；启动 `GET /mini-app-api/production/<uuid>/launch` → `{release, runtime_token, runtime_context}`；`release` 含 `manifest` / `permissions` / `package_url` / `package_password` / `package_size` / `zip_sha256` / `public_key`；包为自定义 **DMA 容器**（magic `44 4D 41 01`，非 ZIP），解密/验签在论坛下发的 Worker 内完成。**Worker URL 的 hash 是站点插件全局固定值**（出处：`/apps/<id>` 页内嵌 `runtimeAssets.packageWorker`），**不是** `zip_sha256`（那是解密后 zip 的摘要，早期误用导致 404）。**Worker 用包内嵌元数据做 `RELEASE_MISMATCH` 精确校验**，故 launch 原始 `release` JSON 必须原文透传（`MiniAppLaunch.releaseRawJson`），不能按结构化字段重建。**权威依据已从逆向升级为官方开发者指南**：`github.com/linux-do/mapp-developer-guide`（`sdk/index.d.ts` = 完整 API 面，`sdk/pack.mjs` = 模块包注册契约） |
+
+**架构决策（2026-11-20）**：
+
+| 决策点 | 选择 | 理由 |
+|---|---|---|
+| 技术路线 | **B. 自建原生宿主引擎** | 用户决策。路线 A（WebView 复用网页版）仅作对照与调试参考 |
+| 入口 | **底部 Tab 第 4 页** | 用户决策 |
+| 包解密 | 复用论坛下发的 Worker 脚本，**不自己逆向实现加密算法** | 协议未公开；自己实现既有合规风险又会随论坛迭代碎掉。Worker 走同源加载，JetDo 只负责喂 `postMessage({buffer, release})` |
+| Worker URL | 站点插件**全局固定 hash**（`PACKAGE_WORKER_PATH` 常量），非 `zip_sha256` | 真机实测：URL 里的 hash 来自 `/apps/<id>` 页内嵌 `runtimeAssets.packageWorker`，与具体包无关；早期按 `zip_sha256` 拼装必然 404。站点升插件后更新常量即可 |
+| release 透传 | 把 launch 响应的**原始 release JSON 字符串**喂给 Worker | Worker 用包内嵌元数据做 `RELEASE_MISMATCH` 精确校验；按结构化字段重建会丢 `description`/`tags`/`icon_url`/manifest 的 `tags`/`assets`，导致校验失败 |
+| iframe 尺寸 | 显式像素高度（`100vw/100vh` + mount 时按视口设 px） | srcdoc + sandbox 下 `height:100%` 会解析成 0，内层 `innerHeight=0` → 微应用离屏 canvas 宽高为 0，`drawImage` 抛 `InvalidStateError` 白屏 |
+| 横竖屏 / 视口变化 | 外层监听 `resize`（rAF）+ `orientationchange`（100/400ms 兜底），统一走 `syncFrameSize()` 重设 iframe px；内层注入 `resize` 日志上报 | Activity 声明 `configChanges=orientation\|screenSize`，旋转**不重建**——外层 WebView 变成 800x360 但 iframe 若停在 mount 时写死的 360x800，内层一直拿到竖屏 viewport，表现为「竖屏提示要横屏、转横屏后布局仍竖屏 / canvas 尺寸错」。改 iframe px 会让内层 window 自动收到 `resize`，微应用据此重排。真机验证双向切换 `360x800 ↔ 800x360` 内外层同步 |
+| 宿主桥范围 | 按官方 SDK 契约实现核心面 + 其余显式 `API_UNSUPPORTED` | 官方 `sdk/index.d.ts` 是权威契约，形状猜错微应用直接跑不起来；未实现的能力显式报错让应用降级，不假装成功 |
+| 宿主页面加载方式 | **`loadDataWithBaseURL(base=https://linux.do/, html=宿主页面)`** | 解密 Worker 必须与宿主页面同源（Worker 是论坛下发的 https URL）。走「引导页 + document.write」会被论坛页面 CSP 拦掉内联脚本、也会被论坛自身脚本干扰；`loadDataWithBaseURL` 既拿到正确 origin 又不带任何响应头策略。页面加载后自报 origin，原生侧校验，不匹配则退化到引导页路径并明确报错 |
+| 权限模型 | 以 `release.permissions`（审核结果）为准，**同步**下发 | 官方 `permissions.list()` 返回数组、`has()` 返回布尔，**不是** Promise。宿主必须在注入 SDK 前就知道批准结果，因此权限快照随启动信息一次性下发 |
+| 平台 JWT | 用启动接口下发的 `runtime_token` 承载 | 官方：`auth:"platform"` 端点从 `Authorization: Bearer` 读 JWT，WS 从 `mini_app_token` query 读；JWT 由平台签发、有效期 15 分钟 |
+
+**官方契约要点（与逆向结论的差异，已全部对齐）**：
+
+| 项 | 官方契约 | 早期实现的问题 | 现状 |
+|---|---|---|---|
+| `permissions.list/has` | **同步** | 返回 Promise → 应用拿到的是 Promise，`has()` 恒真 | 已改为同步，权限随启动信息下发 |
+| `miniApp.modules.__registerBundle` | 必须**不可写、不可配置、且为函数**；`miniApp` 必须冻结 | 缺失 → 官方模块包直接抛 `SDK_UNAVAILABLE` | 已按 `sdk/pack.mjs` 的校验逻辑实现 |
+| `http.request` | 返回 `{status, headers, body}`；`body` 默认 JSON、可为 text/bytes | 未支持 bytes/流 | 已支持 `request/stream/events` |
+| `webSocket.connect` | 返回 `MiniAppSocket`：`id/readyState/ready/send/sendText/close/on` | 完全未实现 | 已实现，外层代理真 WS，消息按 `textMode` 自动 JSON 解析 |
+| `network.*` | `reconnectSocket/reconnectEvents/uploadChunks` | 缺失 | 已实现（基于 http/webSocket 组合） |
+| manifest `endpoints` | `query` 是**允许的动态 query 键白名单**；`auth` 三态；`headers` 常量头 | 未校验 query 键 → 应用可往开发者服务塞任意参数 | 已做白名单校验，未声明键一律 `PERMISSION_DENIED` |
+| 其它 | `media/location/usb/bluetooth` 为设备能力；`video.*` 含直播时间线 | 形状不符 | 未接通者显式 `API_UNSUPPORTED` |
+
+**协议层验证方式（2026-11-20）**：在真实 Chromium（headless + CDP）里加载真实 `host.html`，仅把原生侧换成夹具，跑 **26 项断言全绿**，覆盖冻结属性、权限同步语义、`__registerBundle` 注册、storage 往返、HTTP 端点白名单、WS 消息解析、权限拒绝与不支持能力的显式报错。
 
 ---
 

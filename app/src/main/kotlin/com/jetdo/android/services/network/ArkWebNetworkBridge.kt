@@ -1308,13 +1308,20 @@ object ArkWebNetworkBridge : JsonNetworkClient {
         }
 
         if (statusCode !in 200..299) {
+            // Discourse 对需要登录的接口返回 403 + {"error_type":"not_logged_in"}，
+            // 换成可操作的提示，而不是裸的 HTTP 状态码。
+            val message = if (statusCode == 403 && body.contains("not_logged_in")) {
+                AppContextHolder.getString(R.string.err_login_required)
+            } else {
+                AppContextHolder.getString(R.string.err_http_status, statusCode)
+            }
             return NetworkResult(
                 success = false,
                 statusCode = statusCode,
                 challengeState = ChallengeState.NONE,
                 error = NetworkError(
                     NetworkErrorCode.UNEXPECTED_RESPONSE,
-                    AppContextHolder.getString(R.string.err_http_status, statusCode),
+                    message,
                     requiresChallenge = false
                 )
             )

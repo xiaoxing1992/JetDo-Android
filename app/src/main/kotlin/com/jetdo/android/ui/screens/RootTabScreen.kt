@@ -27,9 +27,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -80,6 +82,7 @@ import com.jetdo.android.feature.home.HomeViewModel
 import com.jetdo.android.common.constants.AppConstants
 import com.jetdo.android.ui.composer.ensureComposerAccess
 import com.jetdo.android.ui.notification.MessagesScreen
+import com.jetdo.android.ui.miniapp.MiniAppSquareScreen
 
 /**
  * Root Tab 容器
@@ -490,10 +493,19 @@ fun RootTabScreen(
                     immersive = true
                 )
             }
+            composable(Routes.MINI_APP_SQUARE) {
+                // 底部 Tab「微应用」：站点小程序广场。
+                // 点进某个应用 → 压到根栈的运行页（带 appId）。
+                MiniAppSquareScreen(
+                    onOpenApp = { appId ->
+                        navController.navigate("${Routes.MINI_APP_RUN}/$appId")
+                    }
+                )
+            }
         }
     }
     }
-    }
+}
 }
 
 /** 版本公告弹层的展示态:标题 + cooked 正文 + 跳楼目标楼层(0 = 无跳转按钮)。 */
@@ -534,11 +546,26 @@ internal enum class RootTabDestination(
         label = AppContextHolder.getString(R.string.home_profile),
         selectedIcon = Icons.Filled.Person,
         unselectedIcon = Icons.Outlined.Person
+    ),
+
+    /**
+     * 「微应用」。
+     *
+     * 站点 2026-11 新增的小程序平台（mapp）。原本是给 App 准备的小程序引擎，
+     * 网页版先行、App 侧引擎由本项目自建（见 docs/FDROID_SUBMISSION.md 与
+     * GAP_ANALYSIS.md §二·二）。
+     */
+    MINI_APP(
+        route = Routes.MINI_APP_SQUARE,
+        label = AppContextHolder.getString(R.string.mini_app_square_title),
+        selectedIcon = Icons.Filled.Apps,
+        unselectedIcon = Icons.Outlined.Apps
     )
 }
 
 internal val rootTabDestinations = listOf(
     RootTabDestination.HOME,
     RootTabDestination.NOTIFICATION,
+    RootTabDestination.MINI_APP,
     RootTabDestination.PROFILE
 )

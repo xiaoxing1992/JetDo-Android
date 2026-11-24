@@ -12,13 +12,15 @@ class RootTabDestinationTest {
     fun installStrings() = TestStrings.install()
 
     @Test
-    fun `底部 tab 顺序为 首页-消息-我的`() {
+    fun `底部 tab 顺序为 首页-消息-微应用-我的`() {
         assertEquals(
             listOf(
                 RootTabDestination.HOME to Routes.HOME,
                 // 枚举名与路由保持 NOTIFICATION（推送深链按这个字面量走），
                 // 对用户可见的 label 已改为「消息」。
                 RootTabDestination.NOTIFICATION to Routes.NOTIFICATION,
+                // 站点微应用（mapp）广场：内容型 tab，放在「我的」之前。
+                RootTabDestination.MINI_APP to Routes.MINI_APP_SQUARE,
                 RootTabDestination.PROFILE to Routes.PROFILE
             ),
             rootTabDestinations.map { it to it.route }

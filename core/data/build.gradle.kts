@@ -19,6 +19,7 @@ dependencies {
     implementation(project(":core:network"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coroutines.core)
+    implementation(libs.timber)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
 }
